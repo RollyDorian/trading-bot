@@ -59,3 +59,26 @@ hibachi-bot --stream
 Without `--stream`, the command only validates current public contract metadata
 and exits. If PostgreSQL becomes unavailable or the WebSocket receive loop stops,
 the streaming process exits instead of silently discarding data.
+
+## Local PostgreSQL and end-to-end check
+
+Docker Compose starts a PostgreSQL 16 instance bound only to localhost. The
+credentials in `compose.yaml` are development-only and match `.env.example`:
+
+```powershell
+docker compose up -d --wait postgres
+.\.venv\Scripts\alembic.exe upgrade head
+```
+
+Run the deterministic end-to-end COLLECT check with:
+
+```powershell
+.\scripts\e2e_collect.ps1
+```
+
+The check uses the isolated `cryptobot-e2e` Compose project on localhost port
+`55432`, sends one representative public market message through
+`MarketCollector`, verifies the normalized fields and unchanged raw payload in
+PostgreSQL, and confirms that an ended stream fails closed. It removes the test
+container and its isolated volume afterward; pass `-KeepDatabase` to keep them
+for local inspection. The check does not connect to account or trading APIs.

@@ -35,6 +35,7 @@ addopts = "-q"
 testpaths = ["tests"]
 
 [tool.ruff]
+exclude = [".agents"]
 line-length = 100
 target-version = "py313"
 
