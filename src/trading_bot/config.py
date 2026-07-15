@@ -11,6 +11,16 @@ class RuntimeMode(StrEnum):
     LIVE_MINIMAL = "live_minimal"
 
 
+MarketTopic = Literal[
+    "mark_price",
+    "spot_price",
+    "funding_rate_estimation",
+    "trades",
+    "orderbook",
+    "ask_bid_price",
+]
+
+
 class Settings(BaseSettings):
     """Runtime settings with a hard COLLECT-only gate for the first milestone."""
 
@@ -24,6 +34,15 @@ class Settings(BaseSettings):
     hibachi_symbol: str = Field(default="ETH/USDT-P", min_length=1)
     hibachi_api_url: AnyHttpUrl = AnyHttpUrl("https://api.hibachi.xyz")
     hibachi_data_api_url: AnyHttpUrl = AnyHttpUrl("https://data-api.hibachi.xyz")
+    hibachi_topics: tuple[MarketTopic, ...] = (
+        "mark_price",
+        "spot_price",
+        "funding_rate_estimation",
+        "trades",
+        "orderbook",
+        "ask_bid_price",
+    )
+    database_url: str = "postgresql+asyncpg://cryptobot:cryptobot@localhost:5432/cryptobot"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
     @model_validator(mode="after")

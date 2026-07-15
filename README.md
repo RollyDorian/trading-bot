@@ -12,6 +12,7 @@ placement, cancellation, account, or withdrawal commands.
 ## Requirements
 
 - Python 3.13+
+- PostgreSQL 16+
 - Network access to Hibachi public APIs
 
 The Python requirement follows the current official `hibachi-xyz` SDK rather
@@ -36,3 +37,25 @@ Secrets must never be committed, logged, or sent to Telegram.
 Trading modes will be introduced only after data validation, persistent storage,
 paper execution, risk controls, and explicit acceptance criteria are implemented.
 
+## Database schema
+
+Raw market and system events are stored append-only in PostgreSQL. Apply the
+schema after setting `DATABASE_URL`:
+
+```powershell
+.\.venv\Scripts\alembic.exe upgrade head
+```
+
+The event payload remains JSON so upstream messages can be preserved without
+loss, while timestamps, sequence numbers, source, symbol, latency, and event type
+are indexed columns for validation and replay.
+
+After the migration, start continuous public market collection explicitly:
+
+```powershell
+hibachi-bot --stream
+```
+
+Without `--stream`, the command only validates current public contract metadata
+and exits. If PostgreSQL becomes unavailable or the WebSocket receive loop stops,
+the streaming process exits instead of silently discarding data.
