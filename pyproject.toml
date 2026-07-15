@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hibachi-eth-research-bot"
+version = "0.1.0"
+description = "Safety-first research and collection service for Hibachi ETH/USDT perpetuals."
+readme = "README.md"
+requires-python = ">=3.13,<4"
+dependencies = [
+  "hibachi-xyz==0.3.1",
+  "pydantic-settings>=2.10,<3",
+  "structlog>=25.4,<26",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.17,<2",
+  "pytest>=8.4,<9",
+  "ruff>=0.12,<1",
+]
+
+[project.scripts]
+hibachi-bot = "trading_bot.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/trading_bot"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+packages = ["trading_bot"]
+
