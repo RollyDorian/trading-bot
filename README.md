@@ -85,3 +85,24 @@ The check uses the isolated `cryptobot-e2e` Compose project on localhost port
 PostgreSQL, and confirms that an ended stream fails closed. It removes the test
 container and its isolated volume afterward; pass `-KeepDatabase` to keep them
 for local inspection. The check does not connect to account or trading APIs.
+
+## Replay, data quality, and retention
+
+Read-only maintenance commands use the configured `DATABASE_URL` and do not
+connect to account or trading APIs:
+
+```powershell
+hibachi-bot --quality-date 2026-07-16
+hibachi-bot --replay --start 2026-07-16T00:00:00Z --event-type trades --limit 1000
+```
+
+Replay output is deterministic JSON Lines ordered by `received_at` and database
+`id`. Daily quality output groups counts, missing timestamps/sequences, and
+latency statistics by symbol and topic.
+
+Retention is disabled unless both the timezone-aware cutoff and explicit
+confirmation flag are provided:
+
+```powershell
+hibachi-bot --retention-before 2026-06-01T00:00:00Z --confirm-retention
+```

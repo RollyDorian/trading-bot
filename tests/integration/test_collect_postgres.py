@@ -1,6 +1,7 @@
 import asyncio
 import os
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -9,6 +10,7 @@ from sqlalchemy import select
 
 from trading_bot.collector import MarketCollector, MessageHandler
 from trading_bot.storage.database import create_engine, create_session_factory
+from trading_bot.storage.maintenance import DataMaintenance, ReplayFilter
 from trading_bot.storage.models import MarketEvent
 from trading_bot.storage.repository import EventRepository
 
@@ -42,11 +44,12 @@ def test_collect_stream_writes_raw_event_to_postgres() -> None:
         pytest.skip("DATABASE_URL is required for the PostgreSQL integration check")
 
     marker = str(uuid4())
+    exchange_timestamp_ms = int(datetime.now(UTC).timestamp() * 1000)
     payload = {
         "topic": "trades",
         "symbol": "ETH/USDT-P",
         "data": {
-            "timestamp": 1_720_000_000_000,
+            "timestamp": exchange_timestamp_ms,
             "sequence": 901,
             "price": "3000",
             "e2e_marker": marker,
@@ -63,6 +66,7 @@ def test_collect_stream_writes_raw_event_to_postgres() -> None:
             stream=stream,
             sink=EventRepository(factory),
         )
+        maintenance = DataMaintenance(factory)
         try:
             with pytest.raises(ConnectionError, match="stopped unexpectedly"):
                 await collector.run()
@@ -82,8 +86,27 @@ def test_collect_stream_writes_raw_event_to_postgres() -> None:
             assert event.symbol == "ETH/USDT-P"
             assert event.sequence == 901
             assert event.payload == payload
+            assert event.latency_ms is not None
+            assert event.latency_ms < 5_000
+
+            replay = await maintenance.replay(
+                ReplayFilter(
+                    symbol="ETH/USDT-P",
+                    event_types=("trades",),
+                    limit=100,
+                )
+            )
+            assert [item.id for item in replay] == sorted(item.id for item in replay)
+            assert any(item.payload == payload for item in replay)
+
+            metrics = await maintenance.daily_quality(
+                datetime.now(UTC).date(),
+                symbol="ETH/USDT-P",
+            )
+            trades = next(metric for metric in metrics if metric.event_type == "trades")
+            assert trades.total_events >= 1
+            assert trades.missing_exchange_time == 0
         finally:
             await engine.dispose()
 
     asyncio.run(run_check())
-

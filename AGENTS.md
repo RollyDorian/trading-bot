@@ -66,7 +66,7 @@ python -m venv .venv
 
 ## Suggested next milestones
 
-1. Add retention, daily data-quality metrics, and a reproducible replay reader.
-2. Add long-running soak tests for reconnect, desync, and database failure paths.
-3. Only then implement research features and PAPER execution; keep all real
+1. Add long-running soak tests for reconnect, desync, and database failure paths.
+2. Add versioned research datasets and baseline signal evaluation from replay.
+3. Only then implement PAPER execution; keep all real
    trading commands absent until the documented admission criteria are met.
