@@ -106,3 +106,6 @@ confirmation flag are provided:
 ```powershell
 hibachi-bot --retention-before 2026-06-01T00:00:00Z --confirm-retention
 ```
+
+GitHub Actions runs unit tests, PostgreSQL integration, Ruff, Mypy, and Alembic
+validation for every pull request.
