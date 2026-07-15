@@ -58,7 +58,10 @@ hibachi-bot --stream
 
 Without `--stream`, the command only validates current public contract metadata
 and exits. If PostgreSQL becomes unavailable or the WebSocket receive loop stops,
-the streaming process exits instead of silently discarding data.
+the collector records a `DEGRADED` event and reconnects with bounded exponential
+backoff. Repeated failures produce `HALTED` and stop the process. Order book
+updates are accepted only after a snapshot; detected sequence gaps or regressions
+produce `DESYNC` and restart the stream instead of continuing with invalid state.
 
 ## Local PostgreSQL and end-to-end check
 

@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     )
     database_url: str = "postgresql+asyncpg://cryptobot:cryptobot@localhost:5432/cryptobot"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    reconnect_max_attempts: int = Field(default=5, ge=1, le=100)
+    reconnect_initial_delay: float = Field(default=1.0, gt=0, le=60)
+    reconnect_max_delay: float = Field(default=30.0, gt=0, le=300)
 
     @model_validator(mode="after")
     def enforce_collect_only(self) -> "Settings":
@@ -51,4 +54,6 @@ class Settings(BaseSettings):
             raise ValueError(
                 "This build is COLLECT-only; PAPER and LIVE_MINIMAL are disabled."
             )
+        if self.reconnect_max_delay < self.reconnect_initial_delay:
+            raise ValueError("RECONNECT_MAX_DELAY must be >= RECONNECT_INITIAL_DELAY.")
         return self

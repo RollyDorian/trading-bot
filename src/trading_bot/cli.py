@@ -5,7 +5,7 @@ import logging
 
 import structlog
 
-from trading_bot.collector import build_collector
+from trading_bot.collector import build_supervisor
 from trading_bot.config import Settings
 from trading_bot.exchange import HibachiPublicExchange
 from trading_bot.service import CollectionBootstrap
@@ -26,14 +26,17 @@ def _parse_args() -> argparse.Namespace:
 async def _stream(settings: Settings) -> None:
     engine = create_engine(settings.database_url)
     repository = EventRepository(create_session_factory(engine))
-    collector = build_collector(
+    supervisor = build_supervisor(
         symbol=settings.hibachi_symbol,
         topics=settings.hibachi_topics,
         data_api_url=str(settings.hibachi_data_api_url),
         repository=repository,
+        max_attempts=settings.reconnect_max_attempts,
+        initial_delay=settings.reconnect_initial_delay,
+        max_delay=settings.reconnect_max_delay,
     )
     try:
-        await collector.run()
+        await supervisor.run()
     finally:
         await engine.dispose()
 

@@ -66,9 +66,7 @@ python -m venv .venv
 
 ## Suggested next milestones
 
-1. Add Docker Compose for PostgreSQL and run an end-to-end collection test.
-2. Add snapshot/sequence validation for the order book, reconnect/backoff, and
-   explicit `DEGRADED`/`HALTED` system events.
-3. Add retention, daily data-quality metrics, and a reproducible replay reader.
-4. Only then implement research features and PAPER execution; keep all real
+1. Add retention, daily data-quality metrics, and a reproducible replay reader.
+2. Add long-running soak tests for reconnect, desync, and database failure paths.
+3. Only then implement research features and PAPER execution; keep all real
    trading commands absent until the documented admission criteria are met.
