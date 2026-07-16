@@ -52,6 +52,11 @@ class FakeStream:
         self.disconnected = True
 
 
+class FailedConnectStream(FakeStream):
+    async def connect(self) -> None:
+        raise ConnectionError("connect failed")
+
+
 def test_timestamp_and_sequence_are_extracted_from_nested_data() -> None:
     payload = {"data": {"timestamp": 1_720_000_000_000, "sequence": "42"}}
     assert extract_exchange_time(payload) == datetime.fromtimestamp(1_720_000_000, tz=UTC)
@@ -92,6 +97,19 @@ def test_collector_persists_raw_message_and_fails_on_closed_stream() -> None:
     assert len(sink.events) == 1
     assert sink.events[0].payload == payload
     assert sink.events[0].sequence == 9
+
+
+def test_collector_disconnects_after_connect_failure() -> None:
+    stream = FailedConnectStream({})
+    collector = MarketCollector(
+        symbol="ETH/USDT-P",
+        topics=("trades",),
+        stream=stream,
+        sink=MemorySink(),
+    )
+    with pytest.raises(ConnectionError, match="connect failed"):
+        asyncio.run(collector.run())
+    assert stream.disconnected is True
 
 
 def test_orderbook_sequence_gap_is_persisted_and_fails_closed() -> None:

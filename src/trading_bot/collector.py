@@ -102,7 +102,7 @@ class HibachiMarketStream:
 
         self._executor = AiohttpWsExecutor()
         self._client = HibachiWSMarketClient(
-            api_endpoint=data_api_url,
+            api_endpoint=data_api_url.rstrip("/"),
             executor=self._executor,
         )
 
@@ -110,7 +110,7 @@ class HibachiMarketStream:
         self._client.on(topic, handler)
 
     async def connect(self) -> None:
-        await self._client.connect()
+        await asyncio.wait_for(self._client.connect(), timeout=15.0)
 
     async def subscribe(self, symbol: str, topics: Sequence[str]) -> None:
         from hibachi_xyz import (
@@ -129,12 +129,15 @@ class HibachiMarketStream:
         if receive_task is None:
             raise RuntimeError("Hibachi WebSocket receive loop was not started")
         await receive_task
+        current_task = asyncio.current_task()
+        if current_task is not None and current_task.cancelling():
+            raise asyncio.CancelledError
 
     async def disconnect(self) -> None:
         try:
-            await self._client.disconnect()
+            await asyncio.wait_for(self._client.disconnect(), timeout=10.0)
         finally:
-            await self._executor.close()
+            await asyncio.wait_for(self._executor.close(), timeout=10.0)
 
 
 class MarketCollector:
@@ -235,8 +238,8 @@ class MarketCollector:
     async def run(self) -> None:
         for topic in self._topics:
             self._stream.on(topic, self._handle_message)
-        await self._stream.connect()
         try:
+            await self._stream.connect()
             await self._stream.subscribe(self._symbol, self._topics)
             await self._stream.wait_closed()
             raise ConnectionError("Hibachi market WebSocket stopped unexpectedly")

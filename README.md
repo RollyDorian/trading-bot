@@ -5,9 +5,30 @@ Hibachi `ETH/USDT-P` perpetual contract.
 
 ## Current milestone
 
-The repository is intentionally **COLLECT-only**. The executable can read public
-exchange metadata and validate the configured contract, but it contains no order
-placement, cancellation, account, or withdrawal commands.
+The repository collects public data and supports isolated PAPER research. It contains
+no order placement, cancellation, account, transfer, or withdrawal commands.
+
+## PAPER research
+
+PAPER uses public market data only. Fills cross the observed bid/ask and add one basis
+point of adverse slippage plus the conservative Tier 1 taker fee of 0.045%. Funding is
+accrued from the public estimate over Hibachi's eight-hour interval. A 10% drawdown
+closes the simulated position and prevents new entries.
+
+Replay stored events deterministically:
+
+```powershell
+hibachi-bot --paper-backtest --limit 100000
+```
+
+Run an eight-hour live PAPER soak while retaining raw public events:
+
+```powershell
+hibachi-bot --paper --duration-seconds 28800
+```
+
+Both commands print a JSON report with net PnL, costs, drawdown, fills, win rate, and
+sample Sharpe. These are research measurements, not evidence of future profitability.
 
 ## Requirements
 
@@ -33,9 +54,8 @@ Secrets must never be committed, logged, or sent to Telegram.
 
 ## Safety invariant
 
-`BOT_MODE` must be `collect`. Any other value fails during configuration loading.
-Trading modes will be introduced only after data validation, persistent storage,
-paper execution, risk controls, and explicit acceptance criteria are implemented.
+`BOT_MODE` remains `collect`: PAPER is an account-free CLI research action, not an
+exchange runtime mode. Any non-collect mode fails during configuration loading.
 
 ## Database schema
 

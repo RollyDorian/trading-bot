@@ -23,7 +23,10 @@ class HibachiPublicExchange:
     def __init__(self, api_url: str, data_api_url: str) -> None:
         from hibachi_xyz import HibachiApiClient  # type: ignore[import-untyped]
 
-        self._client = HibachiApiClient(api_url=api_url, data_api_url=data_api_url)
+        self._client = HibachiApiClient(
+            api_url=api_url.rstrip("/"),
+            data_api_url=data_api_url.rstrip("/"),
+        )
 
     def get_contract(self, symbol: str) -> ContractMetadata:
         inventory = self._client.get_inventory()
