@@ -14,6 +14,7 @@ from trading_bot.config import Settings
 from trading_bot.exchange import HibachiPublicExchange
 from trading_bot.paper import PaperEngine
 from trading_bot.research.dataset import DatasetExporter
+from trading_bot.research.quality import validate_dataset
 from trading_bot.research.replay import replay_dataset, terminal_summary, write_report
 from trading_bot.service import CollectionBootstrap
 from trading_bot.storage.database import create_engine, create_session_factory
@@ -24,6 +25,11 @@ from trading_bot.storage.repository import EventRepository
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Hibachi COLLECT-only research service")
     action = parser.add_mutually_exclusive_group()
+    action.add_argument(
+        "command",
+        nargs="?",
+        choices=("validate-dataset",),
+    )
     action.add_argument(
         "--stream",
         action="store_true",
@@ -64,6 +70,10 @@ def _parse_args() -> argparse.Namespace:
         default=Path("data/research/eth-usdt-p"),
     )
     parser.add_argument("--report", type=Path, default=Path("research-report.json"))
+    parser.add_argument("--dataset", type=Path)
+    parser.add_argument("--allow-warnings", action="store_true")
+    parser.add_argument("--gap-warning-seconds", type=float, default=60.0)
+    parser.add_argument("--price-discontinuity-percent", type=float, default=20.0)
     args = parser.parse_args()
     replay_options_used = (
         args.start is not None
@@ -85,6 +95,12 @@ def _parse_args() -> argparse.Namespace:
         parser.error("--confirm-retention requires --retention-before")
     if args.duration_seconds <= 0:
         parser.error("--duration-seconds must be positive")
+    if args.command == "validate-dataset" and args.dataset is None:
+        parser.error("validate-dataset requires --dataset")
+    if args.command != "validate-dataset" and args.dataset is not None:
+        parser.error("--dataset requires validate-dataset")
+    if args.gap_warning_seconds <= 0 or args.price_discontinuity_percent <= 0:
+        parser.error("quality thresholds must be positive")
     return args
 
 
@@ -243,11 +259,23 @@ def main() -> None:
             logging.getLevelNamesMapping()[settings.log_level]
         )
     )
+    if args.command == "validate-dataset":
+        print(
+            json.dumps(
+                validate_dataset(
+                    args.dataset,
+                    gap_warning_seconds=args.gap_warning_seconds,
+                    price_discontinuity_percent=args.price_discontinuity_percent,
+                ),
+                sort_keys=True,
+            )
+        )
+        return
     if args.paper_backtest:
         print(json.dumps(asyncio.run(_paper_backtest(args, settings)), default=str, sort_keys=True))
         return
     if args.offline_replay is not None:
-        report = replay_dataset(args.offline_replay)
+        report = replay_dataset(args.offline_replay, allow_warnings=args.allow_warnings)
         write_report(report, args.report)
         print(terminal_summary(report))
         print(f"report={args.report}")

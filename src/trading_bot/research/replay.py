@@ -9,6 +9,7 @@ from typing import Any, cast
 import pyarrow.parquet as pq  # type: ignore[import-untyped]
 
 from trading_bot.research.dataset import validate_manifest
+from trading_bot.research.quality import require_acceptable_quality
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,7 +147,9 @@ def replay_dataset(
     *,
     signal_config: BaselineConfig | None = None,
     cost_config: CostConfig | None = None,
+    allow_warnings: bool = False,
 ) -> dict[str, Any]:
+    quality = require_acceptable_quality(dataset_dir, allow_warnings=allow_warnings)
     manifest = validate_manifest(dataset_dir)
     signal = signal_config or BaselineConfig()
     costs = cost_config or CostConfig()
@@ -260,6 +263,8 @@ def replay_dataset(
         "intents": [asdict(intent) for intent in intents],
         "trades": [asdict(trade) for trade in trades],
         "warning": "Benchmark simulation only; not a validated trading strategy.",
+        "dataset_quality_status": quality["status"],
+        "quality_warnings_allowed": allow_warnings,
     }
 
 

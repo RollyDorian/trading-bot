@@ -1,4 +1,5 @@
 import asyncio
+import json
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
@@ -12,6 +13,8 @@ from trading_bot.collector import (
     SequenceDesyncError,
     extract_exchange_time,
     extract_sequence,
+    sanitize_error_data,
+    sanitize_error_message,
 )
 from trading_bot.storage.repository import MarketEventInput
 
@@ -197,6 +200,7 @@ def test_supervisor_retries_with_backoff_then_halts() -> None:
         initial_delay=0.5,
         max_delay=1.0,
         sleeper=sleeper,
+        jitter=lambda low, high: (low + high) / 2,
     )
 
     with pytest.raises(ConnectionError, match="stream failed"):
@@ -209,3 +213,92 @@ def test_supervisor_retries_with_backoff_then_halts() -> None:
         "DEGRADED",
         "HALTED",
     ]
+    details = sink.system_events[0]["details"]
+    assert details["event_kind"] == "collection_failure"
+    assert details["exception_class"] == "ConnectionError"
+    assert details["reconnect_attempt"] == 1
+    assert details["retry_delay_seconds"] == 0.5
+    assert details["next_retry_timestamp"]
+    assert details["receipt_timestamp"]
+
+
+@pytest.mark.parametrize(
+    ("uri", "secrets"),
+    [
+        (
+            "postgresql+asyncpg://pg-user:pg-pass@db.local:5432/"
+            "main?token=query-secret,tail-secret#frag",
+            ("pg-user", "pg-pass", "main", "query-secret", "tail-secret", "frag"),
+        ),
+        ("postgresql://pg-user:pg-pass@db.local/main", ("pg-user", "pg-pass", "main")),
+        ("redis://:redis-pass@cache.local:6379/0", ("redis-pass", "/0")),
+        ("amqp://mq-user:mq-pass@queue.local/vhost", ("mq-user", "mq-pass", "vhost")),
+        (
+            "https://web-user:web-pass@example.com/private?access_token=abc#secret",
+            ("web-user", "web-pass", "private", "abc", "secret"),
+        ),
+        ("https://broken-user:broken-pass@", ("broken-user", "broken-pass")),
+    ],
+)
+def test_failure_uri_secrets_do_not_reach_persistence(
+    uri: str, secrets: tuple[str, ...]
+) -> None:
+    sink = MemorySink()
+
+    class FailedCollector:
+        async def run(self) -> None:
+            raise RuntimeError(f"connection failed: {uri}")
+
+    supervisor = CollectorSupervisor(
+        collector_factory=FailedCollector,
+        sink=sink,
+        max_attempts=1,
+        initial_delay=1.0,
+        max_delay=1.0,
+    )
+    with pytest.raises(RuntimeError):
+        asyncio.run(supervisor.run())
+    persisted = json.dumps(sink.system_events)
+    assert all(secret not in persisted for secret in secrets)
+    assert "connection failed" in persisted
+
+
+def test_normal_failure_message_is_preserved_and_bounded() -> None:
+    message = sanitize_error_message(RuntimeError("ordinary connection failure\nretry"), limit=80)
+    assert message == "ordinary connection failure retry"
+    assert "\n" not in message
+    assert len(message) <= 80
+
+
+def test_structured_sensitive_fields_are_redacted() -> None:
+    sanitized = sanitize_error_data(
+        {"access_token": "structured-secret", "nested": ["https://u:p@example.com/x"]}
+    )
+    assert "structured-secret" not in str(sanitized)
+    assert "https://u:p@" not in str(sanitized)
+
+
+def test_backoff_has_positive_bounds_and_no_busy_loop() -> None:
+    sink = MemorySink()
+    delays: list[float] = []
+
+    class FailedCollector:
+        async def run(self) -> None:
+            raise ConnectionError("failed")
+
+    async def sleeper(delay: float) -> None:
+        delays.append(delay)
+
+    supervisor = CollectorSupervisor(
+        collector_factory=FailedCollector,
+        sink=sink,
+        max_attempts=4,
+        initial_delay=1.0,
+        max_delay=3.0,
+        sleeper=sleeper,
+        jitter=lambda low, high: low,
+    )
+    with pytest.raises(ConnectionError):
+        asyncio.run(supervisor.run())
+    assert len(delays) == 3
+    assert all(1.0 <= delay <= 3.0 for delay in delays)
