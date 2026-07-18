@@ -5,30 +5,93 @@ Hibachi `ETH/USDT-P` perpetual contract.
 
 ## Current milestone
 
-The repository collects public data and supports isolated PAPER research. It contains
-no order placement, cancellation, account, transfer, or withdrawal commands.
+The repository collects public data and exports immutable, checksummed datasets for
+deterministic offline research. It contains no order placement, cancellation, account,
+transfer, withdrawal, leverage, or private API commands. `BOT_MODE` remains `collect`.
 
-## PAPER research
+## Offline baseline research
 
-PAPER uses public market data only. Fills cross the observed bid/ask and add one basis
-point of adverse slippage plus the conservative Tier 1 taker fee of 0.045%. Funding is
-accrued from the public estimate over Hibachi's eight-hour interval. A 10% drawdown
-closes the simulated position and prevents new entries.
+The baseline is a deliberately simple short-horizon momentum benchmark over exported
+one-second candles. It emits research intents only. The report applies configurable
+taker costs, funding estimate, slippage, latency penalty, and execution delay. Maker
+fees are recorded in configuration but are not used by this taker-only baseline.
 
-Replay stored events deterministically:
+This is not a validated strategy and is not evidence of profitability. PAPER remains
+blocked until chronological out-of-sample evaluation across multiple versioned
+datasets passes acceptance thresholds chosen before viewing those samples.
+
+## Exact research workflow
+
+### 1. Apply migrations
 
 ```powershell
-hibachi-bot --paper-backtest --limit 100000
+.\.venv\Scripts\alembic.exe upgrade head
 ```
 
-Run an eight-hour live PAPER soak while retaining raw public events:
+### 2. Collect public events
 
 ```powershell
-hibachi-bot --paper --duration-seconds 28800
+.\.venv\Scripts\hibachi-bot.exe --stream
 ```
 
-Both commands print a JSON report with net PnL, costs, drawdown, fills, win rate, and
-sample Sharpe. These are research measurements, not evidence of future profitability.
+### 3. Export a bounded versioned dataset
+
+The start is inclusive and the end is exclusive. Both timestamps must include a
+timezone. The default destination is `data/research/eth-usdt-p/`.
+
+```powershell
+.\.venv\Scripts\hibachi-bot.exe --export-dataset `
+  --start 2026-07-18T00:00:00Z `
+  --end 2026-07-18T08:00:00Z
+```
+
+Each dataset contains `manifest.json`, `events.parquet`, `candles_1s.parquet`, and
+`README.md`. The ID includes symbol, UTC bounds, and schema version. The manifest
+contains row counts, deterministic export timestamp, software revision, and SHA-256
+checksums. Re-export to an existing ID fails instead of overwriting it.
+
+### 4. Replay the offline baseline
+
+```powershell
+.\.venv\Scripts\hibachi-bot.exe --offline-replay `
+  data/research/eth-usdt-p/eth-usdt-p_20260718T000000000000Z_20260718T080000000000Z_v1 `
+  --report research-report.json
+```
+
+Replay validates the manifest and every artifact checksum before reading candles. It
+uses no network or exchange client. Identical dataset and typed configuration produce
+an identical report.
+
+### 5. Read the report
+
+The terminal prints a concise `OFFLINE RESEARCH SIMULATION` summary. The JSON report
+contains dataset/configuration identity, signals, simulated entries/exits, gross PnL,
+fees, funding, slippage plus latency, net PnL, win rate, maximum drawdown, average
+holding time, skipped-signal reasons, intents, and simulated trades.
+
+All PnL fields are research simulation outputs. The baseline assumes one position at a
+time and a cooldown. It does not model queue position, partial fills, liquidation,
+spread dynamics, time-varying fees, exact funding settlements, or market impact.
+
+### VPS/Linux equivalents
+
+Run these from the checked-out repository with `DATABASE_URL` configured outside Git:
+
+```bash
+python3.13 -m venv .venv
+.venv/bin/python -m pip install -e '.[dev]'
+.venv/bin/alembic upgrade head
+.venv/bin/hibachi-bot --stream
+.venv/bin/hibachi-bot --export-dataset \
+  --start 2026-07-18T00:00:00Z \
+  --end 2026-07-18T08:00:00Z
+.venv/bin/hibachi-bot --offline-replay \
+  data/research/eth-usdt-p/eth-usdt-p_20260718T000000000000Z_20260718T080000000000Z_v1 \
+  --report research-report.json
+```
+
+Do not run collection before migrations complete. Generated datasets and reports are
+ignored by Git; copy them to controlled research storage with their manifest intact.
 
 ## Requirements
 

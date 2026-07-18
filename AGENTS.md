@@ -66,7 +66,11 @@ python -m venv .venv
 
 ## Suggested next milestones
 
-1. Add long-running soak tests for reconnect, desync, and database failure paths.
-2. Add versioned research datasets and baseline signal evaluation from replay.
-3. Only then implement PAPER execution; keep all real
-   trading commands absent until the documented admission criteria are met.
+1. **Complete:** Soak tests cover reconnect continuity, desync halt/error recording,
+   and propagated PostgreSQL write failures.
+2. **In progress:** Add versioned research datasets and baseline signal evaluation
+   from deterministic offline replay.
+3. PAPER remains blocked until multiple versioned datasets pass documented
+   chronological out-of-sample evaluation after fees, funding, slippage, latency,
+   data-quality review, and independently chosen acceptance thresholds. Keep all
+   real trading commands absent.

@@ -4,6 +4,7 @@ import json
 import logging
 from dataclasses import asdict
 from datetime import date, datetime
+from pathlib import Path
 from typing import Any
 
 import structlog
@@ -12,6 +13,8 @@ from trading_bot.collector import build_supervisor
 from trading_bot.config import Settings
 from trading_bot.exchange import HibachiPublicExchange
 from trading_bot.paper import PaperEngine
+from trading_bot.research.dataset import DatasetExporter
+from trading_bot.research.replay import replay_dataset, terminal_summary, write_report
 from trading_bot.service import CollectionBootstrap
 from trading_bot.storage.database import create_engine, create_session_factory
 from trading_bot.storage.maintenance import DataMaintenance, ReplayFilter
@@ -38,12 +41,29 @@ def _parse_args() -> argparse.Namespace:
         metavar="TIMESTAMP",
         help="delete events older than an explicit timezone-aware timestamp",
     )
+    action.add_argument(
+        "--export-dataset",
+        action="store_true",
+        help="export a bounded immutable research dataset from PostgreSQL",
+    )
+    action.add_argument(
+        "--offline-replay",
+        type=Path,
+        metavar="DATASET_DIR",
+        help="run deterministic baseline research from an exported local dataset",
+    )
     parser.add_argument("--start", type=_parse_datetime, help="replay start timestamp")
     parser.add_argument("--end", type=_parse_datetime, help="replay end timestamp")
     parser.add_argument("--event-type", action="append", default=[])
     parser.add_argument("--limit", type=int, default=10_000)
     parser.add_argument("--confirm-retention", action="store_true")
     parser.add_argument("--duration-seconds", type=float, default=28_800.0)
+    parser.add_argument(
+        "--dataset-root",
+        type=Path,
+        default=Path("data/research/eth-usdt-p"),
+    )
+    parser.add_argument("--report", type=Path, default=Path("research-report.json"))
     args = parser.parse_args()
     replay_options_used = (
         args.start is not None
@@ -51,8 +71,14 @@ def _parse_args() -> argparse.Namespace:
         or bool(args.event_type)
         or args.limit != 10_000
     )
-    if replay_options_used and not (args.replay or args.paper_backtest):
-        parser.error("--start, --end, --event-type, and --limit require replay or backtest")
+    if replay_options_used and not (args.replay or args.paper_backtest or args.export_dataset):
+        parser.error(
+            "--start, --end, --event-type, and --limit require replay, export, or backtest"
+        )
+    if args.export_dataset and (args.start is None or args.end is None):
+        parser.error("--export-dataset requires explicit --start and --end")
+    if args.event_type and args.export_dataset:
+        parser.error("--event-type is not supported by full dataset export")
     if args.retention_before is not None and not args.confirm_retention:
         parser.error("--retention-before requires --confirm-retention")
     if args.confirm_retention and args.retention_before is None:
@@ -195,6 +221,16 @@ async def _maintenance(args: argparse.Namespace, settings: Settings) -> None:
                 confirmed=args.confirm_retention,
             )
             print(json.dumps(asdict(result), sort_keys=True))
+        elif args.export_dataset:
+            dataset_dir = await DatasetExporter(
+                create_session_factory(engine)
+            ).export(
+                symbol=settings.hibachi_symbol,
+                start=args.start,
+                end=args.end,
+                output_root=args.dataset_root,
+            )
+            print(dataset_dir)
     finally:
         await engine.dispose()
 
@@ -210,7 +246,18 @@ def main() -> None:
     if args.paper_backtest:
         print(json.dumps(asyncio.run(_paper_backtest(args, settings)), default=str, sort_keys=True))
         return
-    if args.quality_date is not None or args.replay or args.retention_before is not None:
+    if args.offline_replay is not None:
+        report = replay_dataset(args.offline_replay)
+        write_report(report, args.report)
+        print(terminal_summary(report))
+        print(f"report={args.report}")
+        return
+    if (
+        args.quality_date is not None
+        or args.replay
+        or args.retention_before is not None
+        or args.export_dataset
+    ):
         asyncio.run(_maintenance(args, settings))
         return
 
