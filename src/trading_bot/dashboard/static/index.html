@@ -3,48 +3,61 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Hibachi Research Dashboard</title>
+  <title>Hibachi Research Terminal</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <style>
-    body { font: 14px system-ui; margin: 24px; background: #0b1020; color: #e8ecf4; }
-    h1 { margin-bottom: 4px; } .muted { color: #9aa6bd; }
-    .card { background: #151d31; border-radius: 10px; padding: 16px; margin: 16px 0; }
-    .dot { display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:8px; }
-    .green { background:#32d583; } .red { background:#f04438; }
-    table { width:100%; border-collapse:collapse; } th,td { text-align:left; padding:8px; border-bottom:1px solid #2b354d; }
-    canvas { max-height: 360px; }
+    :root{color-scheme:dark;--bg:#15181d;--panel:#1c2026;--panel2:#20252c;--line:#343a43;--text:#e8ebef;--muted:#99a2ad;--blue:#55b6d9;--green:#4ac184;--amber:#e2a84b;--red:#e26464;--mono:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace}
+    *{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:var(--bg);color:var(--text);font:13px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}button,a{font:inherit}.mono,.value,time,.badge,.status{font-family:var(--mono)}
+    .topbar{min-height:54px;padding:9px 18px;display:flex;align-items:center;gap:16px;border-bottom:1px solid var(--line);background:#191d22;position:sticky;top:0;z-index:5}.brand{font-weight:750;letter-spacing:.08em;white-space:nowrap}.instrument{color:var(--blue);font-weight:700}.badge{font-size:11px;padding:3px 7px;border:1px solid #517689;border-radius:6px;color:#9bd7ed}.top-spacer{flex:1}.top-stat{display:flex;gap:7px;align-items:center;white-space:nowrap}.label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em}.dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}.healthy{color:var(--green)}.healthy .dot,.dot.healthy{background:var(--green)}.stale{color:var(--amber)}.stale .dot,.dot.stale{background:var(--amber)}.fault{color:var(--red)}.fault .dot,.dot.fault{background:var(--red)}
+    button{color:var(--text);background:#252b33;border:1px solid #414955;border-radius:6px;padding:6px 10px;cursor:pointer}button:hover{border-color:#637083}button:focus-visible,a:focus-visible{outline:2px solid var(--blue);outline-offset:2px}button:disabled{opacity:.45;cursor:not-allowed}
+    .alert{display:none;padding:9px 18px;border-bottom:1px solid;font-family:var(--mono);font-weight:700}.alert.show{display:block}.alert.stale{background:#332b1d;border-color:#725b31}.alert.fault{background:#351f22;border-color:#71363d}
+    main{max-width:1600px;margin:auto;padding:14px 18px 50px}.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:10px}.metric{background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:10px 12px;min-height:90px}.metric h2,.panel h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px;color:#bdc5cf}.metric-grid{display:grid;grid-template-columns:auto 1fr;gap:3px 10px}.metric-grid .value{text-align:right;white-space:nowrap}.helper{color:var(--muted);font-size:11px;margin-top:5px}
+    .primary{display:grid;grid-template-columns:minmax(0,2.4fr) minmax(270px,1fr);gap:10px;margin-bottom:10px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;min-width:0}.panel-head{height:43px;padding:9px 12px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line)}.panel-head h2{margin:0}.panel-head .right{margin-left:auto}.chart-wrap{height:340px;padding:10px 12px}.chart-empty,.state-message{height:100%;display:grid;place-items:center;color:var(--muted);font-family:var(--mono)}
+    .system-list{height:340px;overflow:auto}.system-event{padding:9px 12px;border-bottom:1px solid #2e343c}.system-event:last-child{border:0}.system-meta{display:flex;gap:8px;color:var(--muted);font:11px var(--mono);margin-bottom:3px}.sev-error,.sev-critical{color:var(--red)}.sev-warning{color:var(--amber)}
+    .table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:800px}th,td{text-align:left;padding:8px 10px;border-bottom:1px solid #30363e;white-space:nowrap}th{position:sticky;top:0;background:var(--panel2);color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em}td.num{text-align:right;font-family:var(--mono)}tbody tr:hover{background:#22272e}.tag{display:inline-block;border:1px solid #4a535f;border-radius:5px;padding:2px 6px;font:11px var(--mono);color:#c5ccd5}.tag.good{border-color:#376c52;color:var(--green)}.tag.warn{border-color:#705b35;color:var(--amber)}
+    footer{position:fixed;bottom:0;left:0;right:0;padding:7px 18px;background:#191d22;border-top:1px solid var(--line);color:var(--muted);font-size:11px;text-align:center}
+    @media(max-width:900px){.topbar{flex-wrap:wrap;gap:8px}.top-spacer{display:none}.metrics{grid-template-columns:repeat(2,1fr)}.primary{grid-template-columns:1fr}.system-list{height:230px}}
+    @media(max-width:540px){.topbar{padding:8px 10px}.brand{width:100%}.top-stat.utc{display:none}main{padding:10px 10px 54px}.metrics{grid-template-columns:1fr}.metric{min-height:0}.chart-wrap{height:300px}.alert{padding:8px 10px}}
   </style>
 </head>
 <body>
-  <h1>COLLECT Research Dashboard</h1>
-  <div class="muted">Read-only public market data and offline evaluations</div>
-  <section class="card"><h2>Collector</h2><div id="health">Loading…</div></section>
-  <section class="card"><h2>Datasets</h2><table><thead><tr><th>Version</th><th>Rows</th><th>Signals</th><th>Win rate</th><th>Mean return</th><th>Sharpe approx.</th></tr></thead><tbody id="datasets"></tbody></table></section>
-  <section class="card"><h2>Recent mid-price</h2><canvas id="priceChart"></canvas></section>
+  <header class="topbar">
+    <div class="brand">HIBACHI RESEARCH</div><div class="instrument mono">ETH/USDT-P</div><div class="badge">COLLECT ONLY</div>
+    <div class="top-spacer"></div><div id="topStatus" class="top-stat status"><span class="dot"></span><span>LOADING</span></div>
+    <div class="top-stat"><span class="label">AGE</span><span id="topAge" class="value">—</span></div>
+    <div class="top-stat utc"><span class="label">UTC</span><time id="utcClock" class="value">—</time></div>
+    <button id="refreshButton" type="button" aria-label="Refresh dashboard data">Refresh</button>
+  </header>
+  <div id="criticalAlert" class="alert" role="alert" aria-live="assertive"></div>
+  <main>
+    <section class="metrics" aria-label="Operational metrics">
+      <article class="metric"><h2>Collector</h2><div class="metric-grid"><span class="label">Status</span><span id="collectorState" class="value">—</span><span class="label">Last event</span><span id="collectorAge" class="value">—</span><span class="label">Events/min</span><span id="eventRate" class="value">—</span></div></article>
+      <article class="metric"><h2>Data quality</h2><div class="metric-grid"><span class="label">Recent desync</span><span id="desyncCount" class="value">—</span><span class="label">Latency 1m</span><span id="latency" class="value">—</span><span class="label">Sequence gaps</span><span class="value" title="Aggregate sequence-gap metric is not collected">—</span></div><div class="helper">Only persisted DESYNC events are reported.</div></article>
+      <article class="metric"><h2>Storage</h2><div class="metric-grid"><span class="label">Total events</span><span id="totalEvents" class="value">—</span><span class="label">Coverage from</span><span id="coverageStart" class="value">—</span><span class="label">Coverage to</span><span id="coverageEnd" class="value">—</span></div></article>
+      <article class="metric"><h2>Research</h2><div class="metric-grid"><span class="label">Datasets</span><span id="datasetCount" class="value">—</span><span class="label">Evaluated</span><span id="evaluatedCount" class="value">—</span><span class="label">Usable</span><span id="usableCount" class="value" title="Non-empty datasets with an evaluation containing at least one signal">—</span></div></article>
+    </section>
+    <section class="primary">
+      <article class="panel"><div class="panel-head"><h2>Recent mid-price</h2><span id="pointCount" class="helper right">Loading</span></div><div class="chart-wrap"><canvas id="priceChart" aria-label="Recent ETH/USDT-P mid-price chart" role="img"></canvas><div id="chartState" class="chart-empty">Loading market data…</div></div></article>
+      <aside class="panel"><div class="panel-head"><h2>Recent system events</h2><span class="helper right">latest 20</span></div><div id="systemEvents" class="system-list"><div class="state-message">Loading system events…</div></div></aside>
+    </section>
+    <section class="panel"><div class="panel-head"><h2>Versioned datasets</h2><span id="datasetSummary" class="helper right">Loading</span></div><div class="table-wrap"><table><thead><tr><th>Version</th><th>Data range (UTC)</th><th>Rows</th><th>Quality</th><th>Evaluation</th><th>Signals</th><th>Detail</th></tr></thead><tbody id="datasetRows"><tr><td colspan="7" class="state-message">Loading datasets…</td></tr></tbody></table></div></section>
+  </main>
+  <footer>Research only — displayed metrics are not evidence of profitability or trading readiness.</footer>
   <script>
-    let chart;
-    const number = value => { const n = Number(value); return Number.isFinite(n) && n > 0 ? n : null; };
-    function mid(payload) {
-      const d = payload.data && typeof payload.data === 'object' ? payload.data : payload;
-      const bid = number(d.bidPrice ?? d.bid_price ?? d.bid);
-      const ask = number(d.askPrice ?? d.ask_price ?? d.ask);
-      if (bid && ask && bid <= ask) return (bid + ask) / 2;
-      return number(d.markPrice ?? d.mark_price ?? d.price ?? d.tradePrice);
-    }
-    async function refresh() {
-      const [status, datasets, events] = await Promise.all([
-        fetch('/api/status').then(r => r.json()), fetch('/api/datasets').then(r => r.json()),
-        fetch('/api/market/recent?limit=200').then(r => r.json())
-      ]);
-      const age = status.last_event_timestamp ? Math.max(0, (Date.now() - Date.parse(status.last_event_timestamp)) / 1000) : null;
-      document.getElementById('health').innerHTML = `<span class="dot ${status.healthy ? 'green' : 'red'}"></span>${status.healthy ? 'Healthy' : 'Stale'} — events ${status.event_count}, last age ${age === null ? 'n/a' : age.toFixed(1) + 's'}`;
-      const tbody = document.getElementById('datasets'); tbody.replaceChildren();
-      datasets.forEach(item => { const m=item.manifest, e=item.evaluation||{}; const row=document.createElement('tr');
-        [m.version, m.row_count, e.signal_count ?? '—', e.win_rate?.toFixed(4) ?? '—', e.mean_return?.toFixed(6) ?? '—', e.sharpe_approximation?.toFixed(3) ?? '—'].forEach(value => { const cell=document.createElement('td'); cell.textContent=value; row.appendChild(cell); }); tbody.appendChild(row); });
-      const points = events.map(e => ({x:e.exchange_at || e.received_at, y:mid(e.payload)})).filter(p => p.y !== null);
-      if (chart) chart.destroy(); chart = new Chart(document.getElementById('priceChart'), {type:'line', data:{labels:points.map(p=>p.x),datasets:[{label:'ETH/USDT-P',data:points.map(p=>p.y),borderColor:'#53b1fd',pointRadius:0}]}, options:{animation:false}});
-    }
-    refresh(); setInterval(refresh, 10000);
+    'use strict'; let chart; const $=id=>document.getElementById(id); const dash='—';
+    const num=v=>{const n=Number(v);return Number.isFinite(n)&&n>0?n:null};
+    function mid(payload){const d=payload?.data&&typeof payload.data==='object'?payload.data:payload||{};const bid=num(d.bidPrice??d.bid_price??d.bid),ask=num(d.askPrice??d.ask_price??d.ask);if(bid&&ask&&bid<=ask)return(bid+ask)/2;return num(d.markPrice??d.mark_price??d.price??d.tradePrice)}
+    function duration(seconds){if(seconds==null||!Number.isFinite(Number(seconds)))return dash;let s=Math.max(0,Math.floor(seconds));const d=Math.floor(s/86400);s%=86400;const h=Math.floor(s/3600);s%=3600;const m=Math.floor(s/60);s%=60;return[d&&`${d}d`,h&&`${h}h`,m&&`${m}m`,`${s}s`].filter(Boolean).join(' ')}
+    function shortTime(value){if(!value)return dash;return new Date(value).toISOString().replace('T',' ').slice(0,19)}
+    function setText(id,value){$(id).textContent=value??dash}
+    function setStatus(status,systems){const state=status?.state||'fault',age=status?.last_event_age_seconds;const top=$('topStatus');top.className=`top-stat status ${state}`;top.querySelector('.dot').className=`dot ${state}`;top.lastElementChild.textContent=state.toUpperCase();setText('topAge',duration(age));setText('collectorState',state.toUpperCase());$('collectorState').className=`value ${state}`;setText('collectorAge',duration(age));setText('eventRate',status?.events_per_minute);setText('totalEvents',status?.event_count);setText('coverageStart',shortTime(status?.coverage_start_timestamp));setText('coverageEnd',shortTime(status?.coverage_end_timestamp));setText('latency',status?.average_latency_ms_1m==null?dash:`${Number(status.average_latency_ms_1m).toFixed(1)} ms`);const desync=(systems||[]).filter(e=>e.event_type==='DESYNC').length;setText('desyncCount',desync);const alert=$('criticalAlert');alert.className='alert';if(status?.error==='database_unavailable'){alert.textContent='DATABASE UNAVAILABLE — collector status and recent market data cannot be verified';alert.classList.add('show','fault')}else if(desync>0){alert.textContent=`DESYNC DETECTED — ${desync} persisted event${desync===1?'':'s'} in recent system history`;alert.classList.add('show','fault')}else if(state==='stale'){alert.textContent=`STALE DATA — no market event for ${duration(age)}`;alert.classList.add('show','stale')}else{alert.textContent=''}}
+    function renderSystems(events,error){const root=$('systemEvents');root.replaceChildren();if(error){const item=document.createElement('div');item.className='state-message fault';item.textContent='System events unavailable';root.append(item);return}if(!events.length){const item=document.createElement('div');item.className='state-message';item.textContent='No system events recorded';root.append(item);return}events.forEach(event=>{const item=document.createElement('div');item.className='system-event';const meta=document.createElement('div');meta.className='system-meta';const sev=document.createElement('span');sev.className=`sev-${String(event.severity).toLowerCase()}`;sev.textContent=event.severity;const time=document.createElement('time');time.textContent=shortTime(event.occurred_at);meta.append(sev,time);const message=document.createElement('div');message.textContent=`${event.event_type} — ${event.message}`;item.append(meta,message);root.append(item)})}
+    function datasetState(item){const m=item.manifest||{},e=item.evaluation;if(Number(m.row_count)===0)return{quality:'Empty',evaluation:'Not evaluated',usable:false};if(!e)return{quality:dash,evaluation:'Not evaluated',usable:false};if(Number(e.signal_count)===0)return{quality:dash,evaluation:'Insufficient data',usable:false};return{quality:dash,evaluation:'Evaluated',usable:true}}
+    function renderDatasets(items,error){const body=$('datasetRows');body.replaceChildren();if(error||!items){const row=body.insertRow();const cell=row.insertCell();cell.colSpan=7;cell.className='state-message fault';cell.textContent='Datasets unavailable';return}setText('datasetCount',items.length);const states=items.map(datasetState);setText('evaluatedCount',items.filter(item=>item.evaluation!=null).length);setText('usableCount',states.filter(s=>s.usable).length);setText('datasetSummary',items.length?`${items.length} version${items.length===1?'':'s'}`:'No datasets');if(!items.length){const row=body.insertRow();const cell=row.insertCell();cell.colSpan=7;cell.className='state-message';cell.textContent='No versioned datasets available';return}items.forEach((item,index)=>{const m=item.manifest||{},e=item.evaluation,state=states[index],row=body.insertRow();const values=[m.version??dash,`${shortTime(m.start_utc)} → ${shortTime(m.end_utc)}`,m.row_count??dash,state.quality,state.evaluation,e?.signal_count??dash];values.forEach((value,i)=>{const cell=row.insertCell();cell.textContent=value;if(i===2||i===5)cell.className='num';if(i===3||i===4){cell.innerHTML='';const tag=document.createElement('span');tag.className=`tag ${state.usable?'good':state.evaluation==='Insufficient data'||state.quality==='Empty'?'warn':''}`;tag.textContent=value;cell.append(tag)}});const action=row.insertCell();if(e){const link=document.createElement('a');link.href=`/api/datasets/${encodeURIComponent(m.version)}/eval`;link.textContent='JSON';link.className='tag';link.setAttribute('aria-label',`Open evaluation JSON for ${m.version}`);action.append(link)}else{action.textContent=dash}})}
+    function renderChart(events,error){const state=$('chartState'),canvas=$('priceChart');if(chart){chart.destroy();chart=null}if(error){state.textContent='Recent market data unavailable';state.className='chart-empty fault';canvas.hidden=true;return}const points=events.map(e=>({x:e.exchange_at||e.received_at,y:mid(e.payload)})).filter(p=>p.y!==null);setText('pointCount',`${points.length} points / latest ${events.length} events`);if(!points.length){state.textContent='No parseable mid-price points in recent events';state.className='chart-empty';canvas.hidden=true;return}state.hidden=true;canvas.hidden=false;chart=new Chart(canvas,{type:'line',data:{labels:points.map(p=>p.x),datasets:[{data:points.map(p=>p.y),label:'ETH/USDT-P mid',borderColor:'#55b6d9',borderWidth:1.5,pointRadius:0,tension:0}]},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{title:items=>new Date(points[items[0].dataIndex].x).toISOString()}}},scales:{x:{grid:{color:'#2b3037'},ticks:{color:'#8f99a5',autoSkip:true,maxTicksLimit:8,maxRotation:0,minRotation:0,callback:(_,index)=>new Date(points[index].x).toISOString().slice(11,19)}},y:{position:'right',grid:{color:'#2b3037'},ticks:{color:'#8f99a5',callback:value=>Number(value).toFixed(2)}}}}})}
+    async function get(url){const response=await fetch(url,{cache:'no-store'});if(!response.ok)throw new Error(`${url}: ${response.status}`);return response.json()}
+    async function refresh(){const button=$('refreshButton');button.disabled=true;setText('datasetSummary','Refreshing');const [statusResult,datasetResult,marketResult,systemResult]=await Promise.allSettled([get('/api/status'),get('/api/datasets'),get('/api/market/recent?limit=200'),get('/api/system/recent?limit=20')]);const status=statusResult.status==='fulfilled'?statusResult.value:{state:'fault',error:'database_unavailable'},systems=systemResult.status==='fulfilled'?systemResult.value:[];setStatus(status,systems);renderSystems(systems,systemResult.status==='rejected');renderDatasets(datasetResult.status==='fulfilled'?datasetResult.value:null,datasetResult.status==='rejected');renderChart(marketResult.status==='fulfilled'?marketResult.value:[],marketResult.status==='rejected');button.disabled=false}
+    function tickClock(){setText('utcClock',new Date().toISOString().replace('T',' ').slice(0,19))}$('refreshButton').addEventListener('click',refresh);tickClock();setInterval(tickClock,1000);refresh();setInterval(refresh,10000);
   </script>
 </body>
 </html>
