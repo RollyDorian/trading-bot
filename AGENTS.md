@@ -47,11 +47,12 @@ python -m venv .venv
   launch it against a database unless migrations have been applied.
 - The default database URL is development-only. Replace it locally through
   `.env`; never commit local credentials.
+- After every meaningful repository change, review and update this `AGENTS.md`
+  when project scope, invariants, workflow, branch state, or milestones changed.
 
 ## Git and GitHub
 
-- Current integration branch: `codex/collect-foundation`; draft PR #1 targets
-  `main`.
+- Current integration branch: `codex/integration`.
 - Preserve unrelated user changes. Do not reset, force-push, delete branches,
   merge a PR, or push new commits unless the user explicitly requests it.
 - Git for Windows must use the system OpenSSH to access the loaded Windows
@@ -61,16 +62,21 @@ python -m venv .venv
   $env:GIT_SSH_COMMAND='"C:\Windows\System32\OpenSSH\ssh.exe"'
   ```
 
-- GitHub CLI is installed at `C:\Program Files\GitHub CLI\gh.exe` and is
-  authenticated as `RollyDorian`.
+- GitHub CLI is installed at `C:\Program Files\GitHub CLI\gh.exe`. Verify auth
+  with `gh auth status` before workflows that require the GitHub API.
 
 ## Suggested next milestones
 
 1. **Complete:** Soak tests cover reconnect continuity, desync halt/error recording,
    and propagated PostgreSQL write failures.
-2. **In progress:** Validate versioned research datasets, deterministic momentum
-   evaluation, and the read-only dashboard against representative PostgreSQL data.
-3. PAPER remains blocked until multiple versioned datasets pass documented
-   chronological out-of-sample evaluation after fees, funding, slippage, latency,
-   data-quality review, and independently chosen acceptance thresholds. Keep all
+2. **Complete:** The dashboard exposes authenticated research export/evaluate
+   controls and read-only paper-admission visibility. It never enables execution.
+3. **Complete:** A deterministic, fail-closed paper-admission research gate validates
+   manifests, checksums, quality status `pass`, chronological splits, compatible
+   cost-aware replay reports, and aggregate OOS criteria.
+4. **In progress:** Exercise the admission gate across multiple representative,
+   versioned datasets and independently review thresholds, cost assumptions, regime
+   coverage, and OOS stability.
+5. PAPER remains disabled even when admission criteria pass. Human review and a
+   separate explicitly approved implementation milestone are mandatory; keep all
    real trading commands absent.
