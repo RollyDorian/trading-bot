@@ -1,0 +1,162 @@
+import json
+import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, Protocol, cast
+
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import FileResponse
+from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+
+from trading_bot.config import Settings
+from trading_bot.storage.database import create_engine, create_session_factory
+from trading_bot.storage.models import MarketEvent
+
+
+class DashboardStore(Protocol):
+    async def status(self) -> dict[str, Any]: ...
+
+    async def recent(self, limit: int) -> list[dict[str, Any]]: ...
+
+    async def close(self) -> None: ...
+
+
+class DatabaseDashboardStore:
+    def __init__(
+        self,
+        engine: AsyncEngine,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        self._engine = engine
+        self._session_factory = session_factory
+
+    async def status(self) -> dict[str, Any]:
+        try:
+            async with self._session_factory() as session:
+                count, last_event = (
+                    await session.execute(
+                        select(func.count(MarketEvent.id), func.max(MarketEvent.received_at))
+                    )
+                ).one()
+        except SQLAlchemyError:
+            return {
+                "event_count": 0,
+                "last_event_timestamp": None,
+                "healthy": False,
+                "error": "database_unavailable",
+            }
+        return {
+            "event_count": count,
+            "last_event_timestamp": last_event.isoformat() if last_event else None,
+            "healthy": last_event is not None
+            and (datetime.now(UTC) - last_event).total_seconds() <= 30,
+        }
+
+    async def recent(self, limit: int) -> list[dict[str, Any]]:
+        statement = select(MarketEvent).order_by(MarketEvent.received_at.desc()).limit(limit)
+        async with self._session_factory() as session:
+            events = list((await session.scalars(statement)).all())
+        events.reverse()
+        return [
+            {
+                "id": event.id,
+                "received_at": event.received_at.isoformat(),
+                "exchange_at": event.exchange_at.isoformat() if event.exchange_at else None,
+                "topic": event.event_type,
+                "symbol": event.symbol,
+                "sequence": event.sequence,
+                "latency_ms": event.latency_ms,
+                "payload": event.payload,
+            }
+            for event in events
+        ]
+
+    async def close(self) -> None:
+        await self._engine.dispose()
+
+
+def _safe_dataset_dir(root: Path, version: str) -> Path:
+    candidate = (root / version).resolve()
+    root = root.resolve()
+    if candidate.parent != root:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    return candidate
+
+
+def _list_datasets(root: Path) -> list[dict[str, Any]]:
+    if not root.is_dir():
+        return []
+    datasets: list[dict[str, Any]] = []
+    for directory in sorted(root.iterdir(), key=lambda path: path.name, reverse=True):
+        manifest_path = directory / "manifest.json"
+        if not directory.is_dir() or not manifest_path.is_file():
+            continue
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        evaluation_path = directory / "eval_momentum.json"
+        evaluation = None
+        if evaluation_path.is_file():
+            try:
+                evaluation = json.loads(evaluation_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                evaluation = None
+        datasets.append({"manifest": manifest, "evaluation": evaluation})
+    return datasets
+
+
+def create_app(
+    *,
+    database_url: str | None = None,
+    datasets_dir: Path | None = None,
+    store: DashboardStore | None = None,
+) -> FastAPI:
+    root = datasets_dir or Path(os.getenv("DATASETS_DIR", "datasets"))
+    dashboard_store = store
+    if dashboard_store is None:
+        engine = create_engine(database_url or Settings().database_url)
+        dashboard_store = DatabaseDashboardStore(engine, create_session_factory(engine))
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        yield
+        await dashboard_store.close()
+
+    app = FastAPI(title="Hibachi COLLECT Research Dashboard", lifespan=lifespan)
+    static_index = Path(__file__).parent / "static" / "index.html"
+
+    @app.get("/", include_in_schema=False)
+    async def index() -> FileResponse:
+        return FileResponse(static_index)
+
+    @app.get("/api/status")
+    async def status() -> dict[str, Any]:
+        return await dashboard_store.status()
+
+    @app.get("/api/datasets")
+    async def datasets() -> list[dict[str, Any]]:
+        return _list_datasets(root)
+
+    @app.get("/api/datasets/{version}/eval")
+    async def dataset_evaluation(version: str) -> dict[str, Any]:
+        path = _safe_dataset_dir(root, version) / "eval_momentum.json"
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail="Evaluation not found")
+        try:
+            return cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
+        except (OSError, json.JSONDecodeError) as error:
+            raise HTTPException(status_code=500, detail="Invalid evaluation file") from error
+
+    @app.get("/api/market/recent")
+    async def recent(limit: int = Query(default=200, ge=1, le=1_000)) -> list[dict[str, Any]]:
+        return await dashboard_store.recent(limit)
+
+    return app
+
+
+app = create_app()

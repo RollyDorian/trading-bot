@@ -1,6 +1,7 @@
 import hashlib
 import json
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -9,6 +10,33 @@ from typing import Any, cast
 import pyarrow.parquet as pq  # type: ignore[import-untyped]
 
 from trading_bot.research.dataset import validate_manifest
+
+type SignalCallback[ReplayResult] = Callable[[dict[str, Any]], ReplayResult | None]
+
+
+def replay_parquet[ReplayResult](
+    parquet_path: Path,
+    callback: SignalCallback[ReplayResult],
+) -> list[ReplayResult]:
+    table = pq.read_table(parquet_path)
+    required = {"id", "exchange_at", "received_at", "payload_json"}
+    if not required.issubset(table.column_names):
+        raise ValueError("Versioned event dataset schema is incompatible.")
+    rows = cast(list[dict[str, Any]], table.to_pylist())
+    rows.sort(
+        key=lambda row: (
+            row["exchange_at"] or row["received_at"],
+            row["received_at"],
+            row["id"],
+        )
+    )
+    results: list[ReplayResult] = []
+    for row in rows:
+        row["payload"] = json.loads(row["payload_json"])
+        result = callback(row)
+        if result is not None:
+            results.append(result)
+    return results
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Hibachi Research Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <style>
+    body { font: 14px system-ui; margin: 24px; background: #0b1020; color: #e8ecf4; }
+    h1 { margin-bottom: 4px; } .muted { color: #9aa6bd; }
+    .card { background: #151d31; border-radius: 10px; padding: 16px; margin: 16px 0; }
+    .dot { display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:8px; }
+    .green { background:#32d583; } .red { background:#f04438; }
+    table { width:100%; border-collapse:collapse; } th,td { text-align:left; padding:8px; border-bottom:1px solid #2b354d; }
+    canvas { max-height: 360px; }
+  </style>
+</head>
+<body>
+  <h1>COLLECT Research Dashboard</h1>
+  <div class="muted">Read-only public market data and offline evaluations</div>
+  <section class="card"><h2>Collector</h2><div id="health">Loading…</div></section>
+  <section class="card"><h2>Datasets</h2><table><thead><tr><th>Version</th><th>Rows</th><th>Signals</th><th>Win rate</th><th>Mean return</th><th>Sharpe approx.</th></tr></thead><tbody id="datasets"></tbody></table></section>
+  <section class="card"><h2>Recent mid-price</h2><canvas id="priceChart"></canvas></section>
+  <script>
+    let chart;
+    const number = value => { const n = Number(value); return Number.isFinite(n) && n > 0 ? n : null; };
+    function mid(payload) {
+      const d = payload.data && typeof payload.data === 'object' ? payload.data : payload;
+      const bid = number(d.bidPrice ?? d.bid_price ?? d.bid);
+      const ask = number(d.askPrice ?? d.ask_price ?? d.ask);
+      if (bid && ask && bid <= ask) return (bid + ask) / 2;
+      return number(d.markPrice ?? d.mark_price ?? d.price ?? d.tradePrice);
+    }
+    async function refresh() {
+      const [status, datasets, events] = await Promise.all([
+        fetch('/api/status').then(r => r.json()), fetch('/api/datasets').then(r => r.json()),
+        fetch('/api/market/recent?limit=200').then(r => r.json())
+      ]);
+      const age = status.last_event_timestamp ? Math.max(0, (Date.now() - Date.parse(status.last_event_timestamp)) / 1000) : null;
+      document.getElementById('health').innerHTML = `<span class="dot ${status.healthy ? 'green' : 'red'}"></span>${status.healthy ? 'Healthy' : 'Stale'} — events ${status.event_count}, last age ${age === null ? 'n/a' : age.toFixed(1) + 's'}`;
+      const tbody = document.getElementById('datasets'); tbody.replaceChildren();
+      datasets.forEach(item => { const m=item.manifest, e=item.evaluation||{}; const row=document.createElement('tr');
+        [m.version, m.row_count, e.signal_count ?? '—', e.win_rate?.toFixed(4) ?? '—', e.mean_return?.toFixed(6) ?? '—', e.sharpe_approximation?.toFixed(3) ?? '—'].forEach(value => { const cell=document.createElement('td'); cell.textContent=value; row.appendChild(cell); }); tbody.appendChild(row); });
+      const points = events.map(e => ({x:e.exchange_at || e.received_at, y:mid(e.payload)})).filter(p => p.y !== null);
+      if (chart) chart.destroy(); chart = new Chart(document.getElementById('priceChart'), {type:'line', data:{labels:points.map(p=>p.x),datasets:[{label:'ETH/USDT-P',data:points.map(p=>p.y),borderColor:'#53b1fd',pointRadius:0}]}, options:{animation:false}});
+    }
+    refresh(); setInterval(refresh, 10000);
+  </script>
+</body>
+</html>

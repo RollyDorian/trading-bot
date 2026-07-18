@@ -16,5 +16,19 @@ services:
       - postgres-data:/var/lib/postgresql/data
     restart: unless-stopped
 
+  dashboard:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+asyncpg://cryptobot:cryptobot@postgres:5432/cryptobot
+      DATASETS_DIR: /app/datasets
+    ports:
+      - "127.0.0.1:${DASHBOARD_PORT:-8000}:8000"
+    volumes:
+      - ./datasets:/app/datasets:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres-data:
