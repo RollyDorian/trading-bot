@@ -10,7 +10,7 @@ import pyarrow.parquet as pq  # type: ignore[import-untyped]
 from trading_bot.research.dataset import sha256_file, validate_manifest
 
 QUALITY_REPORT = "quality_report.json"
-QUALITY_REPORT_VERSION = 2
+QUALITY_REPORT_VERSION = 3
 PRICE_FIELDS = ("price", "tradePrice", "trade_price", "markPrice", "mark_price", "p")
 
 
@@ -65,6 +65,11 @@ def validate_dataset(
     rows = cast(list[dict[str, Any]], pq.read_table(dataset_dir / "events.parquet").to_pylist())
     timestamps = [row.get("exchange_at") or row.get("received_at") for row in rows]
     valid_times = [value for value in timestamps if isinstance(value, datetime)]
+    manifest_start = datetime.fromisoformat(str(manifest["start_utc"])).astimezone(UTC)
+    manifest_end = datetime.fromisoformat(str(manifest["end_utc"])).astimezone(UTC)
+    range_violations = sum(
+        timestamp < manifest_start or timestamp >= manifest_end for timestamp in valid_times
+    )
     ordering_violations = sum(
         left > right for left, right in zip(valid_times, valid_times[1:], strict=False)
     )
@@ -111,6 +116,9 @@ def validate_dataset(
     if ordering_violations:
         status = "rejected"
         findings.append(f"Found {ordering_violations} timestamp ordering violation(s).")
+    if range_violations:
+        status = "rejected"
+        findings.append(f"Found {range_violations} timestamp(s) outside the manifest range.")
     warning_reasons = (
         (duplicate_count, f"Found {duplicate_count} duplicate event(s)."),
         (invalid_prices, f"Found {invalid_prices} invalid price value(s)."),
@@ -150,6 +158,7 @@ def validate_dataset(
         "duplicate_event_count": duplicate_count,
         "invalid_or_missing_price_count": invalid_prices,
         "timestamp_ordering_violations": ordering_violations,
+        "timestamp_manifest_range_violations": range_violations,
         "sequence_anomalies": sequence_anomalies,
         "largest_timestamp_gap_seconds": largest_gap,
         "gap_warning_threshold_seconds": gap_warning_seconds,

@@ -76,7 +76,9 @@ python -m venv .venv
    cost-aware replay reports, and aggregate OOS criteria.
 4. **In progress:** Exercise the admission gate across multiple representative,
    versioned datasets and independently review thresholds, cost assumptions, regime
-   coverage, and OOS stability.
+   coverage, and OOS stability. The current local snapshot is insufficient: only 2 trade
+   events were collected, and all five audited slices fail quality schema 3 due timestamp
+   range/order violations. Do not lower thresholds or invent regimes to force admission.
 5. PAPER remains disabled even when admission criteria pass. Human review and a
    separate explicitly approved implementation milestone are mandatory; keep all
    real trading commands absent.

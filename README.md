@@ -156,6 +156,8 @@ unless `--force` is explicit. See [the formal policy](docs/paper_admission.md).
 
 An admitted result does not enable PAPER, authorize trading, or provide evidence of
 future profitability. `BOT_MODE=collect` remains mandatory and human review is required.
+The latest collected-data exercise and its unresolved blockers are documented in
+[the Milestone 4 admission review](docs/milestone4_admission_review.md).
 
 ## Requirements
 

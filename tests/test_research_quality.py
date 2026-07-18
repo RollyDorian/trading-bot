@@ -77,6 +77,16 @@ def test_timestamp_disorder_is_rejected(tmp_path: Path) -> None:
         replay_dataset(dataset)
 
 
+def test_timestamp_outside_manifest_range_is_rejected(tmp_path: Path) -> None:
+    dataset = _dataset(tmp_path, [100, 101, 102])
+    rows = pq.read_table(dataset / "events.parquet").to_pylist()
+    rows[0]["exchange_at"] = START - timedelta(seconds=1)
+    _replace_rows(dataset, rows)
+    report = validate_dataset(dataset)
+    assert report["status"] == "rejected"
+    assert report["timestamp_manifest_range_violations"] == 1
+
+
 def test_empty_dataset_is_rejected(tmp_path: Path) -> None:
     report = validate_dataset(_dataset(tmp_path, []))
     assert report["status"] == "rejected"

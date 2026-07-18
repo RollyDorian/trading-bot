@@ -28,7 +28,13 @@ PASSING = AdmissionThresholds(
 )
 
 
-def _dataset(root: Path, day: float, *, net_pnl: float = 10.0) -> Path:
+def _dataset(
+    root: Path,
+    day: float,
+    *,
+    net_pnl: float = 10.0,
+    trade_count: int = 1,
+) -> Path:
     start = START + timedelta(days=day)
     events = [
         MarketEvent(
@@ -52,18 +58,21 @@ def _dataset(root: Path, day: float, *, net_pnl: float = 10.0) -> Path:
         output_root=root,
     )
     validate_dataset(directory, now=start + timedelta(days=1))
-    trade = {
-        "direction": 1,
-        "entry_time": start.isoformat(),
-        "exit_time": (start + timedelta(hours=1)).isoformat(),
-        "entry_price": 100,
-        "exit_price": 101,
-        "gross_pnl": net_pnl + 3,
-        "fees": 1,
-        "funding": 1,
-        "slippage": 1,
-        "net_pnl": net_pnl,
-    }
+    trades = [
+        {
+            "direction": 1,
+            "entry_time": (start + timedelta(minutes=60 * index)).isoformat(),
+            "exit_time": (start + timedelta(minutes=60 * index + 30)).isoformat(),
+            "entry_price": 100,
+            "exit_price": 101,
+            "gross_pnl": net_pnl + 3,
+            "fees": 1,
+            "funding": 1,
+            "slippage": 1,
+            "net_pnl": net_pnl,
+        }
+        for index in range(trade_count)
+    ]
     signal = BaselineConfig()
     costs = CostConfig()
     report = {
@@ -71,13 +80,13 @@ def _dataset(root: Path, day: float, *, net_pnl: float = 10.0) -> Path:
         "dataset_id": directory.name,
         "configuration_hash": configuration_hash(signal, costs),
         "configuration": {"signal": asdict(signal), "costs": asdict(costs)},
-        "simulated_exits": 1,
-        "gross_pnl": net_pnl + 3,
-        "fees": 1,
-        "funding": 1,
-        "slippage_and_latency": 1,
-        "net_pnl": net_pnl,
-        "trades": [trade],
+        "simulated_exits": trade_count,
+        "gross_pnl": (net_pnl + 3) * trade_count,
+        "fees": trade_count,
+        "funding": trade_count,
+        "slippage_and_latency": trade_count,
+        "net_pnl": net_pnl * trade_count,
+        "trades": trades,
         "dataset_quality_status": "pass",
         "quality_warnings_allowed": False,
     }
@@ -85,8 +94,16 @@ def _dataset(root: Path, day: float, *, net_pnl: float = 10.0) -> Path:
     return directory
 
 
-def _datasets(tmp_path: Path, pnls: tuple[float, ...] = (10, 10, 10, 10)) -> list[Path]:
-    return [_dataset(tmp_path, day, net_pnl=pnl) for day, pnl in enumerate(pnls)]
+def _datasets(
+    tmp_path: Path,
+    pnls: tuple[float, ...] = (10, 10, 10, 10),
+    *,
+    trade_count: int = 1,
+) -> list[Path]:
+    return [
+        _dataset(tmp_path, day, net_pnl=pnl, trade_count=trade_count)
+        for day, pnl in enumerate(pnls)
+    ]
 
 
 def test_happy_path_uses_chronological_oos_only(tmp_path: Path) -> None:
@@ -102,6 +119,33 @@ def test_happy_path_uses_chronological_oos_only(tmp_path: Path) -> None:
     ]
     assert report["oos_aggregate"]["net_pnl"] == 20
     assert all(item["admissible"] for item in report["datasets"])
+
+
+def test_default_gate_passes_minimal_valid_synthetic_fixture(tmp_path: Path) -> None:
+    report = evaluate_admission(
+        _datasets(tmp_path, trade_count=15), validation_count=1, oos_count=2
+    )
+    assert report["admitted"] is True
+    assert report["oos_aggregate"]["trade_count"] == 30
+    assert report["failed_criteria"] == []
+
+
+def test_default_gate_rejects_fewer_than_thirty_oos_trades(tmp_path: Path) -> None:
+    report = evaluate_admission(
+        _datasets(tmp_path, trade_count=14), validation_count=1, oos_count=2
+    )
+    assert report["admitted"] is False
+    assert "minimum_oos_trade_count" in report["failed_criteria"]
+
+
+def test_synthetic_decision_is_stable_across_small_split_shifts(tmp_path: Path) -> None:
+    datasets = _datasets(tmp_path, (10, 10, 10, 10, 10), trade_count=15)
+    baseline = evaluate_admission(datasets, validation_count=1, oos_count=2)
+    validation_shift = evaluate_admission(datasets, validation_count=2, oos_count=2)
+    oos_shift = evaluate_admission(datasets, validation_count=1, oos_count=3)
+    assert baseline["admitted"] is True
+    assert validation_shift["admitted"] is True
+    assert oos_shift["admitted"] is True
 
 
 def test_failed_quality_rejects_admission(tmp_path: Path) -> None:
