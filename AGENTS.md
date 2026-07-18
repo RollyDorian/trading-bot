@@ -68,8 +68,8 @@ python -m venv .venv
 
 1. **Complete:** Soak tests cover reconnect continuity, desync halt/error recording,
    and propagated PostgreSQL write failures.
-2. **In progress:** Add versioned research datasets and baseline signal evaluation
-   from deterministic offline replay.
+2. **In progress:** Validate versioned research datasets, deterministic momentum
+   evaluation, and the read-only dashboard against representative PostgreSQL data.
 3. PAPER remains blocked until multiple versioned datasets pass documented
    chronological out-of-sample evaluation after fees, funding, slippage, latency,
    data-quality review, and independently chosen acceptance thresholds. Keep all

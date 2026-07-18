@@ -2,21 +2,27 @@ import json
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol, cast
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from trading_bot.collector import sanitize_error_data, sanitize_error_text
 from trading_bot.config import Settings
 from trading_bot.storage.database import create_engine, create_session_factory
-from trading_bot.storage.models import SystemEvent
+from trading_bot.storage.models import MarketEvent, SystemEvent
 
 
 class DashboardStore(Protocol):
+    async def status(self) -> dict[str, Any]: ...
+
+    async def recent(self, limit: int) -> list[dict[str, Any]]: ...
+
     async def system_events(self, limit: int) -> list[dict[str, Any]]: ...
 
     async def system_event(self, event_id: int) -> dict[str, Any] | None: ...
@@ -51,6 +57,43 @@ class DatabaseDashboardStore:
     ) -> None:
         self._engine = engine
         self._session_factory = session_factory
+
+    async def status(self) -> dict[str, Any]:
+        try:
+            async with self._session_factory() as session:
+                count, last_event = (
+                    await session.execute(
+                        select(func.count(MarketEvent.id), func.max(MarketEvent.received_at))
+                    )
+                ).one()
+        except SQLAlchemyError:
+            return {"event_count": 0, "last_event_timestamp": None, "healthy": False,
+                    "error": "database_unavailable"}
+        return {
+            "event_count": count,
+            "last_event_timestamp": last_event.isoformat() if last_event else None,
+            "healthy": last_event is not None
+            and (datetime.now(UTC) - last_event).total_seconds() <= 30,
+        }
+
+    async def recent(self, limit: int) -> list[dict[str, Any]]:
+        statement = select(MarketEvent).order_by(MarketEvent.received_at.desc()).limit(limit)
+        async with self._session_factory() as session:
+            events = list((await session.scalars(statement)).all())
+        events.reverse()
+        return [
+            {
+                "id": event.id,
+                "received_at": event.received_at.isoformat(),
+                "exchange_at": event.exchange_at.isoformat() if event.exchange_at else None,
+                "topic": event.event_type,
+                "symbol": event.symbol,
+                "sequence": event.sequence,
+                "latency_ms": event.latency_ms,
+                "payload": event.payload,
+            }
+            for event in events
+        ]
 
     async def system_events(self, limit: int) -> list[dict[str, Any]]:
         statement = select(SystemEvent).order_by(SystemEvent.occurred_at.desc()).limit(limit)
@@ -92,6 +135,7 @@ def list_datasets(root: Path) -> list[dict[str, Any]]:
         if manifest is None:
             continue
         quality = _read_json(directory / "quality_report.json")
+        evaluation = _read_json(directory / "eval_momentum.json")
         status = str(quality.get("status")) if quality else "not_validated"
         findings = quality.get("findings") if quality else None
         reason = (
@@ -105,6 +149,7 @@ def list_datasets(root: Path) -> list[dict[str, Any]]:
                 "quality": quality,
                 "quality_status": status,
                 "quality_reason": reason,
+                "evaluation": evaluation,
             }
         )
     return result
@@ -134,6 +179,14 @@ def create_app(
     async def index() -> FileResponse:
         return FileResponse(index_path)
 
+    @app.get("/api/status")
+    async def status() -> dict[str, Any]:
+        return await dashboard_store.status()
+
+    @app.get("/api/market/recent")
+    async def recent(limit: int = Query(default=200, ge=1, le=1_000)) -> list[dict[str, Any]]:
+        return await dashboard_store.recent(limit)
+
     @app.get("/api/system/recent")
     async def recent_system_events(
         limit: int = Query(default=20, ge=1, le=200),
@@ -159,6 +212,13 @@ def create_app(
         report = _read_json(_safe_dataset_dir(root, version) / "quality_report.json")
         if report is None:
             raise HTTPException(status_code=404, detail="Quality report not found")
+        return report
+
+    @app.get("/api/datasets/{version}/eval")
+    async def dataset_evaluation(version: str) -> dict[str, Any]:
+        report = _read_json(_safe_dataset_dir(root, version) / "eval_momentum.json")
+        if report is None:
+            raise HTTPException(status_code=404, detail="Evaluation not found")
         return report
 
     return app
