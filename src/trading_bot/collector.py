@@ -1,7 +1,11 @@
 import asyncio
+import random
+import re
+import time
 from collections.abc import Awaitable, Callable, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
+from urllib.parse import urlsplit
 
 from trading_bot.storage.repository import EventRepository, MarketEventInput
 
@@ -266,6 +270,68 @@ def build_collector(
 
 CollectorFactory = Callable[[], MarketCollector]
 Sleeper = Callable[[float], Awaitable[None]]
+Jitter = Callable[[float, float], float]
+Clock = Callable[[], float]
+
+_SECRET_PATTERNS = (
+    re.compile(r"(?i)(api[_-]?key|authorization|token|secret|password)\s*[:=]\s*\S+"),
+    re.compile(r"(?i)bearer\s+\S+"),
+)
+_URI_PATTERN = re.compile(r"(?i)\b[a-z][a-z0-9+.-]*://\S+")
+_SAFE_HOST_PATTERN = re.compile(r"^[a-zA-Z0-9.:-]+$")
+_SENSITIVE_FIELD_PATTERN = re.compile(
+    r"(?i)(?:api[_-]?key|authorization|access[_-]?token|token|secret|password)"
+)
+
+
+def _sanitize_uri(match: re.Match[str]) -> str:
+    try:
+        parsed = urlsplit(match.group(0))
+        if not parsed.scheme or not parsed.hostname:
+            return "[REDACTED_URI]"
+        hostname = parsed.hostname
+        if not _SAFE_HOST_PATTERN.fullmatch(hostname):
+            return "[REDACTED_URI]"
+        port = parsed.port
+    except ValueError:
+        return "[REDACTED_URI]"
+    display_host = f"[{hostname}]" if ":" in hostname else hostname
+    authority = f"{display_host}:{port}" if port is not None else display_host
+    safe_path = "/[PATH]" if parsed.path and parsed.path != "/" else parsed.path
+    return f"{parsed.scheme.lower()}://{authority}{safe_path}"
+
+
+def sanitize_error_text(value: str, *, limit: int = 500) -> str:
+    message = value.replace("\r", " ").replace("\n", " ").strip()
+    message = _URI_PATTERN.sub(_sanitize_uri, message)
+    for pattern in _SECRET_PATTERNS:
+        message = pattern.sub(
+            lambda match: (
+                f"{match.group(1)}[REDACTED]" if match.lastindex else "[REDACTED]"
+            ),
+            message,
+        )
+    return (message or "Error")[:limit]
+
+
+def sanitize_error_data(value: Any, *, field: str | None = None) -> Any:
+    if field is not None and _SENSITIVE_FIELD_PATTERN.fullmatch(field):
+        return "[REDACTED]"
+    if isinstance(value, str):
+        return sanitize_error_text(value)
+    if isinstance(value, dict):
+        return {
+            key: sanitize_error_data(item, field=str(key))
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [sanitize_error_data(item) for item in value]
+    return value
+
+
+def sanitize_error_message(error: BaseException, *, limit: int = 500) -> str:
+    message = sanitize_error_text(str(error), limit=limit)
+    return type(error).__name__ if message == "Error" else message
 
 
 class CollectorSupervisor:
@@ -280,6 +346,9 @@ class CollectorSupervisor:
         initial_delay: float,
         max_delay: float,
         sleeper: Sleeper = asyncio.sleep,
+        jitter: Jitter = random.uniform,
+        clock: Clock = time.monotonic,
+        jitter_ratio: float = 0.2,
     ) -> None:
         self._collector_factory = collector_factory
         self._sink = sink
@@ -287,10 +356,45 @@ class CollectorSupervisor:
         self._initial_delay = initial_delay
         self._max_delay = max_delay
         self._sleeper = sleeper
+        self._jitter = jitter
+        self._clock = clock
+        self._jitter_ratio = jitter_ratio
+
+    def _retry_delay(self, attempt: int) -> float:
+        base = min(self._initial_delay * (2 ** (attempt - 1)), self._max_delay)
+        spread = base * self._jitter_ratio
+        return min(
+            self._max_delay,
+            max(self._initial_delay, self._jitter(base - spread, base + spread)),
+        )
+
+    def _failure_details(
+        self,
+        error: Exception,
+        *,
+        attempt: int,
+        started_at: float,
+        delay: float | None,
+    ) -> dict[str, Any]:
+        received_at = datetime.now(UTC)
+        details: dict[str, Any] = {
+            "event_kind": "collection_failure",
+            "category": "collector_reconnect" if delay is not None else "collector_halt",
+            "exception_class": type(error).__name__,
+            "error_message": sanitize_error_message(error),
+            "reconnect_attempt": attempt,
+            "session_uptime_seconds": max(0.0, self._clock() - started_at),
+            "receipt_timestamp": received_at.isoformat(),
+        }
+        if delay is not None:
+            details["retry_delay_seconds"] = delay
+            details["next_retry_timestamp"] = (received_at + timedelta(seconds=delay)).isoformat()
+        return details
 
     async def run(self) -> None:
         attempt = 0
         while True:
+            started_at = self._clock()
             try:
                 await self._collector_factory().run()
             except asyncio.CancelledError:
@@ -303,20 +407,20 @@ class CollectorSupervisor:
                         event_type="HALTED",
                         component="collector_supervisor",
                         message="Market collection halted after repeated failures",
-                        details={"attempt": attempt, "error": type(error).__name__},
+                        details=self._failure_details(
+                            error, attempt=attempt, started_at=started_at, delay=None
+                        ),
                     )
                     raise
-                delay = min(self._initial_delay * (2 ** (attempt - 1)), self._max_delay)
+                delay = self._retry_delay(attempt)
                 await self._sink.append_system_event(
                     severity="WARNING",
                     event_type="DEGRADED",
                     component="collector_supervisor",
                     message="Market collection failed; reconnect scheduled",
-                    details={
-                        "attempt": attempt,
-                        "delay_seconds": delay,
-                        "error": type(error).__name__,
-                    },
+                    details=self._failure_details(
+                        error, attempt=attempt, started_at=started_at, delay=delay
+                    ),
                 )
                 await self._sleeper(delay)
 

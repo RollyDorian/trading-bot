@@ -208,6 +208,7 @@ tempCodeRunnerFile.py
 
 # Generated research artifacts
 /data/research/
+/datasets/
 /research-report.json
 
 # PyPI configuration file
