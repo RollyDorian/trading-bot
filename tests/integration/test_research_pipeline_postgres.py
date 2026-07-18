@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 
 from trading_bot.research.dataset import DatasetExporter, validate_manifest
+from trading_bot.research.quality import validate_dataset
 from trading_bot.research.replay import BaselineConfig, CostConfig, replay_dataset
 from trading_bot.storage.database import create_engine, create_session_factory
 from trading_bot.storage.repository import EventRepository, MarketEventInput
@@ -49,6 +50,7 @@ async def test_postgres_export_then_offline_replay(tmp_path: Path) -> None:
             output_root=tmp_path,
         )
         manifest = validate_manifest(dataset_dir)
+        quality = validate_dataset(dataset_dir)
         report = replay_dataset(
             dataset_dir,
             signal_config=BaselineConfig(
@@ -60,6 +62,7 @@ async def test_postgres_export_then_offline_replay(tmp_path: Path) -> None:
             cost_config=CostConfig(execution_delay_seconds=0),
         )
         assert manifest["row_counts"]["events"] == 12
+        assert quality["status"] == "valid"
         assert report["events"] == 12
         assert report["candles"] == 12
         assert report["signals"] > 0
