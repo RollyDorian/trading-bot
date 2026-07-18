@@ -14,6 +14,11 @@ from trading_bot.collector import build_supervisor
 from trading_bot.config import Settings
 from trading_bot.exchange import HibachiPublicExchange
 from trading_bot.paper import PaperEngine
+from trading_bot.research.admission import (
+    AdmissionInputError,
+    evaluate_admission,
+    write_admission_report,
+)
 from trading_bot.research.dataset import DatasetExporter
 from trading_bot.research.evaluator import evaluate_momentum
 from trading_bot.research.exporter import VersionedDatasetExporter
@@ -132,6 +137,32 @@ def _parse_evaluate_command(arguments: list[str]) -> argparse.Namespace:
     parser.add_argument("--window", type=int, default=20)
     parser.add_argument("--threshold-bps", type=float, default=5.0)
     return parser.parse_args(arguments)
+
+
+def _parse_admit_command(arguments: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="hibachi-bot admit-paper")
+    parser.add_argument("--datasets", nargs="+", type=Path, required=True)
+    parser.add_argument("--validation-count", type=int, required=True)
+    parser.add_argument("--oos-count", type=int, required=True)
+    parser.add_argument("--report", type=Path, required=True)
+    parser.add_argument("--force", action="store_true")
+    args = parser.parse_args(arguments)
+    if args.validation_count < 1 or args.oos_count < 1:
+        parser.error("--validation-count and --oos-count must be positive")
+    if len(args.datasets) <= args.validation_count + args.oos_count:
+        parser.error("at least one training dataset must remain")
+    return args
+
+
+def _admission_summary(report: dict[str, Any]) -> str:
+    failed = report["failed_criteria"]
+    result = "PASS" if report["admitted"] else "FAIL"
+    failed_text = ", ".join(failed) if failed else "none"
+    return (
+        f"PAPER ADMISSION RESEARCH GATE: {result}\n"
+        f"failed_criteria={failed_text}\n"
+        "PAPER remains disabled; manual review is required."
+    )
 
 
 async def _versioned_export(args: argparse.Namespace, settings: Settings) -> Path:
@@ -305,6 +336,23 @@ def main() -> None:
             ),
         )
         print(json.dumps(report, sort_keys=True))
+        return
+    if len(sys.argv) > 1 and sys.argv[1] == "admit-paper":
+        admit_args = _parse_admit_command(sys.argv[2:])
+        try:
+            admission = evaluate_admission(
+                admit_args.datasets,
+                validation_count=admit_args.validation_count,
+                oos_count=admit_args.oos_count,
+            )
+            write_admission_report(admission, admit_args.report, force=admit_args.force)
+        except (AdmissionInputError, FileExistsError, OSError, ValueError) as error:
+            print(f"admit-paper: {error}", file=sys.stderr)
+            raise SystemExit(2) from error
+        print(_admission_summary(admission))
+        print(f"report={admit_args.report}")
+        if not admission["admitted"]:
+            raise SystemExit(1)
         return
     args = _parse_args()
     settings = Settings()

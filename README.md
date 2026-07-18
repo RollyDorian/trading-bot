@@ -125,6 +125,38 @@ The momentum evaluator reports hypothetical PnL without fees. This deliberately
 incomplete benchmark must not be compared with the cost-aware replay report or used
 to admit PAPER mode.
 
+## Paper admission research gate
+
+Generate quality and cost-aware replay reports for four chronological datasets:
+
+```powershell
+$datasets = @(
+  "data/research/eth-usdt-p/eth-usdt-p_20260701T000000000000Z_20260702T000000000000Z_v1",
+  "data/research/eth-usdt-p/eth-usdt-p_20260702T000000000000Z_20260703T000000000000Z_v1",
+  "data/research/eth-usdt-p/eth-usdt-p_20260703T000000000000Z_20260704T000000000000Z_v1",
+  "data/research/eth-usdt-p/eth-usdt-p_20260704T000000000000Z_20260705T000000000000Z_v1"
+)
+foreach ($dataset in $datasets) {
+  .\.venv\Scripts\hibachi-bot.exe validate-dataset --dataset $dataset
+  .\.venv\Scripts\hibachi-bot.exe --offline-replay $dataset `
+    --report "$dataset/offline_replay.json"
+}
+
+.\.venv\Scripts\hibachi-bot.exe admit-paper `
+  --datasets $datasets `
+  --validation-count 1 `
+  --oos-count 2 `
+  --report paper-admission-report.json
+```
+
+`paper-admission-report.json` is the default dashboard admission-report path; override it
+with `ADMISSION_REPORT_PATH`. It records artifact decisions, chronological splits, OOS
+aggregates, thresholds, and every criterion result. Existing reports are not overwritten
+unless `--force` is explicit. See [the formal policy](docs/paper_admission.md).
+
+An admitted result does not enable PAPER, authorize trading, or provide evidence of
+future profitability. `BOT_MODE=collect` remains mandatory and human review is required.
+
 ## Requirements
 
 - Python 3.13+

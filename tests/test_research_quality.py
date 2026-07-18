@@ -52,9 +52,9 @@ def _replace_rows(dataset: Path, rows: list[dict[str, object]]) -> None:
 def test_clean_dataset_is_valid(tmp_path: Path) -> None:
     dataset = _dataset(tmp_path, [100, 101, 102])
     report = validate_dataset(dataset)
-    assert report["status"] == "valid"
+    assert report["status"] == "pass"
     assert report["row_count"] == 3
-    assert replay_dataset(dataset)["dataset_quality_status"] == "valid"
+    assert replay_dataset(dataset)["dataset_quality_status"] == "pass"
 
 
 def test_duplicates_are_warning(tmp_path: Path) -> None:

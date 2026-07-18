@@ -5,7 +5,9 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
+from trading_bot.config import Settings
 from trading_bot.dashboard.app import collector_status, create_app
+from trading_bot.research.exporter import VersionedDatasetExporter
 
 NOW = datetime(2026, 7, 18, 12, 0, tzinfo=UTC)
 
@@ -161,3 +163,116 @@ def test_dashboard_blocks_dataset_path_traversal(tmp_path: Path) -> None:
     with TestClient(create_app(datasets_dir=tmp_path, store=FakeStore())) as client:
         response = client.get("/api/datasets/%2E%2E/eval")
         assert response.status_code == 404
+
+
+def test_export_dataset_valid_range(tmp_path: Path, monkeypatch: Any) -> None:
+    async def fake_export(self: VersionedDatasetExporter, **_: Any) -> Path:
+        return tmp_path / "v1_20260718"
+
+    monkeypatch.setattr(VersionedDatasetExporter, "export", fake_export)
+    with TestClient(create_app(datasets_dir=tmp_path, store=FakeStore())) as client:
+        response = client.post(
+            "/api/datasets/export",
+            json={
+                "start": "2026-07-18T00:00:00Z",
+                "end": "2026-07-18T08:00:00Z",
+            },
+        )
+    assert response.status_code == 200
+    assert response.json()["version"] == "v1_20260718"
+
+
+def test_export_dataset_invalid_range(tmp_path: Path) -> None:
+    with TestClient(create_app(datasets_dir=tmp_path, store=FakeStore())) as client:
+        response = client.post(
+            "/api/datasets/export",
+            json={
+                "start": "2026-07-18T08:00:00Z",
+                "end": "2026-07-18T00:00:00Z",
+            },
+        )
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Export start must be earlier than end"}
+
+
+def test_evaluate_missing_dataset_returns_404(tmp_path: Path) -> None:
+    with TestClient(create_app(datasets_dir=tmp_path, store=FakeStore())) as client:
+        response = client.post("/api/datasets/missing/evaluate", json={})
+    assert response.status_code == 404
+
+
+def test_control_authentication(tmp_path: Path, monkeypatch: Any) -> None:
+    async def fake_export(self: VersionedDatasetExporter, **_: Any) -> Path:
+        return tmp_path / "v1_20260718"
+
+    monkeypatch.setattr(VersionedDatasetExporter, "export", fake_export)
+    payload = {
+        "start": "2026-07-18T00:00:00Z",
+        "end": "2026-07-18T08:00:00Z",
+    }
+    protected = Settings(dashboard_token="secret")
+    with TestClient(
+        create_app(datasets_dir=tmp_path, store=FakeStore(), settings=protected)
+    ) as client:
+        assert client.post("/api/datasets/export", json=payload).status_code == 401
+        assert client.post(
+            "/api/datasets/export",
+            json=payload,
+            headers={"Authorization": "Bearer secret"},
+        ).status_code == 200
+    with TestClient(
+        create_app(
+            datasets_dir=tmp_path,
+            store=FakeStore(),
+            settings=Settings(dashboard_token=None),
+        )
+    ) as client:
+        assert client.post("/api/datasets/export", json=payload).status_code == 200
+
+
+def test_admission_visibility_missing_and_valid(tmp_path: Path) -> None:
+    report_path = tmp_path / "paper-admission-report.json"
+    with TestClient(
+        create_app(
+            datasets_dir=tmp_path,
+            store=FakeStore(),
+            admission_report_path=report_path,
+        )
+    ) as client:
+        assert client.get("/api/admission").json() == {
+            "available": False,
+            "report": None,
+        }
+        html = client.get("/").text
+        assert "Paper admission" in html
+        assert "No admission report available." in html
+
+    report_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "generated_at_utc": "2026-07-19T00:00:00+00:00",
+                "admitted": False,
+                "failed_criteria": ["minimum_oos_trade_count"],
+                "oos_aggregate": {
+                    "dataset_count": 2,
+                    "trade_count": 4,
+                    "net_pnl": -1.0,
+                    "maximum_drawdown": 5.0,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    with TestClient(
+        create_app(
+            datasets_dir=tmp_path,
+            store=FakeStore(),
+            admission_report_path=report_path,
+        )
+    ) as client:
+        response = client.get("/api/admission")
+    assert response.status_code == 200
+    assert response.json()["report"]["failed_criteria"] == [
+        "minimum_oos_trade_count"
+    ]

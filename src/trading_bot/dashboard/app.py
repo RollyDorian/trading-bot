@@ -6,18 +6,51 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol, cast
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from trading_bot.collector import sanitize_error_data, sanitize_error_text
 from trading_bot.config import Settings
+from trading_bot.research.evaluator import evaluate_momentum
+from trading_bot.research.exporter import VersionedDatasetExporter
+from trading_bot.research.signals.momentum import MomentumConfig
 from trading_bot.storage.database import create_engine, create_session_factory
 from trading_bot.storage.models import MarketEvent, SystemEvent
 
 STALE_AFTER_SECONDS = 30
+
+
+class DatasetExportRequest(BaseModel):
+    start: datetime
+    end: datetime
+    version: str | None = None
+
+
+class DatasetExportResponse(BaseModel):
+    version: str
+    path: str
+
+
+class DatasetEvaluateRequest(BaseModel):
+    window: int = Field(default=20, ge=1)
+    threshold_bps: float = Field(default=5.0, ge=0)
+
+
+class DatasetEvaluationResponse(BaseModel):
+    model_config = {"extra": "allow"}
+
+
+class DashboardAuthResponse(BaseModel):
+    required: bool
+
+
+class AdmissionVisibilityResponse(BaseModel):
+    available: bool
+    report: dict[str, Any] | None = None
 
 
 def collector_status(
@@ -227,20 +260,35 @@ def create_app(
     database_url: str | None = None,
     datasets_dir: Path | None = None,
     store: DashboardStore | None = None,
+    settings: Settings | None = None,
+    admission_report_path: Path | None = None,
 ) -> FastAPI:
+    dashboard_settings = settings or Settings()
     root = datasets_dir or Path(os.getenv("DATASETS_DIR", "datasets"))
+    admission_path = admission_report_path or dashboard_settings.admission_report_path
     dashboard_store = store
     if dashboard_store is None:
-        engine = create_engine(database_url or Settings().database_url)
+        engine = create_engine(database_url or dashboard_settings.database_url)
         dashboard_store = DatabaseDashboardStore(engine, create_session_factory(engine))
+
+    export_engine = create_engine(database_url or dashboard_settings.database_url)
+    exporter = VersionedDatasetExporter(create_session_factory(export_engine))
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         yield
         await dashboard_store.close()
+        await export_engine.dispose()
 
     app = FastAPI(title="Hibachi COLLECT Research Dashboard", lifespan=lifespan)
     static_index = Path(__file__).parent / "static" / "index.html"
+
+    async def require_dashboard_token(
+        authorization: str | None = Header(default=None),
+    ) -> None:
+        token = dashboard_settings.dashboard_token
+        if token is not None and authorization != f"Bearer {token}":
+            raise HTTPException(status_code=401, detail="Unauthorized")
 
     @app.get("/", include_in_schema=False)
     async def index() -> FileResponse:
@@ -253,6 +301,73 @@ def create_app(
     @app.get("/api/datasets")
     async def datasets() -> list[dict[str, Any]]:
         return _list_datasets(root)
+
+    @app.get("/api/dashboard/auth", response_model=DashboardAuthResponse)
+    async def dashboard_auth() -> DashboardAuthResponse:
+        return DashboardAuthResponse(required=dashboard_settings.dashboard_token is not None)
+
+    @app.get("/api/admission", response_model=AdmissionVisibilityResponse)
+    async def admission() -> AdmissionVisibilityResponse:
+        if not admission_path.is_file():
+            return AdmissionVisibilityResponse(available=False)
+        try:
+            value = json.loads(admission_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return AdmissionVisibilityResponse(available=False)
+        if not isinstance(value, dict):
+            return AdmissionVisibilityResponse(available=False)
+        sanitized = sanitize_error_data(value)
+        if not isinstance(sanitized, dict):
+            return AdmissionVisibilityResponse(available=False)
+        return AdmissionVisibilityResponse(available=True, report=sanitized)
+
+    @app.post(
+        "/api/datasets/export",
+        response_model=DatasetExportResponse,
+        dependencies=[Depends(require_dashboard_token)],
+    )
+    async def export_dataset(request: DatasetExportRequest) -> DatasetExportResponse:
+        if request.start.utcoffset() != timedelta(0) or request.end.utcoffset() != timedelta(0):
+            raise HTTPException(status_code=400, detail="Timestamps must be UTC")
+        if request.start >= request.end:
+            raise HTTPException(status_code=400, detail="Export start must be earlier than end")
+        try:
+            path = await exporter.export(
+                output_root=root,
+                symbol=dashboard_settings.hibachi_symbol,
+                version=request.version,
+                start=request.start,
+                end=request.end,
+            )
+        except FileExistsError as error:
+            raise HTTPException(status_code=400, detail="Dataset version already exists") from error
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail="Invalid export request") from error
+        except (OSError, SQLAlchemyError) as error:
+            raise HTTPException(status_code=400, detail="Dataset export failed") from error
+        return DatasetExportResponse(version=path.name, path=str(path))
+
+    @app.post(
+        "/api/datasets/{version}/evaluate",
+        response_model=DatasetEvaluationResponse,
+        dependencies=[Depends(require_dashboard_token)],
+    )
+    async def evaluate_dataset(
+        version: str, request: DatasetEvaluateRequest
+    ) -> dict[str, Any]:
+        directory = _safe_dataset_dir(root, version)
+        if not directory.is_dir():
+            raise HTTPException(status_code=404, detail="Dataset not found")
+        try:
+            return evaluate_momentum(
+                directory,
+                MomentumConfig(
+                    window=request.window,
+                    threshold_bps=request.threshold_bps,
+                ),
+            )
+        except (KeyError, OSError, ValueError, json.JSONDecodeError) as error:
+            raise HTTPException(status_code=400, detail="Dataset evaluation failed") from error
 
     @app.get("/api/datasets/{version}/eval")
     async def dataset_evaluation(version: str) -> dict[str, Any]:

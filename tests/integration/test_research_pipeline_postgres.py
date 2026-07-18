@@ -63,7 +63,7 @@ async def test_postgres_export_then_offline_replay(tmp_path: Path) -> None:
             allow_warnings=True,
         )
         assert manifest["row_counts"]["events"] == 12
-        assert quality["status"] in {"valid", "warning"}
+        assert quality["status"] in {"pass", "warning"}
         assert report["events"] == 12
         assert report["candles"] == 12
         assert report["signals"] > 0

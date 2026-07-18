@@ -10,7 +10,7 @@ import pyarrow.parquet as pq  # type: ignore[import-untyped]
 from trading_bot.research.dataset import sha256_file, validate_manifest
 
 QUALITY_REPORT = "quality_report.json"
-QUALITY_REPORT_VERSION = 1
+QUALITY_REPORT_VERSION = 2
 PRICE_FIELDS = ("price", "tradePrice", "trade_price", "markPrice", "mark_price", "p")
 
 
@@ -104,7 +104,7 @@ def validate_dataset(
         )
 
     findings: list[str] = []
-    status = "valid"
+    status = "pass"
     if not rows:
         status = "rejected"
         findings.append("Dataset contains no market events.")
@@ -129,7 +129,7 @@ def validate_dataset(
     for present, finding in warning_reasons:
         if present:
             findings.append(finding)
-            if status == "valid":
+            if status == "pass":
                 status = "warning"
     if not findings:
         findings.append("No configured data-quality anomalies found.")
@@ -225,6 +225,6 @@ def require_acceptable_quality(dataset_dir: Path, *, allow_warnings: bool) -> di
         raise ValueError("Dataset quality status is rejected; evaluation refused.")
     if status == "warning" and not allow_warnings:
         raise ValueError("Dataset quality has warnings; pass --allow-warnings to evaluate.")
-    if status not in {"valid", "warning"}:
+    if status not in {"pass", "warning"}:
         raise ValueError("Dataset quality report has an invalid status.")
     return report

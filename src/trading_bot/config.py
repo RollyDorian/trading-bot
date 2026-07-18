@@ -1,4 +1,5 @@
 from enum import StrEnum
+from pathlib import Path
 from typing import Literal
 
 from pydantic import AnyHttpUrl, Field, model_validator
@@ -43,6 +44,8 @@ class Settings(BaseSettings):
         "ask_bid_price",
     )
     database_url: str = "postgresql+asyncpg://cryptobot:cryptobot@localhost:5432/cryptobot"
+    dashboard_token: str | None = None
+    admission_report_path: Path = Path("paper-admission-report.json")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     reconnect_max_attempts: int = Field(default=5, ge=1, le=100)
     reconnect_initial_delay: float = Field(default=1.0, gt=0, le=60)
