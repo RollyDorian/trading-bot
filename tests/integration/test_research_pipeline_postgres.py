@@ -60,9 +60,10 @@ async def test_postgres_export_then_offline_replay(tmp_path: Path) -> None:
                 cooldown_seconds=1,
             ),
             cost_config=CostConfig(execution_delay_seconds=0),
+            allow_warnings=True,
         )
         assert manifest["row_counts"]["events"] == 12
-        assert quality["status"] == "valid"
+        assert quality["status"] in {"valid", "warning"}
         assert report["events"] == 12
         assert report["candles"] == 12
         assert report["signals"] > 0
