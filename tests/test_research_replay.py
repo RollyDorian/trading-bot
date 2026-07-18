@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from trading_bot.research.dataset import write_dataset
+from trading_bot.research.quality import validate_dataset
 from trading_bot.research.replay import (
     BaselineConfig,
     CostConfig,
@@ -80,6 +81,7 @@ def test_offline_replay_is_deterministic(tmp_path: Path) -> None:
         cooldown_seconds=1,
     )
     costs = CostConfig(execution_delay_seconds=0)
+    validate_dataset(dataset_dir)
     first = replay_dataset(dataset_dir, signal_config=signal, cost_config=costs)
     second = replay_dataset(dataset_dir, signal_config=signal, cost_config=costs)
     assert first == second
