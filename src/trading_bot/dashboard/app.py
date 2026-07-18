@@ -2,7 +2,7 @@ import json
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol, cast
 
@@ -14,13 +14,48 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from trading_bot.config import Settings
 from trading_bot.storage.database import create_engine, create_session_factory
-from trading_bot.storage.models import MarketEvent
+from trading_bot.storage.models import MarketEvent, SystemEvent
+
+STALE_AFTER_SECONDS = 30
+
+
+def collector_status(
+    *,
+    event_count: int,
+    last_event: datetime | None,
+    coverage_start: datetime | None,
+    events_last_minute: int,
+    average_latency_ms_1m: float | None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    current = now or datetime.now(UTC)
+    age_seconds = (
+        max(0.0, (current - last_event).total_seconds()) if last_event is not None else None
+    )
+    state = (
+        "healthy"
+        if age_seconds is not None and age_seconds <= STALE_AFTER_SECONDS
+        else "stale"
+    )
+    return {
+        "state": state,
+        "healthy": state == "healthy",
+        "event_count": event_count,
+        "last_event_timestamp": last_event.isoformat() if last_event else None,
+        "last_event_age_seconds": age_seconds,
+        "events_per_minute": events_last_minute,
+        "coverage_start_timestamp": coverage_start.isoformat() if coverage_start else None,
+        "coverage_end_timestamp": last_event.isoformat() if last_event else None,
+        "average_latency_ms_1m": average_latency_ms_1m,
+    }
 
 
 class DashboardStore(Protocol):
     async def status(self) -> dict[str, Any]: ...
 
     async def recent(self, limit: int) -> list[dict[str, Any]]: ...
+
+    async def system_events(self, limit: int) -> list[dict[str, Any]]: ...
 
     async def close(self) -> None: ...
 
@@ -35,26 +70,44 @@ class DatabaseDashboardStore:
         self._session_factory = session_factory
 
     async def status(self) -> dict[str, Any]:
+        minute_ago = datetime.now(UTC) - timedelta(minutes=1)
         try:
             async with self._session_factory() as session:
-                count, last_event = (
+                count, coverage_start, last_event, events_last_minute, latency = (
                     await session.execute(
-                        select(func.count(MarketEvent.id), func.max(MarketEvent.received_at))
+                        select(
+                            func.count(MarketEvent.id),
+                            func.min(MarketEvent.received_at),
+                            func.max(MarketEvent.received_at),
+                            func.count(MarketEvent.id).filter(
+                                MarketEvent.received_at >= minute_ago
+                            ),
+                            func.avg(MarketEvent.latency_ms).filter(
+                                MarketEvent.received_at >= minute_ago
+                            ),
+                        )
                     )
                 ).one()
         except SQLAlchemyError:
             return {
+                "state": "fault",
                 "event_count": 0,
                 "last_event_timestamp": None,
+                "last_event_age_seconds": None,
+                "events_per_minute": None,
+                "coverage_start_timestamp": None,
+                "coverage_end_timestamp": None,
+                "average_latency_ms_1m": None,
                 "healthy": False,
                 "error": "database_unavailable",
             }
-        return {
-            "event_count": count,
-            "last_event_timestamp": last_event.isoformat() if last_event else None,
-            "healthy": last_event is not None
-            and (datetime.now(UTC) - last_event).total_seconds() <= 30,
-        }
+        return collector_status(
+            event_count=count,
+            last_event=last_event,
+            coverage_start=coverage_start,
+            events_last_minute=events_last_minute,
+            average_latency_ms_1m=float(latency) if latency is not None else None,
+        )
 
     async def recent(self, limit: int) -> list[dict[str, Any]]:
         statement = select(MarketEvent).order_by(MarketEvent.received_at.desc()).limit(limit)
@@ -71,6 +124,23 @@ class DatabaseDashboardStore:
                 "sequence": event.sequence,
                 "latency_ms": event.latency_ms,
                 "payload": event.payload,
+            }
+            for event in events
+        ]
+
+    async def system_events(self, limit: int) -> list[dict[str, Any]]:
+        statement = select(SystemEvent).order_by(SystemEvent.occurred_at.desc()).limit(limit)
+        async with self._session_factory() as session:
+            events = list((await session.scalars(statement)).all())
+        return [
+            {
+                "id": event.id,
+                "occurred_at": event.occurred_at.isoformat(),
+                "severity": event.severity,
+                "event_type": event.event_type,
+                "component": event.component,
+                "message": event.message,
+                "details": event.details,
             }
             for event in events
         ]
@@ -155,6 +225,12 @@ def create_app(
     @app.get("/api/market/recent")
     async def recent(limit: int = Query(default=200, ge=1, le=1_000)) -> list[dict[str, Any]]:
         return await dashboard_store.recent(limit)
+
+    @app.get("/api/system/recent")
+    async def system_events(
+        limit: int = Query(default=20, ge=1, le=200),
+    ) -> list[dict[str, Any]]:
+        return await dashboard_store.system_events(limit)
 
     return app
 
