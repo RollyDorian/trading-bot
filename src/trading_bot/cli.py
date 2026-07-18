@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import json
 import logging
+import sys
 from dataclasses import asdict
 from datetime import date, datetime
 from pathlib import Path
@@ -14,6 +15,8 @@ from trading_bot.config import Settings
 from trading_bot.exchange import HibachiPublicExchange
 from trading_bot.paper import PaperEngine
 from trading_bot.research.dataset import DatasetExporter
+from trading_bot.research.evaluator import evaluate_momentum
+from trading_bot.research.exporter import VersionedDatasetExporter
 from trading_bot.research.quality import validate_dataset
 from trading_bot.research.replay import replay_dataset, terminal_summary, write_report
 from trading_bot.service import CollectionBootstrap
@@ -109,6 +112,40 @@ def _parse_datetime(value: str) -> datetime:
     if parsed.tzinfo is None:
         raise argparse.ArgumentTypeError("timestamp must include a timezone")
     return parsed
+
+
+def _parse_export_command(arguments: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="hibachi-bot export-dataset")
+    parser.add_argument("--out", type=Path, default=Path("datasets"))
+    parser.add_argument("--version")
+    parser.add_argument("--start", type=_parse_datetime)
+    parser.add_argument("--end", type=_parse_datetime)
+    args = parser.parse_args(arguments)
+    if (args.start is None) != (args.end is None):
+        parser.error("--start and --end must be provided together")
+    return args
+
+
+def _parse_evaluate_command(arguments: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="hibachi-bot evaluate-dataset")
+    parser.add_argument("dataset", type=Path)
+    parser.add_argument("--window", type=int, default=20)
+    parser.add_argument("--threshold-bps", type=float, default=5.0)
+    return parser.parse_args(arguments)
+
+
+async def _versioned_export(args: argparse.Namespace, settings: Settings) -> Path:
+    engine = create_engine(settings.database_url)
+    try:
+        return await VersionedDatasetExporter(create_session_factory(engine)).export(
+            output_root=args.out,
+            symbol=settings.hibachi_symbol,
+            version=args.version,
+            start=args.start,
+            end=args.end,
+        )
+    finally:
+        await engine.dispose()
 
 
 async def _stream(settings: Settings) -> None:
@@ -252,6 +289,23 @@ async def _maintenance(args: argparse.Namespace, settings: Settings) -> None:
 
 
 def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] == "export-dataset":
+        export_args = _parse_export_command(sys.argv[2:])
+        print(asyncio.run(_versioned_export(export_args, Settings())))
+        return
+    if len(sys.argv) > 1 and sys.argv[1] == "evaluate-dataset":
+        evaluate_args = _parse_evaluate_command(sys.argv[2:])
+        from trading_bot.research.signals.momentum import MomentumConfig
+
+        report = evaluate_momentum(
+            evaluate_args.dataset,
+            MomentumConfig(
+                window=evaluate_args.window,
+                threshold_bps=evaluate_args.threshold_bps,
+            ),
+        )
+        print(json.dumps(report, sort_keys=True))
+        return
     args = _parse_args()
     settings = Settings()
     structlog.configure(
