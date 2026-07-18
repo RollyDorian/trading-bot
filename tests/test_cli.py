@@ -2,7 +2,7 @@ import sys
 
 import pytest
 
-from trading_bot.cli import _parse_args
+from trading_bot.cli import _parse_args, _parse_evaluate_command, _parse_export_command
 
 
 @pytest.mark.parametrize(
@@ -65,3 +65,28 @@ def test_dataset_export_range_is_accepted(monkeypatch: pytest.MonkeyPatch) -> No
     )
     args = _parse_args()
     assert args.export_dataset is True
+
+
+def test_versioned_export_subcommand_arguments() -> None:
+    args = _parse_export_command(
+        [
+            "--out",
+            "datasets",
+            "--version",
+            "v1_20260718",
+            "--start",
+            "2026-07-18T00:00:00Z",
+            "--end",
+            "2026-07-19T00:00:00Z",
+        ]
+    )
+    assert args.version == "v1_20260718"
+    assert args.out.name == "datasets"
+
+
+def test_evaluate_subcommand_arguments() -> None:
+    args = _parse_evaluate_command(
+        ["datasets/v1_20260718", "--window", "30", "--threshold-bps", "8"]
+    )
+    assert args.window == 30
+    assert args.threshold_bps == 8

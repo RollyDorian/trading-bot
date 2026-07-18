@@ -11,12 +11,14 @@ requires-python = ">=3.13,<4"
 dependencies = [
   "alembic>=1.16,<2",
   "asyncpg>=0.30,<1",
+  "fastapi>=0.116,<1",
   "hibachi-xyz==0.3.1",
   "pyarrow>=21,<24",
   "pydantic-settings>=2.10,<3",
   "sqlalchemy[asyncio]>=2.0.41,<3",
   "structlog>=25.4,<26",
   "tzdata>=2025.2",
+  "uvicorn[standard]>=0.35,<1",
 ]
 
 [project.optional-dependencies]

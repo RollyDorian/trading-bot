@@ -93,6 +93,38 @@ python3.13 -m venv .venv
 Do not run collection before migrations complete. Generated datasets and reports are
 ignored by Git; copy them to controlled research storage with their manifest intact.
 
+## Versioned exporter, evaluator, and dashboard
+
+The dashboard milestone adds a compact version layout alongside the checksummed
+bounded format above:
+
+```powershell
+.\.venv\Scripts\hibachi-bot.exe export-dataset `
+  --out datasets `
+  --version v1_20260718 `
+  --start 2026-07-18T00:00:00Z `
+  --end 2026-07-19T00:00:00Z
+
+.\.venv\Scripts\hibachi-bot.exe evaluate-dataset `
+  datasets/v1_20260718 `
+  --window 20 `
+  --threshold-bps 5
+
+docker compose up -d --build dashboard
+```
+
+Omit `--version` to allocate the next `vN_YYYYMMDD` directory. Each version contains
+`ETH-USDT-P.parquet`, `manifest.json`, and, after evaluation,
+`eval_momentum.json`. Existing versions are never overwritten.
+
+The dashboard listens on `127.0.0.1:8000` by default and exposes read-only status,
+dataset, evaluation, and recent-market endpoints. Its Chart.js asset is loaded from a
+public CDN by the browser; API and evaluation code make no exchange requests.
+
+The momentum evaluator reports hypothetical PnL without fees. This deliberately
+incomplete benchmark must not be compared with the cost-aware replay report or used
+to admit PAPER mode.
+
 ## Requirements
 
 - Python 3.13+
