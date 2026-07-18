@@ -15,9 +15,9 @@ from trading_bot.config import Settings
 from trading_bot.exchange import HibachiPublicExchange
 from trading_bot.paper import PaperEngine
 from trading_bot.research.dataset import DatasetExporter
-from trading_bot.research.quality import validate_dataset
 from trading_bot.research.evaluator import evaluate_momentum
 from trading_bot.research.exporter import VersionedDatasetExporter
+from trading_bot.research.quality import validate_dataset
 from trading_bot.research.replay import replay_dataset, terminal_summary, write_report
 from trading_bot.service import CollectionBootstrap
 from trading_bot.storage.database import create_engine, create_session_factory
