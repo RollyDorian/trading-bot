@@ -102,6 +102,50 @@ def test_collector_persists_raw_message_and_fails_on_closed_stream() -> None:
     assert sink.events[0].sequence == 9
 
 
+def test_collector_preserves_receipt_order_and_topic_exchange_times() -> None:
+    exchange_at = datetime.now(UTC).replace(microsecond=0)
+    messages = [
+        {
+            "topic": "orderbook",
+            "symbol": "ETH/USDT-P",
+            "messageType": "snapshot",
+            "timestamp_ms": int(exchange_at.timestamp() * 1_000),
+            "data": {},
+        },
+        {
+            "topic": "mark_price",
+            "symbol": "ETH/USDT-P",
+            "data": {"markPrice": "3000"},
+        },
+    ]
+
+    class MixedTopicStream(FakeStream):
+        async def subscribe(self, symbol: str, topics: Sequence[str]) -> None:
+            assert symbol == "ETH/USDT-P"
+            assert topics == ("orderbook", "mark_price")
+
+        async def wait_closed(self) -> None:
+            for message in messages:
+                await self.handlers[str(message["topic"])](message)
+
+    sink = MemorySink()
+    collector = MarketCollector(
+        symbol="ETH/USDT-P",
+        topics=("orderbook", "mark_price"),
+        stream=MixedTopicStream(messages[0]),
+        sink=sink,
+    )
+    with pytest.raises(ConnectionError, match="stopped unexpectedly"):
+        asyncio.run(collector.run())
+    assert [event.event_type for event in sink.events] == ["orderbook", "mark_price"]
+    assert sink.events[0].received_at <= sink.events[1].received_at
+    assert all(event.received_at.tzinfo is UTC for event in sink.events)
+    assert sink.events[0].exchange_at == exchange_at
+    assert sink.events[1].exchange_at is None
+    assert sink.events[0].latency_ms is not None
+    assert sink.events[0].latency_ms >= 0
+
+
 def test_collector_disconnects_after_connect_failure() -> None:
     stream = FailedConnectStream({})
     collector = MarketCollector(
@@ -144,6 +188,34 @@ def test_orderbook_sequence_gap_is_persisted_and_fails_closed() -> None:
     assert [event.sequence for event in sink.events] == [100, 102]
     assert sink.system_events[0]["event_type"] == "DESYNC"
     assert sink.system_events[0]["details"]["reason"] == "sequence_gap"
+
+
+def test_duplicate_orderbook_sequence_is_persisted_and_fails_closed() -> None:
+    messages = [
+        {"topic": "orderbook", "data": {"type": "snapshot", "sequence": 100}},
+        {"topic": "orderbook", "data": {"sequence": 100}},
+    ]
+
+    class OrderbookStream(FakeStream):
+        async def subscribe(self, symbol: str, topics: Sequence[str]) -> None:
+            assert symbol == "ETH/USDT-P"
+            assert topics == ("orderbook",)
+
+        async def wait_closed(self) -> None:
+            for message in messages:
+                await self.handlers["orderbook"](message)
+
+    sink = MemorySink()
+    collector = MarketCollector(
+        symbol="ETH/USDT-P",
+        topics=("orderbook",),
+        stream=OrderbookStream(messages[0]),
+        sink=sink,
+    )
+    with pytest.raises(SequenceDesyncError, match="previous=100, received=100"):
+        asyncio.run(collector.run())
+    assert [event.sequence for event in sink.events] == [100, 100]
+    assert sink.system_events[0]["details"]["reason"] == "sequence_regression"
 
 
 def test_orderbook_update_before_snapshot_fails_closed() -> None:

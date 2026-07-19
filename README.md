@@ -125,6 +125,44 @@ The momentum evaluator reports hypothetical PnL without fees. This deliberately
 incomplete benchmark must not be compared with the cost-aware replay report or used
 to admit PAPER mode.
 
+## Paper admission research gate
+
+Generate quality and cost-aware replay reports for four chronological datasets:
+
+```powershell
+$datasets = @(
+  "data/research/eth-usdt-p/eth-usdt-p_20260701T000000000000Z_20260702T000000000000Z_v1",
+  "data/research/eth-usdt-p/eth-usdt-p_20260702T000000000000Z_20260703T000000000000Z_v1",
+  "data/research/eth-usdt-p/eth-usdt-p_20260703T000000000000Z_20260704T000000000000Z_v1",
+  "data/research/eth-usdt-p/eth-usdt-p_20260704T000000000000Z_20260705T000000000000Z_v1"
+)
+foreach ($dataset in $datasets) {
+  .\.venv\Scripts\hibachi-bot.exe validate-dataset --dataset $dataset
+  .\.venv\Scripts\hibachi-bot.exe --offline-replay $dataset `
+    --report "$dataset/offline_replay.json"
+}
+
+.\.venv\Scripts\hibachi-bot.exe admit-paper `
+  --datasets $datasets `
+  --validation-count 1 `
+  --oos-count 2 `
+  --report paper-admission-report.json
+```
+
+`paper-admission-report.json` is the default dashboard admission-report path; override it
+with `ADMISSION_REPORT_PATH`. It records artifact decisions, chronological splits, OOS
+aggregates, thresholds, and every criterion result. Existing reports are not overwritten
+unless `--force` is explicit. See [the formal policy](docs/paper_admission.md).
+
+An admitted result does not enable PAPER, authorize trading, or provide evidence of
+future profitability. `BOT_MODE=collect` remains mandatory and human review is required.
+The latest collected-data exercise and its unresolved blockers are documented in
+[the Milestone 4 admission review](docs/milestone4_admission_review.md).
+Timestamp, clock-domain, and sequence requirements are defined in
+[the quality invariants](docs/timestamp_quality_invariants.md).
+Research/test PostgreSQL isolation and the safe collection workflow are documented in
+[COLLECT-only operations](docs/collect_only_operations.md).
+
 ## Requirements
 
 - Python 3.13+
@@ -195,7 +233,7 @@ Run the deterministic end-to-end COLLECT check with:
 ```
 
 The check uses the isolated `cryptobot-e2e` Compose project on localhost port
-`55432`, sends one representative public market message through
+`55432` with database `cryptobot_test`, sends one representative public market message through
 `MarketCollector`, verifies the normalized fields and unchanged raw payload in
 PostgreSQL, and confirms that an ended stream fails closed. It removes the test
 container and its isolated volume afterward; pass `-KeepDatabase` to keep them

@@ -2,13 +2,13 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: cryptobot
+      POSTGRES_DB: ${POSTGRES_DB:-cryptobot}
       POSTGRES_USER: cryptobot
       POSTGRES_PASSWORD: cryptobot
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cryptobot -d cryptobot"]
+      test: ["CMD-SHELL", "pg_isready -U cryptobot -d ${POSTGRES_DB:-cryptobot}"]
       interval: 2s
       timeout: 3s
       retries: 15

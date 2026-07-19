@@ -1,10 +1,10 @@
-import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
 
+from tests.integration.database import require_test_database_url
 from trading_bot.research.dataset import DatasetExporter, validate_manifest
 from trading_bot.research.quality import validate_dataset
 from trading_bot.research.replay import BaselineConfig, CostConfig, replay_dataset
@@ -14,9 +14,7 @@ from trading_bot.storage.repository import EventRepository, MarketEventInput
 
 @pytest.mark.asyncio
 async def test_postgres_export_then_offline_replay(tmp_path: Path) -> None:
-    database_url = os.getenv("DATABASE_URL")
-    if database_url is None:
-        pytest.skip("DATABASE_URL is required for the PostgreSQL integration check")
+    database_url = require_test_database_url()
 
     engine = create_engine(database_url)
     factory = create_session_factory(engine)
@@ -63,7 +61,7 @@ async def test_postgres_export_then_offline_replay(tmp_path: Path) -> None:
             allow_warnings=True,
         )
         assert manifest["row_counts"]["events"] == 12
-        assert quality["status"] in {"valid", "warning"}
+        assert quality["status"] in {"pass", "warning"}
         assert report["events"] == 12
         assert report["candles"] == 12
         assert report["signals"] > 0

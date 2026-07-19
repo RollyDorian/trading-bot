@@ -1,4 +1,3 @@
-import os
 from collections.abc import Sequence
 from typing import Any
 from uuid import uuid4
@@ -7,6 +6,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import DBAPIError
 
+from tests.integration.database import require_test_database_url
 from trading_bot.collector import MarketCollector, MessageHandler
 from trading_bot.storage.database import create_engine, create_session_factory
 from trading_bot.storage.models import MarketEvent
@@ -40,9 +40,7 @@ class ConstraintFailureStream:
 
 @pytest.mark.asyncio
 async def test_postgres_constraint_failure_propagates_without_partial_row() -> None:
-    database_url = os.getenv("DATABASE_URL")
-    if database_url is None:
-        pytest.skip("DATABASE_URL is required for PostgreSQL soak tests")
+    database_url = require_test_database_url()
 
     marker = str(uuid4())
     payload = {
