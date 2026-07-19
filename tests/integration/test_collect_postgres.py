@@ -1,5 +1,4 @@
 import asyncio
-import os
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
@@ -8,6 +7,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import select
 
+from tests.integration.database import require_test_database_url
 from trading_bot.collector import MarketCollector, MessageHandler
 from trading_bot.storage.database import create_engine, create_session_factory
 from trading_bot.storage.maintenance import DataMaintenance, ReplayFilter
@@ -39,9 +39,7 @@ class OneMessageStream:
 
 
 def test_collect_stream_writes_raw_event_to_postgres() -> None:
-    database_url = os.getenv("DATABASE_URL")
-    if database_url is None:
-        pytest.skip("DATABASE_URL is required for the PostgreSQL integration check")
+    database_url = require_test_database_url()
 
     marker = str(uuid4())
     exchange_timestamp_ms = int(datetime.now(UTC).timestamp() * 1000)

@@ -10,14 +10,39 @@ import pyarrow.parquet as pq  # type: ignore[import-untyped]
 from trading_bot.research.dataset import sha256_file, validate_manifest
 
 QUALITY_REPORT = "quality_report.json"
-QUALITY_REPORT_VERSION = 3
+QUALITY_REPORT_VERSION = 4
 PRICE_FIELDS = ("price", "tradePrice", "trade_price", "markPrice", "mark_price", "p")
+SNAPSHOT_MARKERS = {"snapshot", "initial", "full"}
+
+
+def _payload(payload_json: Any) -> dict[str, Any] | None:
+    try:
+        value = json.loads(str(payload_json))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    return cast(dict[str, Any], value) if isinstance(value, dict) else None
+
+
+def _is_snapshot(payload_json: Any) -> bool:
+    payload = _payload(payload_json)
+    if payload is None:
+        return False
+    containers = [payload]
+    if isinstance(payload.get("data"), dict):
+        containers.append(payload["data"])
+    for container in containers:
+        for name in ("messageType", "type", "event", "action", "isSnapshot"):
+            marker = container.get(name)
+            if marker is True or (
+                isinstance(marker, str) and marker.lower() in SNAPSHOT_MARKERS
+            ):
+                return True
+    return False
 
 
 def _price(payload_json: Any) -> tuple[bool, float | None]:
-    try:
-        payload = json.loads(str(payload_json))
-    except (TypeError, ValueError, json.JSONDecodeError):
+    payload = _payload(payload_json)
+    if payload is None:
         return False, None
     containers = [payload]
     if isinstance(payload, dict) and isinstance(payload.get("data"), dict):
@@ -63,19 +88,40 @@ def validate_dataset(
     if {path.name for path in parquet_paths} != expected_parquet_names:
         raise ValueError("Dataset contains unexpected Parquet inputs.")
     rows = cast(list[dict[str, Any]], pq.read_table(dataset_dir / "events.parquet").to_pylist())
-    timestamps = [row.get("exchange_at") or row.get("received_at") for row in rows]
-    valid_times = [value for value in timestamps if isinstance(value, datetime)]
+    received_times = [
+        value for row in rows if isinstance(value := row.get("received_at"), datetime)
+    ]
     manifest_start = datetime.fromisoformat(str(manifest["start_utc"])).astimezone(UTC)
     manifest_end = datetime.fromisoformat(str(manifest["end_utc"])).astimezone(UTC)
-    range_violations = sum(
-        timestamp < manifest_start or timestamp >= manifest_end for timestamp in valid_times
+    receipt_range_violations = sum(
+        timestamp < manifest_start or timestamp >= manifest_end for timestamp in received_times
     )
-    ordering_violations = sum(
-        left > right for left, right in zip(valid_times, valid_times[1:], strict=False)
+    receipt_ordering_violations = sum(
+        left > right
+        for left, right in zip(received_times, received_times[1:], strict=False)
     )
+    exchange_by_stream: dict[tuple[Any, Any], list[datetime]] = {}
+    exchange_times: list[datetime] = []
+    for row in rows:
+        exchange_at = row.get("exchange_at")
+        if isinstance(exchange_at, datetime):
+            exchange_times.append(exchange_at)
+            stream = (row.get("source"), row.get("topic"))
+            exchange_by_stream.setdefault(stream, []).append(exchange_at)
+    exchange_range_violations = sum(
+        timestamp < manifest_start or timestamp >= manifest_end
+        for timestamp in exchange_times
+    )
+    exchange_ordering_violations = sum(
+        left > right
+        for values in exchange_by_stream.values()
+        for left, right in zip(values, values[1:], strict=False)
+    )
+    range_violations = receipt_range_violations + exchange_range_violations
+    ordering_violations = receipt_ordering_violations + exchange_ordering_violations
     gaps = [
         (right - left).total_seconds()
-        for left, right in zip(valid_times, valid_times[1:], strict=False)
+        for left, right in zip(received_times, received_times[1:], strict=False)
         if right >= left
     ]
     largest_gap = max(gaps, default=0.0)
@@ -94,19 +140,21 @@ def validate_dataset(
         for left, right in zip(prices, prices[1:], strict=False)
     )
 
-    sequences_by_stream: dict[tuple[Any, Any], list[int]] = {}
+    last_sequences: dict[tuple[Any, Any], int] = {}
+    sequence_anomalies: int | None = None
     for row in rows:
         sequence = row.get("sequence")
         if isinstance(sequence, int):
+            if sequence_anomalies is None:
+                sequence_anomalies = 0
             stream = (row.get("source"), row.get("topic"))
-            sequences_by_stream.setdefault(stream, []).append(sequence)
-    sequence_anomalies: int | None = None
-    if sequences_by_stream:
-        sequence_anomalies = sum(
-            right != left + 1
-            for values in sequences_by_stream.values()
-            for left, right in zip(values, values[1:], strict=False)
-        )
+            previous = last_sequences.get(stream)
+            if row.get("topic") == "orderbook" and _is_snapshot(row.get("payload_json")):
+                last_sequences[stream] = sequence
+                continue
+            if previous is not None and sequence != previous + 1:
+                sequence_anomalies += 1
+            last_sequences[stream] = sequence
 
     findings: list[str] = []
     status = "pass"
@@ -142,8 +190,10 @@ def validate_dataset(
     if not findings:
         findings.append("No configured data-quality anomalies found.")
 
-    coverage_start = min(valid_times).isoformat() if valid_times else None
-    coverage_end = max(valid_times).isoformat() if valid_times else None
+    coverage_start = min(received_times).isoformat() if received_times else None
+    coverage_end = max(received_times).isoformat() if received_times else None
+    exchange_coverage_start = min(exchange_times).isoformat() if exchange_times else None
+    exchange_coverage_end = max(exchange_times).isoformat() if exchange_times else None
     report = {
         "quality_report_version": QUALITY_REPORT_VERSION,
         "dataset_version": manifest["dataset_id"],
@@ -155,10 +205,18 @@ def validate_dataset(
         "validated_at_utc": (now or datetime.now(UTC)).astimezone(UTC).isoformat(),
         "row_count": len(rows),
         "coverage": {"start_utc": coverage_start, "end_utc": coverage_end},
+        "exchange_coverage": {
+            "start_utc": exchange_coverage_start,
+            "end_utc": exchange_coverage_end,
+        },
         "duplicate_event_count": duplicate_count,
         "invalid_or_missing_price_count": invalid_prices,
         "timestamp_ordering_violations": ordering_violations,
+        "receipt_timestamp_ordering_violations": receipt_ordering_violations,
+        "exchange_timestamp_ordering_violations": exchange_ordering_violations,
         "timestamp_manifest_range_violations": range_violations,
+        "receipt_timestamp_manifest_range_violations": receipt_range_violations,
+        "exchange_timestamp_manifest_range_violations": exchange_range_violations,
         "sequence_anomalies": sequence_anomalies,
         "largest_timestamp_gap_seconds": largest_gap,
         "gap_warning_threshold_seconds": gap_warning_seconds,

@@ -72,7 +72,8 @@ def test_timestamp_disorder_is_rejected(tmp_path: Path) -> None:
     _replace_rows(dataset, [rows[1], rows[0], rows[2]])
     report = validate_dataset(dataset)
     assert report["status"] == "rejected"
-    assert report["timestamp_ordering_violations"] == 1
+    assert report["receipt_timestamp_ordering_violations"] == 1
+    assert report["exchange_timestamp_ordering_violations"] == 1
     with pytest.raises(ValueError, match="rejected"):
         replay_dataset(dataset)
 
@@ -85,6 +86,48 @@ def test_timestamp_outside_manifest_range_is_rejected(tmp_path: Path) -> None:
     report = validate_dataset(dataset)
     assert report["status"] == "rejected"
     assert report["timestamp_manifest_range_violations"] == 1
+
+
+def test_exchange_ordering_is_checked_within_source_topic_streams(tmp_path: Path) -> None:
+    dataset = _dataset(tmp_path, [100, 101, 102, 103])
+    rows = pq.read_table(dataset / "events.parquet").to_pylist()
+    for index, row in enumerate(rows):
+        if index % 2 == 0:
+            row["topic"] = "orderbook"
+            row["sequence"] = index // 2 + 1
+            row["exchange_at"] = (
+                row["received_at"]
+                if index == 0
+                else row["received_at"] - timedelta(milliseconds=1_500)
+            )
+        else:
+            row["topic"] = "mark_price"
+            row["sequence"] = None
+            row["exchange_at"] = None
+    _replace_rows(dataset, rows)
+    report = validate_dataset(dataset)
+    assert report["status"] == "pass"
+    assert report["receipt_timestamp_ordering_violations"] == 0
+    assert report["exchange_timestamp_ordering_violations"] == 0
+
+
+def test_orderbook_snapshot_resets_sequence_baseline_after_reconnect(tmp_path: Path) -> None:
+    dataset = _dataset(tmp_path, [100, 101, 102, 103])
+    rows = pq.read_table(dataset / "events.parquet").to_pylist()
+    sequences = (100, 101, 50, 51)
+    for index, row in enumerate(rows):
+        row["topic"] = "orderbook"
+        row["sequence"] = sequences[index]
+        row["payload_json"] = json.dumps(
+            {
+                "topic": "orderbook",
+                "messageType": "snapshot" if index in {0, 2} else "update",
+            }
+        )
+    _replace_rows(dataset, rows)
+    report = validate_dataset(dataset)
+    assert report["status"] == "pass"
+    assert report["sequence_anomalies"] == 0
 
 
 def test_empty_dataset_is_rejected(tmp_path: Path) -> None:

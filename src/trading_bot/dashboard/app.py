@@ -14,7 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from trading_bot.collector import sanitize_error_data, sanitize_error_text
-from trading_bot.config import Settings
+from trading_bot.config import Settings, validate_research_database_url
 from trading_bot.research.evaluator import evaluate_momentum
 from trading_bot.research.exporter import VersionedDatasetExporter
 from trading_bot.research.signals.momentum import MomentumConfig
@@ -264,14 +264,17 @@ def create_app(
     admission_report_path: Path | None = None,
 ) -> FastAPI:
     dashboard_settings = settings or Settings()
+    effective_database_url = validate_research_database_url(
+        database_url or dashboard_settings.database_url
+    )
     root = datasets_dir or Path(os.getenv("DATASETS_DIR", "datasets"))
     admission_path = admission_report_path or dashboard_settings.admission_report_path
     dashboard_store = store
     if dashboard_store is None:
-        engine = create_engine(database_url or dashboard_settings.database_url)
+        engine = create_engine(effective_database_url)
         dashboard_store = DatabaseDashboardStore(engine, create_session_factory(engine))
 
-    export_engine = create_engine(database_url or dashboard_settings.database_url)
+    export_engine = create_engine(effective_database_url)
     exporter = VersionedDatasetExporter(create_session_factory(export_engine))
 
     @asynccontextmanager

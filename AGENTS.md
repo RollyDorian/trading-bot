@@ -47,6 +47,9 @@ python -m venv .venv
   launch it against a database unless migrations have been applied.
 - The default database URL is development-only. Replace it locally through
   `.env`; never commit local credentials.
+- Collector, exporter, dashboard, and normal migrations use the explicit `research`
+  database role. PostgreSQL integration tests require a distinct `TEST_DATABASE_URL`,
+  `TEST_DATABASE_ROLE=test`, and test-only database target; never point them at research.
 - After every meaningful repository change, review and update this `AGENTS.md`
   when project scope, invariants, workflow, branch state, or milestones changed.
 
@@ -76,9 +79,11 @@ python -m venv .venv
    cost-aware replay reports, and aggregate OOS criteria.
 4. **In progress:** Exercise the admission gate across multiple representative,
    versioned datasets and independently review thresholds, cost assumptions, regime
-   coverage, and OOS stability. The current local snapshot is insufficient: only 2 trade
-   events were collected, and all five audited slices fail quality schema 3 due timestamp
-   range/order violations. Do not lower thresholds or invent regimes to force admission.
+   coverage, and OOS stability. Schema 4 now separates global receipt order from per-topic
+   exchange order: two audited slices pass, two warn on data gaps, and one rejects a stale
+   fixture timestamp. Only 2 trade events exist and passing slices have zero replay trades.
+   The fixture path is now isolated from research storage, but fresh real COLLECT-only
+   intervals are still required. Do not lower thresholds or invent regimes to force admission.
 5. PAPER remains disabled even when admission criteria pass. Human review and a
    separate explicitly approved implementation milestone are mandatory; keep all
    real trading commands absent.

@@ -158,6 +158,10 @@ An admitted result does not enable PAPER, authorize trading, or provide evidence
 future profitability. `BOT_MODE=collect` remains mandatory and human review is required.
 The latest collected-data exercise and its unresolved blockers are documented in
 [the Milestone 4 admission review](docs/milestone4_admission_review.md).
+Timestamp, clock-domain, and sequence requirements are defined in
+[the quality invariants](docs/timestamp_quality_invariants.md).
+Research/test PostgreSQL isolation and the safe collection workflow are documented in
+[COLLECT-only operations](docs/collect_only_operations.md).
 
 ## Requirements
 
@@ -229,7 +233,7 @@ Run the deterministic end-to-end COLLECT check with:
 ```
 
 The check uses the isolated `cryptobot-e2e` Compose project on localhost port
-`55432`, sends one representative public market message through
+`55432` with database `cryptobot_test`, sends one representative public market message through
 `MarketCollector`, verifies the normalized fields and unchanged raw payload in
 PostgreSQL, and confirms that an ended stream fails closed. It removes the test
 container and its isolated volume afterward; pass `-KeepDatabase` to keep them

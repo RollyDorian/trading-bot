@@ -6,15 +6,21 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from trading_bot.config import Settings
+from trading_bot.config import Settings, integration_test_database_url
 from trading_bot.storage.models import Base
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-settings = Settings()
-config.set_main_option("sqlalchemy.url", settings.database_url)
+database_role = context.get_x_argument(as_dictionary=True).get("database-role", "research")
+if database_role == "research":
+    database_url = Settings().database_url
+elif database_role == "test":
+    database_url = integration_test_database_url()
+else:
+    raise ValueError("Alembic database-role must be 'research' or 'test'.")
+config.set_main_option("sqlalchemy.url", database_url)
 target_metadata = Base.metadata
 
 

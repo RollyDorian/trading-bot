@@ -21,10 +21,12 @@ if ($null -eq (Get-Command docker -ErrorAction SilentlyContinue)) {
 Push-Location $projectRoot
 try {
     $env:POSTGRES_PORT = $postgresPort
+    $env:POSTGRES_DB = "cryptobot_test"
     docker compose --project-name $composeProject up -d --wait postgres
     if ($LASTEXITCODE -ne 0) { throw "PostgreSQL startup failed." }
-    $env:DATABASE_URL = "postgresql+asyncpg://cryptobot:cryptobot@localhost:$postgresPort/cryptobot"
-    & $alembic upgrade head
+    $env:TEST_DATABASE_URL = "postgresql+asyncpg://cryptobot:cryptobot@localhost:$postgresPort/cryptobot_test"
+    $env:TEST_DATABASE_ROLE = "test"
+    & $alembic -x database-role=test upgrade head
     if ($LASTEXITCODE -ne 0) { throw "Alembic migration failed." }
     & $pytest tests/integration/test_collect_postgres.py
     if ($LASTEXITCODE -ne 0) { throw "COLLECT end-to-end check failed." }
