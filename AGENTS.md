@@ -55,7 +55,7 @@ python -m venv .venv
 
 ## Git and GitHub
 
-- Current integration branch: `codex/integration`.
+- Current deployment-preparation branch: `codex/collect-only-deployment-plan`.
 - Preserve unrelated user changes. Do not reset, force-push, delete branches,
   merge a PR, or push new commits unless the user explicitly requests it.
 - Git for Windows must use the system OpenSSH to access the loaded Windows
@@ -84,6 +84,8 @@ python -m venv .venv
    fixture timestamp. Only 2 trade events exist and passing slices have zero replay trades.
    The fixture path is now isolated from research storage, but fresh real COLLECT-only
    intervals are still required. Do not lower thresholds or invent regimes to force admission.
+   A COLLECT-only immutable-image/VPS deployment plan is prepared for review; no Timeweb
+   connection, deployment automation, or network change is authorized or implemented.
 5. PAPER remains disabled even when admission criteria pass. Human review and a
    separate explicitly approved implementation milestone are mandatory; keep all
    real trading commands absent.

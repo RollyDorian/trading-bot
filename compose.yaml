@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-cryptobot}
       POSTGRES_USER: cryptobot
-      POSTGRES_PASSWORD: cryptobot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set a local development password outside Git}
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     healthcheck:
@@ -16,19 +16,61 @@ services:
       - postgres-data:/var/lib/postgresql/data
     restart: unless-stopped
 
+  migrate:
+    build: .
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    environment:
+      BOT_MODE: collect
+      DATABASE_ROLE: research
+      DATABASE_URL: ${MIGRATION_DATABASE_URL:?set the migration PostgreSQL URL outside Git}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: ["tools"]
+    restart: "no"
+
+  collector:
+    build: .
+    command: ["hibachi-bot", "--stream"]
+    environment:
+      BOT_MODE: collect
+      DATABASE_ROLE: research
+      DATABASE_URL: ${DATABASE_URL:?set the research PostgreSQL URL outside Git}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    init: true
+    restart: "on-failure:5"
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "python", "-m", "trading_bot.healthcheck", "--max-age-seconds", "120"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
   dashboard:
     build: .
+    command: ["uvicorn", "trading_bot.dashboard.app:app", "--host", "0.0.0.0", "--port", "8000"]
     environment:
-      DATABASE_URL: postgresql+asyncpg://cryptobot:cryptobot@postgres:5432/cryptobot
+      BOT_MODE: collect
+      DATABASE_ROLE: research
+      DATABASE_URL: ${DATABASE_URL:?set the research PostgreSQL URL outside Git}
       DATASETS_DIR: /app/datasets
     ports:
       - "127.0.0.1:${DASHBOARD_PORT:-8000}:8000"
     volumes:
-      - ./datasets:/app/datasets:ro
+      - ./datasets:/app/datasets
     depends_on:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/status', timeout=5).read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
 volumes:
   postgres-data:
