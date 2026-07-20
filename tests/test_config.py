@@ -44,7 +44,10 @@ def test_research_runtime_rejects_test_database() -> None:
         Settings(_env_file=None, database_role="test")  # type: ignore[arg-type]
 
 
-def test_test_configuration_requires_explicit_role_and_test_target() -> None:
+def test_test_configuration_requires_explicit_role_and_test_target(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("TEST_DATABASE_ROLE", raising=False)
     with pytest.raises(ValidationError, match="test_database_role"):
         IntegrationTestSettings(
             _env_file=None,

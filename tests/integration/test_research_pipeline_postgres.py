@@ -20,6 +20,7 @@ async def test_postgres_export_then_offline_replay(tmp_path: Path) -> None:
     factory = create_session_factory(engine)
     repository = EventRepository(factory)
     marker = str(uuid4())
+    symbol = f"ETH/USDT-P-{marker[:12]}"
     start = datetime.now(UTC).replace(microsecond=0)
     try:
         for index in range(12):
@@ -30,7 +31,7 @@ async def test_postgres_export_then_offline_replay(tmp_path: Path) -> None:
                     exchange_at=timestamp,
                     source="integration_fixture",
                     event_type="trades",
-                    symbol="ETH/USDT-P",
+                    symbol=symbol,
                     sequence=index + 1,
                     latency_ms=0.0,
                     payload={
@@ -42,7 +43,7 @@ async def test_postgres_export_then_offline_replay(tmp_path: Path) -> None:
                 )
             )
         dataset_dir = await DatasetExporter(factory).export(
-            symbol="ETH/USDT-P",
+            symbol=symbol,
             start=start,
             end=start + timedelta(seconds=12),
             output_root=tmp_path,
