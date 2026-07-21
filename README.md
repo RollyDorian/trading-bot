@@ -162,9 +162,12 @@ Timestamp, clock-domain, and sequence requirements are defined in
 [the quality invariants](docs/timestamp_quality_invariants.md).
 Research/test PostgreSQL isolation and the safe collection workflow are documented in
 [COLLECT-only operations](docs/collect_only_operations.md).
+Routine status, preflight, bounded logs, protected backups, isolated restore validation,
+and rollback preparation are documented in the
+[COLLECT-only operations runbook](docs/operations_runbook.md).
 The review-only container/VPS release architecture, health checks, rollback, and backup
-requirements are documented in [the deployment plan](docs/deployment_plan.md). No deployment
-or deployment-host connectivity is implemented.
+requirements are documented in [the deployment plan](docs/deployment_plan.md). Deployment
+remains a manual, separately authorized operation; no automated host connectivity exists.
 
 ## Requirements
 

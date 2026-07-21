@@ -55,7 +55,7 @@ python -m venv .venv
 
 ## Git and GitHub
 
-- Current deployment-preparation branch: `codex/collect-only-deployment-plan`.
+- Current operations-readiness branch: `codex/collect-ops-readiness`.
 - Preserve unrelated user changes. Do not reset, force-push, delete branches,
   merge a PR, or push new commits unless the user explicitly requests it.
 - Git for Windows must use the system OpenSSH to access the loaded Windows
@@ -86,6 +86,10 @@ python -m venv .venv
 - Both local and production Compose definitions keep PostgreSQL, collector, and
   dashboard internal-only. Memory ceilings are 256 MiB, 160 MiB, and 80 MiB;
   the dashboard is profile-gated and omitted from the initial VPS startup.
+- `scripts/collect_ops.sh` is the provider-neutral interface for status, update
+  preflight, bounded redacted logs, protected logical backup, and isolated
+  restore validation. It must remain fail-closed and must not restart services,
+  expose ports, print secrets, or delete unknown backup files.
 
 ## Suggested next milestones
 
@@ -103,9 +107,9 @@ python -m venv .venv
    fixture timestamp. Only 2 trade events exist and passing slices have zero replay trades.
    The fixture path is now isolated from research storage, but fresh real COLLECT-only
    intervals are still required. Do not lower thresholds or invent regimes to force admission.
-   A COLLECT-only immutable-image/VPS deployment plan is prepared for review, but no
-   deployment, migration, database provisioning, network change, or collector stream
-   is authorized by repository policy.
+   The first manual private COLLECT-only stack is operational; routine recoverability
+   tooling is being validated. Deployment updates, network changes, dashboard access,
+   and any PAPER/LIVE behavior still require separate explicit approval.
 5. PAPER remains disabled even when admission criteria pass. Human review and a
    separate explicitly approved implementation milestone are mandatory; keep all
    real trading commands absent.

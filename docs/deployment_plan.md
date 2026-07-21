@@ -171,10 +171,13 @@ or forward-fix plan.
 - Do not put dumps, datasets, reports, logs, or credentials in Git or container images.
 - Retention remains an explicit one-off maintenance action. The least-privilege runtime role
   has no delete permission; any retention role or schedule requires separate review.
+- Use `scripts/collect_ops.sh` and `docs/operations_runbook.md` for provider-neutral status,
+  preflight, bounded logs, protected logical backups, isolated restore validation, and
+  rollback preparation. These commands do not authorize an update or deployment.
 
 ## Explicitly unimplemented
 
-- Deployment-host connection or deployment.
+- Automated deployment-host connection or deployment.
 - SSH, VPN, firewall, DNS, TLS, or reverse-proxy changes.
 - GitHub Environment, deployment secrets, or automatic/manual deployment jobs.
 - Automated PostgreSQL backup, restore, retention, monitoring, or alert delivery.
