@@ -1,12 +1,15 @@
 services:
   postgres:
     image: postgres:16-alpine
+    command: >-
+      postgres -c shared_buffers=64MB -c work_mem=4MB
+      -c maintenance_work_mem=32MB -c max_connections=5
+      -c log_min_duration_statement=1000
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-cryptobot}
       POSTGRES_USER: cryptobot
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set a local development password outside Git}
-    ports:
-      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    mem_limit: 256m
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U cryptobot -d ${POSTGRES_DB:-cryptobot}"]
       interval: 2s
@@ -32,6 +35,7 @@ services:
   collector:
     build: .
     command: ["hibachi-bot", "--stream"]
+    mem_limit: 160m
     environment:
       BOT_MODE: collect
       DATABASE_ROLE: research
@@ -52,19 +56,19 @@ services:
   dashboard:
     build: .
     command: ["uvicorn", "trading_bot.dashboard.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    mem_limit: 80m
     environment:
       BOT_MODE: collect
       DATABASE_ROLE: research
       DATABASE_URL: ${DATABASE_URL:?set the research PostgreSQL URL outside Git}
       DATASETS_DIR: /app/datasets
-    ports:
-      - "127.0.0.1:${DASHBOARD_PORT:-8000}:8000"
     volumes:
       - ./datasets:/app/datasets
     depends_on:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+    profiles: ["dashboard"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/status', timeout=5).read()"]
       interval: 30s

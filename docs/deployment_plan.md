@@ -1,7 +1,7 @@
 # COLLECT-only deployment plan
 
 Status: reviewable preparation only. Nothing in this plan authorizes deployment,
-Timeweb access, network changes, PAPER, LIVE, or trading behavior.
+deployment-host access, network changes, PAPER, LIVE, or trading behavior.
 
 ## Architecture and release boundary
 
@@ -40,10 +40,10 @@ GitHub-provided secret name `GITHUB_TOKEN` with `packages: write` only in the im
 If a future protected manual deployment workflow is separately approved, its proposed
 GitHub Secret names are:
 
-- `TIMEWEB_VPS_HOST`
-- `TIMEWEB_VPS_USER`
-- `TIMEWEB_VPS_SSH_PRIVATE_KEY`
-- `TIMEWEB_VPS_SSH_HOST_KEY`
+- `VPS_HOST`
+- `VPS_USER`
+- `VPS_SSH_PRIVATE_KEY`
+- `VPS_SSH_HOST_KEY`
 - `GHCR_READ_TOKEN`
 
 Database URLs and dashboard credentials should remain on the VPS, not transit through a
@@ -65,6 +65,14 @@ names `RESEARCH_DATABASE_URL`, `MIGRATION_DATABASE_URL`, and `DASHBOARD_TOKEN`.
 VPN, firewall, DNS, reverse proxy, TLS, SSH policy, and server-user changes are explicitly
 out of scope unless the user separately approves them.
 
+For the initial single-user VPS deployment, Compose enforces these memory ceilings:
+PostgreSQL 256 MiB, collector 160 MiB, and dashboard 80 MiB. The dashboard profile remains
+off; start only PostgreSQL and the collector. No application service publishes a host port.
+If dashboard access is separately approved, use a reviewed loopback-only override and an
+SSH tunnel; never expose it publicly. Stop deployment or collection when root filesystem
+free space falls below 3 GiB. Treat sustained swap use above 256 MiB as a capacity warning
+requiring operator review, not as permission to raise limits automatically.
+
 ## First deployment sequence
 
 The following is a human procedure and must not be run by CI in this milestone.
@@ -79,10 +87,10 @@ The following is a human procedure and must not be run by CI in this milestone.
    - `DATABASE_ROLE=research`
    - `DATABASE_URL`
    - `MIGRATION_DATABASE_URL`
+   - `POSTGRES_PASSWORD`
    - `IMAGE_REPOSITORY`
    - `IMAGE_DIGEST`
    - `DASHBOARD_TOKEN`
-   - `DASHBOARD_PORT` if the default is unsuitable
    - `DATASETS_PATH`
    - `REPORTS_PATH`
 
@@ -102,10 +110,10 @@ The following is a human procedure and must not be run by CI in this milestone.
    docker compose -f compose.production.yaml --profile tools run --rm migrate
    ```
 
-8. Start only the dashboard and collector:
+8. Start only PostgreSQL and the collector; the dashboard profile stays disabled:
 
    ```bash
-   docker compose -f compose.production.yaml up -d dashboard collector
+   docker compose -f compose.production.yaml up -d postgres collector
    ```
 
 9. Record the deployed commit, digest, migration revision, UTC start time, and operator.
@@ -146,7 +154,7 @@ Rollback is image-only unless the migration is explicitly documented as reversib
 
 1. Stop the collector gracefully.
 2. Restore the previous recorded `IMAGE_DIGEST`.
-3. Run `docker compose ... pull`, then `up -d dashboard collector`.
+3. Run `docker compose ... pull`, then `up -d postgres collector`.
 4. Verify health and timestamp progression.
 
 Never run an automatic Alembic downgrade against append-only research data. If a schema
@@ -166,7 +174,7 @@ or forward-fix plan.
 
 ## Explicitly unimplemented
 
-- Timeweb/VPS connection or deployment.
+- Deployment-host connection or deployment.
 - SSH, VPN, firewall, DNS, TLS, or reverse-proxy changes.
 - GitHub Environment, deployment secrets, or automatic/manual deployment jobs.
 - Automated PostgreSQL backup, restore, retention, monitoring, or alert delivery.
