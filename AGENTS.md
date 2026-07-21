@@ -68,6 +68,25 @@ python -m venv .venv
 - GitHub CLI is installed at `C:\Program Files\GitHub CLI\gh.exe`. Verify auth
   with `gh auth status` before workflows that require the GitHub API.
 
+## Deployment host policy
+
+- Keep hostnames, SSH aliases, Linux usernames, key paths, provider details,
+  installed versions, listener inventories, and bootstrap status outside Git.
+- Verify SSH host identity out of band. Routine deployment uses a dedicated
+  non-root account with only the minimum container-runtime access and no sudo.
+- Deployment and secret directories must be operator-owned with restrictive
+  permissions. Dataset/report directories remain writable by container UID/GID
+  `10001`; runtime environment files remain outside Git with mode `0600`.
+- Audit existing listeners and resource ownership before deployment. Do not
+  publish application ports; separately approved dashboard access is
+  loopback-only through an SSH tunnel.
+- Host preparation does not authorize image pulls, Compose starts, migrations,
+  PostgreSQL provisioning, dashboard access, or a collector stream. Each is a
+  separate, explicitly approved operational step.
+- Both local and production Compose definitions keep PostgreSQL, collector, and
+  dashboard internal-only. Memory ceilings are 256 MiB, 160 MiB, and 80 MiB;
+  the dashboard is profile-gated and omitted from the initial VPS startup.
+
 ## Suggested next milestones
 
 1. **Complete:** Soak tests cover reconnect continuity, desync halt/error recording,
@@ -84,8 +103,9 @@ python -m venv .venv
    fixture timestamp. Only 2 trade events exist and passing slices have zero replay trades.
    The fixture path is now isolated from research storage, but fresh real COLLECT-only
    intervals are still required. Do not lower thresholds or invent regimes to force admission.
-   A COLLECT-only immutable-image/VPS deployment plan is prepared for review; no Timeweb
-   connection, deployment automation, or network change is authorized or implemented.
+   A COLLECT-only immutable-image/VPS deployment plan is prepared for review, but no
+   deployment, migration, database provisioning, network change, or collector stream
+   is authorized by repository policy.
 5. PAPER remains disabled even when admission criteria pass. Human review and a
    separate explicitly approved implementation milestone are mandatory; keep all
    real trading commands absent.

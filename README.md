@@ -164,7 +164,7 @@ Research/test PostgreSQL isolation and the safe collection workflow are document
 [COLLECT-only operations](docs/collect_only_operations.md).
 The review-only container/VPS release architecture, health checks, rollback, and backup
 requirements are documented in [the deployment plan](docs/deployment_plan.md). No deployment
-or Timeweb connectivity is implemented.
+or deployment-host connectivity is implemented.
 
 ## Requirements
 
