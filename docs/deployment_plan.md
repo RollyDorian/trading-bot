@@ -174,11 +174,13 @@ or forward-fix plan.
 - Use `scripts/collect_ops.sh` and `docs/operations_runbook.md` for provider-neutral status,
   preflight, bounded logs, protected logical backups, isolated restore validation, and
   rollback preparation. These commands do not authorize an update or deployment.
+- Use `scripts/collect_monitor.py` and `docs/monitoring.md` for one bounded host-local JSON
+  health contract. It opens no port, emits no secrets, and performs no remediation.
 
 ## Explicitly unimplemented
 
 - Automated deployment-host connection or deployment.
 - SSH, VPN, firewall, DNS, TLS, or reverse-proxy changes.
 - GitHub Environment, deployment secrets, or automatic/manual deployment jobs.
-- Automated PostgreSQL backup, restore, retention, monitoring, or alert delivery.
+- Automated PostgreSQL backup, restore, retention, remediation, or alert delivery.
 - PAPER/LIVE modes, orders, accounts, transfers, withdrawals, leverage, or private APIs.
