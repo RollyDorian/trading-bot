@@ -167,6 +167,8 @@ and rollback preparation are documented in the
 [COLLECT-only operations runbook](docs/operations_runbook.md).
 The bounded host-local JSON monitoring contract and provider-neutral alert examples are
 documented in [COLLECT-only monitoring](docs/monitoring.md).
+Bounded stream-quality, storage-growth, capacity forecasting, and retention decisions are
+documented in [data quality and retention readiness](docs/retention_readiness.md).
 The review-only container/VPS release architecture, health checks, rollback, and backup
 requirements are documented in [the deployment plan](docs/deployment_plan.md). Deployment
 remains a manual, separately authorized operation; no automated host connectivity exists.

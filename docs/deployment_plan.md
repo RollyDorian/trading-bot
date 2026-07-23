@@ -176,6 +176,8 @@ or forward-fix plan.
   rollback preparation. These commands do not authorize an update or deployment.
 - Use `scripts/collect_monitor.py` and `docs/monitoring.md` for one bounded host-local JSON
   health contract. It opens no port, emits no secrets, and performs no remediation.
+- Use `scripts/collect_quality.py` and `docs/retention_readiness.md` for bounded on-demand
+  stream continuity and capacity forecasts. Retention remains a human decision only.
 
 ## Explicitly unimplemented
 
