@@ -104,3 +104,11 @@ full-history count; `--full-history` is an explicit, potentially expensive revie
 Follow `docs/retention_readiness.md` for signal interpretation, capacity escalation,
 retention alternatives, and bounded sample export. No result authorizes deletion,
 archival execution, migration, or automatic remediation.
+
+## Host-local monitoring
+
+Follow `docs/monitoring.md` for the separately approved least-privilege Zabbix integration.
+The root-owned oneshot is read-only and bounded; Zabbix reads only its sanitized cache and
+must have neither Docker nor sudo access. A stale or malformed cache is an alert, never
+permission to restart PostgreSQL or collector. Rollback removes only project monitoring
+files and restores the preserved agent configuration.

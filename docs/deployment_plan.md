@@ -181,6 +181,8 @@ or forward-fix plan.
   rollback preparation. These commands do not authorize an update or deployment.
 - Use `scripts/collect_monitor.py` and `docs/monitoring.md` for one bounded host-local JSON
   health contract. It opens no port, emits no secrets, and performs no remediation.
+- Approved Zabbix integration uses the root-owned bounded oneshot, sanitized cache, and
+  fixed-key reader; the agent never receives Docker or sudo access.
 - Use `scripts/collect_quality.py` and `docs/retention_readiness.md` for bounded on-demand
   stream continuity and capacity forecasts. Retention remains a human decision only.
 - Use `scripts/restart_state.py` through the operations and monitoring interfaces to

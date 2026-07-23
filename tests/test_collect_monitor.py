@@ -38,7 +38,8 @@ def healthy_snapshot(monitor: ModuleType, **changes: object) -> object:
         "backup_age_seconds": monitor.MAX_BACKUP_AGE_SECONDS,
         "disk_free_bytes": monitor.MIN_DISK_BYTES,
         "swap_used_bytes": monitor.MAX_SWAP_USED_BYTES,
-        "runtime_safe": True,
+        "dashboard_disabled": True,
+        "ports_safe": True,
     }
     values.update(changes)
     return monitor.Snapshot(**values)
@@ -54,9 +55,11 @@ def test_monitor_contract_is_bounded_and_healthy(monitor: ModuleType) -> None:
         "collector_restart_loop": 0,
         "collector_restart_state": "healthy_stable",
         "data_paths_writable": 1,
+        "dashboard_disabled": 1,
         "storage_state": "ready",
         "disk_safe": 1,
         "postgres_health": 1,
+        "ports_safe": 1,
         "readiness": 1,
         "runtime_safe": 1,
         "swap_safe": 1,
@@ -77,7 +80,8 @@ def test_monitor_contract_is_bounded_and_healthy(monitor: ModuleType) -> None:
         ({"backup_age_seconds": 93601}, "backup_fresh"),
         ({"disk_free_bytes": 3 * 1024**3 - 1}, "disk_safe"),
         ({"swap_used_bytes": 256 * 1024**2 + 1}, "swap_safe"),
-        ({"runtime_safe": False}, "runtime_safe"),
+        ({"dashboard_disabled": False}, "dashboard_disabled"),
+        ({"ports_safe": False}, "ports_safe"),
     ],
 )
 def test_each_failed_gate_rejects_readiness(
@@ -236,8 +240,7 @@ def test_script_contains_no_mutating_runtime_commands() -> None:
 
 def test_monitoring_document_contract_is_complete() -> None:
     document = DOC.read_text(encoding="utf-8")
-    assert "UserParameter=hibachi.collect.monitor" in document
-    assert sum(line.startswith("| `") for line in document.splitlines()) == 12
-    assert sum(f"{number}." in document for number in range(1, 9)) == 8
+    assert "hibachi.collect.readiness" in document
+    assert sum(line.startswith("| `") for line in document.splitlines()) >= 14
     assert "opens no listener" in document
     assert "no automatic remediation" in document

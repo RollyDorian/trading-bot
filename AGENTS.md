@@ -55,7 +55,7 @@ python -m venv .venv
 
 ## Git and GitHub
 
-- Current storage-readiness branch: `codex/storage-path-readiness`.
+- Current monitoring-integration branch: `codex/zabbix-cache-integration`.
 - Preserve unrelated user changes. Do not reset, force-push, delete branches,
   merge a PR, or push new commits unless the user explicitly requests it.
 - Git for Windows must use the system OpenSSH to access the loaded Windows
@@ -93,6 +93,9 @@ python -m venv .venv
 - `scripts/collect_monitor.py` emits one bounded numeric JSON health contract for local
   monitoring. It must remain read-only, fail closed, open no listener, print no secret or
   host metadata, and perform no automatic remediation.
+- Zabbix integration uses the documented root-owned bounded oneshot and sanitized cache.
+  The Zabbix account must never gain Docker-group or sudo access, and fixed UserParameters
+  must never invoke Docker, Compose, Git, SQL, or project scripts.
 - `scripts/collect_quality.py` provides bounded read-only stream-quality and capacity
   analysis. Exact full-history scans remain explicit opt-in; retention is a documented
   decision framework and must never delete or archive data automatically.
