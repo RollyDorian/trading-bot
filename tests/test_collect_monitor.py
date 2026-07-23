@@ -12,6 +12,7 @@ DOC = ROOT / "docs" / "monitoring.md"
 
 
 def load_monitor() -> ModuleType:
+    sys.path.insert(0, str(SCRIPT.parent))
     spec = importlib.util.spec_from_file_location("collect_monitor", SCRIPT)
     assert spec is not None
     assert spec.loader is not None
@@ -32,6 +33,7 @@ def healthy_snapshot(monitor: ModuleType, **changes: object) -> object:
         "collector_running": True,
         "collector_health": "healthy",
         "collector_restarts": 0,
+        "collector_restart_state": "healthy_stable",
         "data_paths_writable": True,
         "backup_age_seconds": monitor.MAX_BACKUP_AGE_SECONDS,
         "disk_free_bytes": monitor.MIN_DISK_BYTES,
@@ -48,7 +50,9 @@ def test_monitor_contract_is_bounded_and_healthy(monitor: ModuleType) -> None:
     assert metrics == {
         "backup_fresh": 1,
         "collector_health": 2,
+        "collector_restart_count": 0,
         "collector_restart_loop": 0,
+        "collector_restart_state": "healthy_stable",
         "data_paths_writable": 1,
         "disk_safe": 1,
         "postgres_health": 1,
@@ -64,7 +68,10 @@ def test_monitor_contract_is_bounded_and_healthy(monitor: ModuleType) -> None:
     [
         ({"postgres_health": "unhealthy"}, "postgres_health"),
         ({"collector_health": "unhealthy"}, "collector_health"),
-        ({"collector_restarts": 1}, "collector_restart_loop"),
+        (
+            {"collector_restarts": 1, "collector_restart_state": "restart_loop"},
+            "collector_restart_loop",
+        ),
         ({"data_paths_writable": False}, "data_paths_writable"),
         ({"backup_age_seconds": 93601}, "backup_fresh"),
         ({"disk_free_bytes": 3 * 1024**3 - 1}, "disk_safe"),
@@ -86,6 +93,37 @@ def test_missing_and_malformed_values_fail_closed(monitor: ModuleType) -> None:
     assert metrics["postgres_health"] == -1
     assert metrics["collector_health"] == -1
     assert metrics["backup_fresh"] == 0
+
+
+def test_historical_restart_is_observable_without_blocking_readiness(
+    monitor: ModuleType,
+) -> None:
+    metrics = monitor.evaluate(
+        healthy_snapshot(
+            monitor,
+            collector_restarts=9,
+            collector_restart_state="historical_restart",
+        )
+    )
+    assert metrics["collector_restart_count"] == 9
+    assert metrics["collector_restart_state"] == "historical_restart"
+    assert metrics["collector_restart_loop"] == 0
+    assert metrics["readiness"] == 1
+
+
+def test_recent_restart_alerts_without_changing_collector_health(
+    monitor: ModuleType,
+) -> None:
+    metrics = monitor.evaluate(
+        healthy_snapshot(
+            monitor,
+            collector_restarts=1,
+            collector_restart_state="recent_restart",
+        )
+    )
+    assert metrics["collector_health"] == 2
+    assert metrics["collector_restart_loop"] == 1
+    assert metrics["readiness"] == 0
 
 
 def test_run_redacts_unexpected_configuration_failure(
@@ -182,7 +220,7 @@ def test_script_contains_no_mutating_runtime_commands() -> None:
 def test_monitoring_document_contract_is_complete() -> None:
     document = DOC.read_text(encoding="utf-8")
     assert "UserParameter=hibachi.collect.monitor" in document
-    assert sum(line.startswith("| `") for line in document.splitlines()) == 9
+    assert sum(line.startswith("| `") for line in document.splitlines()) == 11
     assert sum(f"{number}." in document for number in range(1, 9)) == 8
     assert "opens no listener" in document
     assert "no automatic remediation" in document

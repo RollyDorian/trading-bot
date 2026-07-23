@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+from restart_state import BLOCK_STATES, PASS_STATES, observe
+
 MIN_DISK_BYTES: Final = 3 * 1024**3
 MAX_SWAP_USED_BYTES: Final = 256 * 1024**2
 MAX_BACKUP_AGE_SECONDS: Final = 26 * 60 * 60
@@ -23,7 +25,9 @@ UNKNOWN: Final = -1
 METRIC_KEYS: Final = (
     "backup_fresh",
     "collector_health",
+    "collector_restart_count",
     "collector_restart_loop",
+    "collector_restart_state",
     "data_paths_writable",
     "disk_safe",
     "postgres_health",
@@ -39,6 +43,7 @@ class Snapshot:
     collector_running: bool | None = None
     collector_health: str | None = None
     collector_restarts: int | None = None
+    collector_restart_state: str = "unknown"
     data_paths_writable: bool | None = None
     backup_age_seconds: int | None = None
     disk_free_bytes: int | None = None
@@ -46,7 +51,7 @@ class Snapshot:
     runtime_safe: bool | None = None
 
 
-def evaluate(snapshot: Snapshot) -> dict[str, int]:
+def evaluate(snapshot: Snapshot) -> dict[str, int | str]:
     postgres = UNKNOWN if snapshot.postgres_health is None else int(
         snapshot.postgres_health == "healthy"
     )
@@ -58,10 +63,14 @@ def evaluate(snapshot: Snapshot) -> dict[str, int]:
         collector = 2
     else:
         collector = 1
-    restart = (
-        UNKNOWN
-        if snapshot.collector_restarts is None
-        else int(snapshot.collector_restarts > 0)
+    if snapshot.collector_restart_state in PASS_STATES:
+        restart = 0
+    elif snapshot.collector_restart_state in BLOCK_STATES - {"unknown"}:
+        restart = 1
+    else:
+        restart = UNKNOWN
+    restart_count = (
+        UNKNOWN if snapshot.collector_restarts is None else snapshot.collector_restarts
     )
     data = _boolean_metric(snapshot.data_paths_writable)
     backup = (
@@ -93,7 +102,9 @@ def evaluate(snapshot: Snapshot) -> dict[str, int]:
     return {
         "backup_fresh": backup,
         "collector_health": collector,
+        "collector_restart_count": restart_count,
         "collector_restart_loop": restart,
+        "collector_restart_state": snapshot.collector_restart_state,
         "data_paths_writable": data,
         "disk_safe": disk,
         "postgres_health": postgres,
@@ -107,8 +118,9 @@ def _boolean_metric(value: bool | None) -> int:
     return UNKNOWN if value is None else int(value)
 
 
-def unknown_metrics() -> dict[str, int]:
-    metrics = {key: UNKNOWN for key in METRIC_KEYS}
+def unknown_metrics() -> dict[str, int | str]:
+    metrics: dict[str, int | str] = {key: UNKNOWN for key in METRIC_KEYS}
+    metrics["collector_restart_state"] = "unknown"
     metrics["readiness"] = 0
     return metrics
 
@@ -133,11 +145,13 @@ class HostProbe:
     def snapshot(self) -> Snapshot:
         postgres = self._service_state("postgres")
         collector = self._service_state("collector")
+        restart = observe(self.compose)
         return Snapshot(
             postgres_health=postgres[1],
             collector_running=collector[0],
             collector_health=collector[1],
-            collector_restarts=collector[2],
+            collector_restarts=restart.restart_count,
+            collector_restart_state=restart.state,
             data_paths_writable=self._data_paths_writable(),
             backup_age_seconds=self._backup_age_seconds(),
             disk_free_bytes=shutil.disk_usage(self.deploy_dir).free,

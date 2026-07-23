@@ -18,11 +18,15 @@ def test_operations_script_is_fail_closed_and_collect_only() -> None:
     assert "publishes a host port" in script
     assert "docker compose down" not in script
     assert "docker system prune" not in script
-    assert "restart " not in script
+    assert "docker restart" not in script
+    assert "compose restart" not in script
     assert "BOT_MODE=paper" not in script
     assert "BOT_MODE=live" not in script
     assert "trap cleanup EXIT HUP INT TERM" in script
     assert "unexpected service is enabled by default" in script
+    assert 'scripts/restart_state.py"' in script
+    assert "historical_restart" in script
+    assert "recent_restart|restart_loop|unhealthy|unknown" in script
 
 
 def test_backup_and_restore_validation_are_bounded() -> None:

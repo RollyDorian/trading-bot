@@ -167,6 +167,8 @@ and rollback preparation are documented in the
 [COLLECT-only operations runbook](docs/operations_runbook.md).
 The bounded host-local JSON monitoring contract and provider-neutral alert examples are
 documented in [COLLECT-only monitoring](docs/monitoring.md).
+Operational status and monitoring share a bounded two-sample restart classifier: historical
+restart counts remain visible, while recent, advancing, unhealthy, or uncertain state blocks.
 Bounded stream-quality, storage-growth, capacity forecasting, and retention decisions are
 documented in [data quality and retention readiness](docs/retention_readiness.md).
 The review-only container/VPS release architecture, health checks, rollback, and backup

@@ -70,9 +70,30 @@ require_healthy_service() {
         || fail "$service is not running"
     [ "$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container_id")" = healthy ] \
         || fail "$service is not healthy"
-    [ "$(docker inspect --format '{{.RestartCount}}' "$container_id")" = 0 ] \
-        || fail "$service has restarted"
     [ -z "$(docker port "$container_id")" ] || fail "$service publishes a host port"
+}
+
+collector_restart_assessment() {
+    classifier_exit=0
+    classifier_output=$(python3 "$HIBACHI_DEPLOY_DIR/scripts/restart_state.py" 2>/dev/null) \
+        || classifier_exit=$?
+    set -- $classifier_output
+    [ "$#" -eq 2 ] || fail "collector restart state is unknown"
+    restart_state=$1
+    restart_count=$2
+    case "$restart_count" in
+        ''|*[!0-9]*) fail "collector restart state is unknown" ;;
+    esac
+    case "$restart_state" in
+        healthy_stable|historical_restart)
+            [ "$classifier_exit" -eq 0 ] || fail "collector restart state is unknown"
+            ;;
+        recent_restart|restart_loop|unhealthy|unknown)
+            fail "collector restart state is $restart_state"
+            ;;
+        *) fail "collector restart state is unknown" ;;
+    esac
+    printf '%s %s\n' "$restart_state" "$restart_count"
 }
 
 validate_compose_policy() {
@@ -122,8 +143,11 @@ check_resources() {
 status_command() {
     require_healthy_service postgres
     require_healthy_service collector
+    restart_assessment=$(collector_restart_assessment)
+    set -- $restart_assessment
     [ -z "$(compose --profile dashboard ps -q dashboard)" ] || fail "dashboard is present"
-    printf 'postgres=healthy collector=healthy restarts=0 dashboard=off ports=none\n'
+    printf 'postgres=healthy collector=healthy restart_state=%s restart_count=%s dashboard=off ports=none\n' \
+        "$1" "$2"
 }
 
 preflight_command() {

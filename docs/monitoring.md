@@ -18,7 +18,9 @@ Keys and values are stable:
 | --- | --- |
 | `postgres_health` | `1` healthy, `0` unhealthy, `-1` unknown |
 | `collector_health` | `2` healthy, `1` running but unhealthy, `0` stopped, `-1` unknown |
-| `collector_restart_loop` | `0` no restart, `1` one or more restarts, `-1` unknown |
+| `collector_restart_count` | historical Docker restart count, `-1` unknown |
+| `collector_restart_state` | fixed stable/history/recent/loop/unhealthy/unknown enum |
+| `collector_restart_loop` | `0` stable/history, `1` recent/active/unhealthy, `-1` unknown |
 | `data_paths_writable` | `1` UID 10001 permission contract valid, `0` invalid, `-1` unknown |
 | `backup_fresh` | `1` latest protected managed backup is at most 26 hours old, otherwise `0` or `-1` |
 | `disk_safe` | `1` at least 3 GiB free, `0` below threshold, `-1` unknown |
@@ -38,13 +40,13 @@ printing them, then executes the command above. A generic agent entry is:
 UserParameter=hibachi.collect.monitor,/absolute/protected/monitor-wrapper
 ```
 
-Create one master text item `hibachi.collect.monitor` with a 60-second interval and nine
-numeric dependent items using JSONPath `$.<key>`. Keep history for the numeric items; do not
-store wrapper output in shared logs. Suggested triggers:
+Create one master text item `hibachi.collect.monitor` with a 60-second interval, ten
+numeric dependent items and one text state item using JSONPath `$.<key>`. Keep history for
+numeric items; do not store wrapper output in shared logs. Suggested triggers:
 
 1. `postgres_health<>1` for two consecutive polls.
 2. `collector_health<>2` for two consecutive polls.
-3. `collector_restart_loop<>0` immediately.
+3. `collector_restart_loop<>0` immediately; the raw count is informational.
 4. `data_paths_writable<>1` immediately.
 5. `backup_fresh<>1` for two consecutive polls.
 6. `disk_safe<>1` immediately.
@@ -54,6 +56,12 @@ store wrapper output in shared logs. Suggested triggers:
 Treat `-1` as unhealthy, not as missing data. Recover a trigger only after two consecutive
 healthy polls, except high swap, which requires five. Alert text must contain only the item
 key and fixed numeric value.
+
+The shared bounded classifier samples twice, five seconds apart. Historical static restarts
+remain visible but do not alert. `recent_restart`, `restart_loop`, `unhealthy`, and
+`unknown` alert; recover only after two consecutive `healthy_stable` or
+`historical_restart` states. See the operations runbook for five-minute recent and
+three-within-30-minute repeated thresholds.
 
 ## Alert response
 
