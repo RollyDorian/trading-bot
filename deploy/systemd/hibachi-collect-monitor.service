@@ -11,6 +11,7 @@ EnvironmentFile=/etc/hibachi-collect-monitor.conf
 ExecStart=/usr/bin/python3 /usr/local/libexec/hibachi-zabbix-cache collect /run/hibachi-collect-monitor/metrics.json
 RuntimeDirectory=hibachi-collect-monitor
 RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
 UMask=0027
 TimeoutStartSec=55
 NoNewPrivileges=yes
