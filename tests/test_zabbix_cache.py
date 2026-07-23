@@ -225,6 +225,7 @@ def test_installer_and_rollback_are_idempotent_by_contract() -> None:
     rollback = ROLLBACK.read_text(encoding="utf-8")
     validator = VALIDATOR.read_text(encoding="utf-8")
     assert "grep -Fqx" in installer
+    assert "install -d -o root -g root -m 0755 /usr/local/libexec" in installer
     assert "zabbix_agentd -t" in installer
     assert "systemd-analyze verify" in installer
     assert "rm -f --" in rollback
