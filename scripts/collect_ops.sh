@@ -96,6 +96,22 @@ collector_restart_assessment() {
     printf '%s %s\n' "$restart_state" "$restart_count"
 }
 
+storage_assessment() {
+    storage_exit=0
+    storage_state=$(python3 "$HIBACHI_DEPLOY_DIR/scripts/storage_state.py" 2>/dev/null) \
+        || storage_exit=$?
+    case "$storage_state" in
+        ready|not_applicable)
+            [ "$storage_exit" -eq 0 ] || fail "storage state is unknown"
+            ;;
+        required_path_unwritable|required_path_missing|inconsistent|unknown)
+            fail "storage state is $storage_state"
+            ;;
+        *) fail "storage state is unknown" ;;
+    esac
+    printf '%s\n' "$storage_state"
+}
+
 validate_compose_policy() {
     temporary_file=$(mktemp)
     compose config --quiet >/dev/null
@@ -145,9 +161,10 @@ status_command() {
     require_healthy_service collector
     restart_assessment=$(collector_restart_assessment)
     set -- $restart_assessment
+    storage_state=$(storage_assessment)
     [ -z "$(compose --profile dashboard ps -q dashboard)" ] || fail "dashboard is present"
-    printf 'postgres=healthy collector=healthy restart_state=%s restart_count=%s dashboard=off ports=none\n' \
-        "$1" "$2"
+    printf 'postgres=healthy collector=healthy restart_state=%s restart_count=%s storage_state=%s dashboard=off ports=none\n' \
+        "$1" "$2" "$storage_state"
 }
 
 preflight_command() {

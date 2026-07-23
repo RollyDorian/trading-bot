@@ -27,6 +27,12 @@ def test_operations_script_is_fail_closed_and_collect_only() -> None:
     assert 'scripts/restart_state.py"' in script
     assert "historical_restart" in script
     assert "recent_restart|restart_loop|unhealthy|unknown" in script
+    assert 'scripts/storage_state.py"' in script
+    assert "ready|not_applicable" in script
+    assert (
+        "required_path_unwritable|required_path_missing|inconsistent|unknown"
+        in script
+    )
 
 
 def test_backup_and_restore_validation_are_bounded() -> None:

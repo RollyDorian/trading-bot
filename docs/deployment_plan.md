@@ -73,6 +73,11 @@ SSH tunnel; never expose it publicly. Stop deployment or collection when root fi
 free space falls below 3 GiB. Treat sustained swap use above 256 MiB as a capacity warning
 requiring operator review, not as permission to raise limits automatically.
 
+The collector's authoritative persistence is PostgreSQL. Dataset/report mounts are
+dashboard-only and therefore `not_applicable` while its profile is disabled. If that
+profile is enabled by a separately approved change, its declared mounts become required
+and must pass the shared UID 10001 writable-path classifier.
+
 ## First deployment sequence
 
 The following is a human procedure and must not be run by CI in this milestone.

@@ -23,10 +23,20 @@ scripts/collect_ops.sh preflight
 ```
 
 `status` requires healthy PostgreSQL and collector containers, a stable restart state, no
-dashboard container, and no published project ports. `preflight` additionally requires a
-clean pinned checkout, valid internal-only Compose policy, at least 3 GiB free disk, at
-least 256 MiB available RAM, and no more than 256 MiB swap in use. It performs no pull,
-build, migration, restart, or update.
+dashboard container, no published project ports, and a passing storage classification.
+`preflight` additionally requires a clean pinned checkout, valid internal-only Compose
+policy, at least 3 GiB free disk, at least 256 MiB available RAM, and no more than 256 MiB
+swap in use. It performs no pull, build, migration, restart, or update.
+
+The collector's authoritative event sink is PostgreSQL. Dataset and report mounts belong
+to the profile-gated dashboard, so their absence is `not_applicable` while that profile is
+disabled and does not block. The shared bounded `storage_state.py` classifier returns
+`ready` when an enabled filesystem feature has its declared mounts present and writable by
+UID 10001. Missing or unwritable required paths, contradictory declarations, malformed
+Compose state, or unavailable Docker/Compose state block as
+`required_path_missing`, `required_path_unwritable`, `inconsistent`, or `unknown`.
+The classifier inspects fixed metadata only; it creates no files and emits no path or
+runtime value.
 
 Restart classification takes two Docker-state samples five seconds apart. A zero count is
 `healthy_stable`; a static old non-zero count is observable as `historical_restart`, and

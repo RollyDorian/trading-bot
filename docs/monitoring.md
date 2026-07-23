@@ -21,7 +21,8 @@ Keys and values are stable:
 | `collector_restart_count` | historical Docker restart count, `-1` unknown |
 | `collector_restart_state` | fixed stable/history/recent/loop/unhealthy/unknown enum |
 | `collector_restart_loop` | `0` stable/history, `1` recent/active/unhealthy, `-1` unknown |
-| `data_paths_writable` | `1` UID 10001 permission contract valid, `0` invalid, `-1` unknown |
+| `data_paths_writable` | `2` not applicable, `1` required paths ready, `0` invalid, `-1` unknown |
+| `storage_state` | `ready`, `not_applicable`, `required_path_missing`, `required_path_unwritable`, `inconsistent`, or `unknown` |
 | `backup_fresh` | `1` latest protected managed backup is at most 26 hours old, otherwise `0` or `-1` |
 | `disk_safe` | `1` at least 3 GiB free, `0` below threshold, `-1` unknown |
 | `swap_safe` | `1` no more than 256 MiB used, `0` above threshold, `-1` unknown |
@@ -41,13 +42,13 @@ UserParameter=hibachi.collect.monitor,/absolute/protected/monitor-wrapper
 ```
 
 Create one master text item `hibachi.collect.monitor` with a 60-second interval, ten
-numeric dependent items and one text state item using JSONPath `$.<key>`. Keep history for
-numeric items; do not store wrapper output in shared logs. Suggested triggers:
+numeric dependent items and two text state items using JSONPath `$.<key>`. Keep history
+for numeric items; do not store wrapper output in shared logs. Suggested triggers:
 
 1. `postgres_health<>1` for two consecutive polls.
 2. `collector_health<>2` for two consecutive polls.
 3. `collector_restart_loop<>0` immediately; the raw count is informational.
-4. `data_paths_writable<>1` immediately.
+4. `data_paths_writable<1` immediately; `2` is neutral DB-only storage.
 5. `backup_fresh<>1` for two consecutive polls.
 6. `disk_safe<>1` immediately.
 7. `swap_safe<>1` for five consecutive polls.
@@ -62,6 +63,13 @@ remain visible but do not alert. `recent_restart`, `restart_loop`, `unhealthy`, 
 `unknown` alert; recover only after two consecutive `healthy_stable` or
 `historical_restart` states. See the operations runbook for five-minute recent and
 three-within-30-minute repeated thresholds.
+
+Storage classification is also shared with operational preflight. The DB-backed collector
+has no filesystem sink, so disabled dashboard mounts are `not_applicable` and healthy.
+If an enabled service declares dataset/report storage, every expected mount must exist and
+be writable by UID 10001. Missing, unwritable, inconsistent, malformed, or unavailable
+state alerts fail closed. Recovery requires two consecutive `ready` or `not_applicable`
+polls; monitoring never creates or repairs a directory.
 
 ## Alert response
 

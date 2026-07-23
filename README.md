@@ -169,6 +169,9 @@ The bounded host-local JSON monitoring contract and provider-neutral alert examp
 documented in [COLLECT-only monitoring](docs/monitoring.md).
 Operational status and monitoring share a bounded two-sample restart classifier: historical
 restart counts remain visible, while recent, advancing, unhealthy, or uncertain state blocks.
+They also share a bounded storage classifier: PostgreSQL-only collection treats disabled
+dashboard dataset/report mounts as not applicable, while every enabled filesystem sink
+must be declared, mounted, and writable or fail closed.
 Bounded stream-quality, storage-growth, capacity forecasting, and retention decisions are
 documented in [data quality and retention readiness](docs/retention_readiness.md).
 The review-only container/VPS release architecture, health checks, rollback, and backup

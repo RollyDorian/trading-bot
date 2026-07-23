@@ -15,11 +15,12 @@ from pathlib import Path
 from typing import Final
 
 from restart_state import BLOCK_STATES, PASS_STATES, observe
+from storage_state import BLOCK_STATES as STORAGE_BLOCK_STATES
+from storage_state import observe as observe_storage
 
 MIN_DISK_BYTES: Final = 3 * 1024**3
 MAX_SWAP_USED_BYTES: Final = 256 * 1024**2
 MAX_BACKUP_AGE_SECONDS: Final = 26 * 60 * 60
-CONTAINER_DATA_UID: Final = 10001
 UNKNOWN: Final = -1
 
 METRIC_KEYS: Final = (
@@ -33,6 +34,7 @@ METRIC_KEYS: Final = (
     "postgres_health",
     "readiness",
     "runtime_safe",
+    "storage_state",
     "swap_safe",
 )
 
@@ -44,7 +46,7 @@ class Snapshot:
     collector_health: str | None = None
     collector_restarts: int | None = None
     collector_restart_state: str = "unknown"
-    data_paths_writable: bool | None = None
+    storage_state: str = "unknown"
     backup_age_seconds: int | None = None
     disk_free_bytes: int | None = None
     swap_used_bytes: int | None = None
@@ -72,7 +74,14 @@ def evaluate(snapshot: Snapshot) -> dict[str, int | str]:
     restart_count = (
         UNKNOWN if snapshot.collector_restarts is None else snapshot.collector_restarts
     )
-    data = _boolean_metric(snapshot.data_paths_writable)
+    if snapshot.storage_state == "ready":
+        data = 1
+    elif snapshot.storage_state == "not_applicable":
+        data = 2
+    elif snapshot.storage_state in STORAGE_BLOCK_STATES - {"unknown"}:
+        data = 0
+    else:
+        data = UNKNOWN
     backup = (
         UNKNOWN
         if snapshot.backup_age_seconds is None
@@ -93,7 +102,7 @@ def evaluate(snapshot: Snapshot) -> dict[str, int | str]:
         postgres == 1
         and collector == 2
         and restart == 0
-        and data == 1
+        and data in {1, 2}
         and backup == 1
         and disk == 1
         and swap == 1
@@ -106,6 +115,7 @@ def evaluate(snapshot: Snapshot) -> dict[str, int | str]:
         "collector_restart_loop": restart,
         "collector_restart_state": snapshot.collector_restart_state,
         "data_paths_writable": data,
+        "storage_state": snapshot.storage_state,
         "disk_safe": disk,
         "postgres_health": postgres,
         "readiness": ready,
@@ -121,6 +131,7 @@ def _boolean_metric(value: bool | None) -> int:
 def unknown_metrics() -> dict[str, int | str]:
     metrics: dict[str, int | str] = {key: UNKNOWN for key in METRIC_KEYS}
     metrics["collector_restart_state"] = "unknown"
+    metrics["storage_state"] = "unknown"
     metrics["readiness"] = 0
     return metrics
 
@@ -146,13 +157,14 @@ class HostProbe:
         postgres = self._service_state("postgres")
         collector = self._service_state("collector")
         restart = observe(self.compose)
+        storage = observe_storage(self.compose)
         return Snapshot(
             postgres_health=postgres[1],
             collector_running=collector[0],
             collector_health=collector[1],
             collector_restarts=restart.restart_count,
             collector_restart_state=restart.state,
-            data_paths_writable=self._data_paths_writable(),
+            storage_state=storage.state,
             backup_age_seconds=self._backup_age_seconds(),
             disk_free_bytes=shutil.disk_usage(self.deploy_dir).free,
             swap_used_bytes=self._swap_used_bytes(),
@@ -219,31 +231,6 @@ class HostProbe:
                 return False
         return True
 
-    def _data_paths_writable(self) -> bool:
-        paths = (
-            self._runtime_path("DATASETS_PATH"),
-            self._runtime_path("REPORTS_PATH"),
-        )
-        return all(_container_uid_can_write(path) for path in paths)
-
-    def _runtime_path(self, key: str) -> Path:
-        prefix = f"{key}="
-        matches: list[str] = []
-        with self.runtime_env.open(encoding="utf-8") as handle:
-            for raw_line in handle:
-                line = raw_line.strip()
-                if line.startswith(prefix):
-                    matches.append(line.removeprefix(prefix))
-        if len(matches) != 1:
-            raise ValueError("invalid path configuration")
-        value = matches[0]
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
-            value = value[1:-1]
-        path = Path(value)
-        if not value or not path.is_absolute():
-            raise ValueError("invalid path configuration")
-        return path
-
     def _backup_age_seconds(self) -> int | None:
         directory_stat = self.backup_dir.stat()
         backups = list(self.backup_dir.glob("hibachi-????????T??????Z-???????.dump"))
@@ -288,24 +275,6 @@ def _required_path(name: str, *, directory: bool) -> Path:
     if not directory and not path.is_file():
         raise ValueError("invalid monitoring configuration")
     return path
-
-
-def _container_uid_can_write(path: Path) -> bool:
-    try:
-        path_stat = path.stat()
-    except OSError:
-        return False
-    return _mode_allows_container_write(path_stat, path.is_dir())
-
-
-def _mode_allows_container_write(path_stat: os.stat_result, is_directory: bool) -> bool:
-    mode = stat.S_IMODE(path_stat.st_mode)
-    return (
-        is_directory
-        and path_stat.st_uid == CONTAINER_DATA_UID
-        and bool(mode & stat.S_IWUSR)
-        and bool(mode & stat.S_IXUSR)
-    )
 
 
 def _validated_backup_age(
