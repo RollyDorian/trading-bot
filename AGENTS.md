@@ -55,7 +55,7 @@ python -m venv .venv
 
 ## Git and GitHub
 
-- Current restart-semantics branch: `codex/restart-signal-semantics`.
+- Current storage-readiness branch: `codex/storage-path-readiness`.
 - Preserve unrelated user changes. Do not reset, force-push, delete branches,
   merge a PR, or push new commits unless the user explicitly requests it.
 - Git for Windows must use the system OpenSSH to access the loaded Windows
@@ -99,6 +99,10 @@ python -m venv .venv
 - `scripts/restart_state.py` is the shared bounded classifier for operations and monitoring.
   Static old restart history is observable but non-blocking; recent, advancing, unhealthy,
   malformed, or uncertain state remains blocking and must never trigger remediation.
+- `scripts/storage_state.py` is the shared bounded storage classifier. PostgreSQL is the
+  collector's authoritative sink; disabled dashboard dataset/report mounts are not
+  applicable. Any enabled or declared filesystem sink must be mounted and writable by
+  UID 10001, while inconsistent or uncertain state remains blocking.
 
 ## Suggested next milestones
 

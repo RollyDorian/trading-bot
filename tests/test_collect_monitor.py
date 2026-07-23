@@ -34,7 +34,7 @@ def healthy_snapshot(monitor: ModuleType, **changes: object) -> object:
         "collector_health": "healthy",
         "collector_restarts": 0,
         "collector_restart_state": "healthy_stable",
-        "data_paths_writable": True,
+        "storage_state": "ready",
         "backup_age_seconds": monitor.MAX_BACKUP_AGE_SECONDS,
         "disk_free_bytes": monitor.MIN_DISK_BYTES,
         "swap_used_bytes": monitor.MAX_SWAP_USED_BYTES,
@@ -54,13 +54,14 @@ def test_monitor_contract_is_bounded_and_healthy(monitor: ModuleType) -> None:
         "collector_restart_loop": 0,
         "collector_restart_state": "healthy_stable",
         "data_paths_writable": 1,
+        "storage_state": "ready",
         "disk_safe": 1,
         "postgres_health": 1,
         "readiness": 1,
         "runtime_safe": 1,
         "swap_safe": 1,
     }
-    assert len(json.dumps(metrics, separators=(",", ":"))) < 256
+    assert len(json.dumps(metrics, separators=(",", ":"))) < 320
 
 
 @pytest.mark.parametrize(
@@ -72,7 +73,7 @@ def test_monitor_contract_is_bounded_and_healthy(monitor: ModuleType) -> None:
             {"collector_restarts": 1, "collector_restart_state": "restart_loop"},
             "collector_restart_loop",
         ),
-        ({"data_paths_writable": False}, "data_paths_writable"),
+        ({"storage_state": "required_path_unwritable"}, "data_paths_writable"),
         ({"backup_age_seconds": 93601}, "backup_fresh"),
         ({"disk_free_bytes": 3 * 1024**3 - 1}, "disk_safe"),
         ({"swap_used_bytes": 256 * 1024**2 + 1}, "swap_safe"),
@@ -93,6 +94,32 @@ def test_missing_and_malformed_values_fail_closed(monitor: ModuleType) -> None:
     assert metrics["postgres_health"] == -1
     assert metrics["collector_health"] == -1
     assert metrics["backup_fresh"] == 0
+
+
+def test_database_only_storage_is_neutral_and_ready(monitor: ModuleType) -> None:
+    metrics = monitor.evaluate(
+        healthy_snapshot(monitor, storage_state="not_applicable")
+    )
+    assert metrics["data_paths_writable"] == 2
+    assert metrics["storage_state"] == "not_applicable"
+    assert metrics["readiness"] == 1
+
+
+@pytest.mark.parametrize(
+    "state",
+    [
+        "required_path_unwritable",
+        "required_path_missing",
+        "inconsistent",
+        "unknown",
+        "unsupported",
+    ],
+)
+def test_required_or_uncertain_storage_blocks_monitoring(
+    monitor: ModuleType, state: str
+) -> None:
+    metrics = monitor.evaluate(healthy_snapshot(monitor, storage_state=state))
+    assert metrics["readiness"] == 0
 
 
 def test_historical_restart_is_observable_without_blocking_readiness(
@@ -163,16 +190,6 @@ def test_service_state_rejects_malformed_mocked_docker_state(
         probe._service_state("collector")
 
 
-def test_data_path_permission_contract(monitor: ModuleType) -> None:
-    writable = SimpleNamespace(st_mode=0o40700, st_uid=monitor.CONTAINER_DATA_UID)
-    read_only = SimpleNamespace(st_mode=0o40500, st_uid=monitor.CONTAINER_DATA_UID)
-    wrong_owner = SimpleNamespace(st_mode=0o40700, st_uid=0)
-    assert monitor._mode_allows_container_write(writable, True)
-    assert not monitor._mode_allows_container_write(read_only, True)
-    assert not monitor._mode_allows_container_write(wrong_owner, True)
-    assert not monitor._mode_allows_container_write(writable, False)
-
-
 @pytest.mark.parametrize(
     ("age", "mode", "size", "expected"),
     [
@@ -220,7 +237,7 @@ def test_script_contains_no_mutating_runtime_commands() -> None:
 def test_monitoring_document_contract_is_complete() -> None:
     document = DOC.read_text(encoding="utf-8")
     assert "UserParameter=hibachi.collect.monitor" in document
-    assert sum(line.startswith("| `") for line in document.splitlines()) == 11
+    assert sum(line.startswith("| `") for line in document.splitlines()) == 12
     assert sum(f"{number}." in document for number in range(1, 9)) == 8
     assert "opens no listener" in document
     assert "no automatic remediation" in document
