@@ -233,3 +233,4 @@ def test_installer_and_rollback_are_idempotent_by_contract() -> None:
     assert "systemctl disable --now hibachi-collect-monitor.timer" in rollback
     assert "id zabbix | grep -q docker && fail" in validator
     assert "sudo -l -U zabbix" in validator
+    assert r"sed -n 's/.*\[t|\([^]]*\)\]$/\1/p'" in validator
