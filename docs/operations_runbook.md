@@ -22,11 +22,20 @@ scripts/collect_ops.sh status
 scripts/collect_ops.sh preflight
 ```
 
-`status` requires healthy PostgreSQL and collector containers, zero restarts, no dashboard
-container, and no published project ports. `preflight` additionally requires a clean pinned
-checkout, valid internal-only Compose policy, at least 3 GiB free disk, at least 256 MiB
-available RAM, and no more than 256 MiB swap in use. It performs no pull, build, migration,
-restart, or update.
+`status` requires healthy PostgreSQL and collector containers, a stable restart state, no
+dashboard container, and no published project ports. `preflight` additionally requires a
+clean pinned checkout, valid internal-only Compose policy, at least 3 GiB free disk, at
+least 256 MiB available RAM, and no more than 256 MiB swap in use. It performs no pull,
+build, migration, restart, or update.
+
+Restart classification takes two Docker-state samples five seconds apart. A zero count is
+`healthy_stable`; a static old non-zero count is observable as `historical_restart`, and
+both may pass. Any count increase or container replacement is `restart_loop`. A non-zero
+count whose process started within five minutes is `recent_restart`; at least three
+restarts with a start within 30 minutes is also `restart_loop`. Recent, looping, unhealthy,
+missing, malformed, or inconsistent state blocks fail closed. The observation duration may
+be set from 2 through 30 seconds with `HIBACHI_RESTART_OBSERVATION_SECONDS`; it never
+changes or restarts a service.
 
 ## Bounded redacted logs
 

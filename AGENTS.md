@@ -55,7 +55,7 @@ python -m venv .venv
 
 ## Git and GitHub
 
-- Current data-quality branch: `codex/data-quality-retention`.
+- Current restart-semantics branch: `codex/restart-signal-semantics`.
 - Preserve unrelated user changes. Do not reset, force-push, delete branches,
   merge a PR, or push new commits unless the user explicitly requests it.
 - Git for Windows must use the system OpenSSH to access the loaded Windows
@@ -96,6 +96,9 @@ python -m venv .venv
 - `scripts/collect_quality.py` provides bounded read-only stream-quality and capacity
   analysis. Exact full-history scans remain explicit opt-in; retention is a documented
   decision framework and must never delete or archive data automatically.
+- `scripts/restart_state.py` is the shared bounded classifier for operations and monitoring.
+  Static old restart history is observable but non-blocking; recent, advancing, unhealthy,
+  malformed, or uncertain state remains blocking and must never trigger remediation.
 
 ## Suggested next milestones
 

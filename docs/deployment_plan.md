@@ -178,6 +178,8 @@ or forward-fix plan.
   health contract. It opens no port, emits no secrets, and performs no remediation.
 - Use `scripts/collect_quality.py` and `docs/retention_readiness.md` for bounded on-demand
   stream continuity and capacity forecasts. Retention remains a human decision only.
+- Use `scripts/restart_state.py` through the operations and monitoring interfaces to
+  distinguish static restart history from bounded evidence of recent or active looping.
 
 ## Explicitly unimplemented
 
