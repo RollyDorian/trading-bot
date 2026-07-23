@@ -34,6 +34,7 @@ if [ ! -f "$rollback_dir/zabbix_agentd.conf.original" ]; then
         "$rollback_dir/zabbix_agentd.conf.original"
 fi
 
+install -d -o root -g root -m 0755 /usr/local/libexec
 install -o root -g root -m 0755 \
     "$HIBACHI_DEPLOY_DIR/scripts/zabbix_cache.py" \
     /usr/local/libexec/hibachi-zabbix-cache
