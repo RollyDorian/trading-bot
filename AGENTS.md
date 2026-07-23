@@ -55,7 +55,7 @@ python -m venv .venv
 
 ## Git and GitHub
 
-- Current operations-readiness branch: `codex/collect-ops-readiness`.
+- Current monitoring-readiness branch: `codex/collect-monitoring`.
 - Preserve unrelated user changes. Do not reset, force-push, delete branches,
   merge a PR, or push new commits unless the user explicitly requests it.
 - Git for Windows must use the system OpenSSH to access the loaded Windows
@@ -90,6 +90,9 @@ python -m venv .venv
   preflight, bounded redacted logs, protected logical backup, and isolated
   restore validation. It must remain fail-closed and must not restart services,
   expose ports, print secrets, or delete unknown backup files.
+- `scripts/collect_monitor.py` emits one bounded numeric JSON health contract for local
+  monitoring. It must remain read-only, fail closed, open no listener, print no secret or
+  host metadata, and perform no automatic remediation.
 
 ## Suggested next milestones
 
@@ -107,8 +110,9 @@ python -m venv .venv
    fixture timestamp. Only 2 trade events exist and passing slices have zero replay trades.
    The fixture path is now isolated from research storage, but fresh real COLLECT-only
    intervals are still required. Do not lower thresholds or invent regimes to force admission.
-   The first manual private COLLECT-only stack is operational; routine recoverability
-   tooling is being validated. Deployment updates, network changes, dashboard access,
+   The first manual private COLLECT-only stack is operational; provider-neutral
+   recoverability and local monitoring contracts are prepared. Deployment updates,
+   network changes, dashboard access,
    and any PAPER/LIVE behavior still require separate explicit approval.
 5. PAPER remains disabled even when admission criteria pass. Human review and a
    separate explicitly approved implementation milestone are mandatory; keep all
