@@ -234,3 +234,5 @@ def test_installer_and_rollback_are_idempotent_by_contract() -> None:
     assert "id zabbix | grep -q docker && fail" in validator
     assert "sudo -l -U zabbix" in validator
     assert r"sed -n 's/.*\[t|\([^]]*\)\]$/\1/p'" in validator
+    assert "restart_count:[0-9][0-9]*" in validator
+    assert "restart_state:4" in validator

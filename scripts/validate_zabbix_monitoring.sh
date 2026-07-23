@@ -16,7 +16,16 @@ cache=/run/hibachi-collect-monitor/metrics.json
 for item in postgres collector restart restart_count restart_state storage backup disk swap dashboard ports readiness; do
     value=$(zabbix_agentd -t "hibachi.collect.$item" -c "$ZABBIX_AGENT_CONFIG" 2>/dev/null \
         | sed -n 's/.*\[t|\([^]]*\)\]$/\1/p')
-    case "$value" in -1|0|1|2) ;; *) fail ;; esac
+    case "$item:$value" in
+        restart_count:[0-9]|restart_count:[0-9][0-9]*)
+            [ "$value" -le 1000000 ] || fail
+            ;;
+        restart_state:-1|restart_state:0|restart_state:1|restart_state:2|restart_state:3|restart_state:4)
+            ;;
+        *:-1|*:0|*:1|*:2)
+            ;;
+        *) fail ;;
+    esac
 done
 
 id zabbix | grep -q docker && fail
