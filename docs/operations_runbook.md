@@ -76,3 +76,12 @@ downgrade, and start only PostgreSQL plus collector. If the prior image is incom
 the current schema, stop and require a separately reviewed forward-fix or isolated restore.
 Never use `compose down -v`, delete append-only events, or enable the dashboard as part of
 rollback.
+
+## Data quality and capacity review
+
+Run `python3 scripts/collect_quality.py` for bounded JSON or add `--format summary` for a
+short operator view. Treat `unknown` as a failure. The default window performs no exact
+full-history count; `--full-history` is an explicit, potentially expensive review action.
+Follow `docs/retention_readiness.md` for signal interpretation, capacity escalation,
+retention alternatives, and bounded sample export. No result authorizes deletion,
+archival execution, migration, or automatic remediation.

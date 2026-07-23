@@ -63,3 +63,7 @@ directory and separately authorize a backup; never delete unknown files. Low dis
 swap, path-permission failure, dashboard presence, or port publication requires stopping
 the next operational change and human review. Monitoring never authorizes a restart,
 restore, migration, deployment, dashboard activation, or trading action.
+
+Stream continuity and capacity forecasting remain a separate on-demand inspection. Use
+`collect_quality.py` as documented in `docs/retention_readiness.md`; do not embed its
+potentially expensive full-history mode in a frequent monitoring item.
