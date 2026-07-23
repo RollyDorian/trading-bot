@@ -213,6 +213,7 @@ def test_static_installation_contract_is_least_privilege_and_bounded() -> None:
     assert "Type=oneshot" in service
     assert "User=root" in service and "Group=zabbix" in service
     assert "TimeoutStartSec=55" in service
+    assert "RuntimeDirectoryPreserve=yes" in service
     assert "OnUnitActiveSec=60s" in timer
     assert parameters.count("UserParameter=hibachi.collect.") == 12
     assert "[*]" not in parameters
