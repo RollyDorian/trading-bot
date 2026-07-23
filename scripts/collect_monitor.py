@@ -23,20 +23,22 @@ MAX_SWAP_USED_BYTES: Final = 256 * 1024**2
 MAX_BACKUP_AGE_SECONDS: Final = 26 * 60 * 60
 UNKNOWN: Final = -1
 
-METRIC_KEYS: Final = (
+METRIC_KEYS: Final = tuple(sorted((
     "backup_fresh",
     "collector_health",
     "collector_restart_count",
     "collector_restart_loop",
     "collector_restart_state",
     "data_paths_writable",
+    "dashboard_disabled",
     "disk_safe",
+    "ports_safe",
     "postgres_health",
     "readiness",
     "runtime_safe",
     "storage_state",
     "swap_safe",
-)
+)))
 
 
 @dataclass(frozen=True)
@@ -50,7 +52,8 @@ class Snapshot:
     backup_age_seconds: int | None = None
     disk_free_bytes: int | None = None
     swap_used_bytes: int | None = None
-    runtime_safe: bool | None = None
+    dashboard_disabled: bool | None = None
+    ports_safe: bool | None = None
 
 
 def evaluate(snapshot: Snapshot) -> dict[str, int | str]:
@@ -97,7 +100,11 @@ def evaluate(snapshot: Snapshot) -> dict[str, int | str]:
         if snapshot.swap_used_bytes is None
         else int(snapshot.swap_used_bytes <= MAX_SWAP_USED_BYTES)
     )
-    runtime = _boolean_metric(snapshot.runtime_safe)
+    dashboard = _boolean_metric(snapshot.dashboard_disabled)
+    ports = _boolean_metric(snapshot.ports_safe)
+    runtime = (
+        UNKNOWN if UNKNOWN in {dashboard, ports} else int(dashboard == 1 and ports == 1)
+    )
     ready = int(
         postgres == 1
         and collector == 2
@@ -115,9 +122,11 @@ def evaluate(snapshot: Snapshot) -> dict[str, int | str]:
         "collector_restart_loop": restart,
         "collector_restart_state": snapshot.collector_restart_state,
         "data_paths_writable": data,
+        "dashboard_disabled": dashboard,
         "storage_state": snapshot.storage_state,
         "disk_safe": disk,
         "postgres_health": postgres,
+        "ports_safe": ports,
         "readiness": ready,
         "runtime_safe": runtime,
         "swap_safe": swap,
@@ -138,11 +147,15 @@ def unknown_metrics() -> dict[str, int | str]:
 
 class HostProbe:
     def __init__(self) -> None:
+        self.expected_uid = _expected_owner_uid()
         self.deploy_dir = _required_path("HIBACHI_DEPLOY_DIR", directory=True)
         self.runtime_env = _required_path("HIBACHI_RUNTIME_ENV", directory=False)
         self.backup_dir = _required_path("HIBACHI_BACKUP_DIR", directory=True)
         runtime_stat = self.runtime_env.stat()
-        if stat.S_IMODE(runtime_stat.st_mode) != 0o600 or runtime_stat.st_uid != os.getuid():
+        if (
+            stat.S_IMODE(runtime_stat.st_mode) != 0o600
+            or runtime_stat.st_uid != self.expected_uid
+        ):
             raise ValueError("invalid runtime configuration")
         self.compose = (
             "docker",
@@ -168,7 +181,8 @@ class HostProbe:
             backup_age_seconds=self._backup_age_seconds(),
             disk_free_bytes=shutil.disk_usage(self.deploy_dir).free,
             swap_used_bytes=self._swap_used_bytes(),
-            runtime_safe=self._runtime_safe(),
+            dashboard_disabled=self._dashboard_disabled(),
+            ports_safe=self._ports_safe(),
         )
 
     def _run(self, *args: str) -> str:
@@ -210,7 +224,7 @@ class HostProbe:
         restart_count = int(parts[2])
         return running, health_status, restart_count
 
-    def _runtime_safe(self) -> bool:
+    def _dashboard_disabled(self) -> bool:
         self._compose("config", "--quiet")
         services = set(self._compose("config", "--services").splitlines())
         if services != {"postgres", "collector"}:
@@ -218,8 +232,9 @@ class HostProbe:
         profiles = set(self._compose("config", "--profiles").splitlines())
         if not {"dashboard", "tools"} <= profiles:
             return False
-        if self._compose("--profile", "dashboard", "ps", "-q", "dashboard"):
-            return False
+        return not self._compose("--profile", "dashboard", "ps", "-q", "dashboard")
+
+    def _ports_safe(self) -> bool:
         for name in ("postgres", "collector"):
             container_id = self._compose("ps", "-q", name)
             if not container_id:
@@ -236,12 +251,12 @@ class HostProbe:
         backups = list(self.backup_dir.glob("hibachi-????????T??????Z-???????.dump"))
         if not backups:
             return _validated_backup_age(
-                directory_stat, None, False, time.time(), os.getuid()
+                directory_stat, None, False, time.time(), self.expected_uid
             )
         latest = max(backups, key=lambda path: path.stat().st_mtime)
         backup_stat = latest.stat()
         return _validated_backup_age(
-            directory_stat, backup_stat, latest.is_file(), time.time(), os.getuid()
+            directory_stat, backup_stat, latest.is_file(), time.time(), self.expected_uid
         )
 
     @staticmethod
@@ -275,6 +290,15 @@ def _required_path(name: str, *, directory: bool) -> Path:
     if not directory and not path.is_file():
         raise ValueError("invalid monitoring configuration")
     return path
+
+
+def _expected_owner_uid() -> int:
+    value = os.environ.get("HIBACHI_OWNER_UID")
+    if value is None:
+        return os.getuid()
+    if os.getuid() != 0 or not value.isdigit():
+        raise ValueError("invalid monitoring configuration")
+    return int(value)
 
 
 def _validated_backup_age(

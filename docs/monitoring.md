@@ -26,24 +26,57 @@ Keys and values are stable:
 | `backup_fresh` | `1` latest protected managed backup is at most 26 hours old, otherwise `0` or `-1` |
 | `disk_safe` | `1` at least 3 GiB free, `0` below threshold, `-1` unknown |
 | `swap_safe` | `1` no more than 256 MiB used, `0` above threshold, `-1` unknown |
+| `dashboard_disabled` | `1` dashboard profile inactive, `0` active, `-1` unknown |
+| `ports_safe` | `1` no project host ports, `0` exposed, `-1` unknown |
 | `runtime_safe` | `1` dashboard absent/profile-gated and project ports absent, otherwise `0` or `-1` |
 | `readiness` | `1` only when every gate passes, otherwise `0` |
 
 The 26-hour backup window supports a daily backup schedule with two hours of scheduling
 jitter. It is a monitoring threshold, not authorization to create or delete backups.
 
-## Zabbix-compatible example
+## Least-privilege Zabbix integration
 
-Use a protected local wrapper that exports the three required path variables without
-printing them, then executes the command above. A generic agent entry is:
+The supported architecture never grants the Zabbix account Docker or sudo access. A
+root-owned bounded oneshot runs every 60 seconds and atomically replaces a
+`0640 root:zabbix` cache under `/run`. The fixed-key reader accepts no arbitrary item name.
+The cache has a 150-second maximum age, 2 KiB size limit, exact schema, and only bounded
+integers/enums plus an epoch timestamp. Missing, stale, malformed, oversized, duplicate-key,
+unsafe-owner, unsafe-mode, or inconsistent data returns `-1`.
 
-```text
-UserParameter=hibachi.collect.monitor,/absolute/protected/monitor-wrapper
+Repository assets are `scripts/zabbix_cache.py`, the two `deploy/systemd` unit templates,
+`deploy/zabbix/hibachi-collect.conf`, and the install, validation, and rollback scripts.
+Installation is separately approved privileged work. Supply required absolute paths without
+printing them:
+
+```sh
+HIBACHI_DEPLOY_DIR=... HIBACHI_RUNTIME_ENV=... HIBACHI_BACKUP_DIR=... \
+ZABBIX_AGENT_CONFIG=... ZABBIX_INCLUDE_DIR=... \
+sh scripts/install_zabbix_monitoring.sh
 ```
 
-Create one master text item `hibachi.collect.monitor` with a 60-second interval, ten
-numeric dependent items and two text state items using JSONPath `$.<key>`. Keep history
-for numeric items; do not store wrapper output in shared logs. Suggested triggers:
+The installer preserves the original agent configuration, installs only project files,
+adds one exact include line when absent, validates agent and unit syntax, and reloads
+systemd. It does not enable the timer or restart the agent. After a manual oneshot succeeds,
+validate the cache, restart only the agent if reload is unsupported, then enable the timer.
+
+Create ten readiness signals plus two restart-history diagnostics at a 60-second interval:
+
+| Item key | Healthy value |
+| --- | --- |
+| `hibachi.collect.postgres` | `1` |
+| `hibachi.collect.collector` | `2` |
+| `hibachi.collect.restart` | `0` |
+| `hibachi.collect.restart_count` | non-negative bounded count |
+| `hibachi.collect.restart_state` | `0` stable, `1` history, `2` recent, `3` loop, `4` unhealthy |
+| `hibachi.collect.storage` | `1` or neutral `2` |
+| `hibachi.collect.backup` | `1` |
+| `hibachi.collect.disk` | `1` |
+| `hibachi.collect.swap` | `1` |
+| `hibachi.collect.dashboard` | `1` |
+| `hibachi.collect.ports` | `1` |
+| `hibachi.collect.readiness` | `1` |
+
+Suggested triggers:
 
 1. `postgres_health<>1` for two consecutive polls.
 2. `collector_health<>2` for two consecutive polls.
@@ -52,7 +85,9 @@ for numeric items; do not store wrapper output in shared logs. Suggested trigger
 5. `backup_fresh<>1` for two consecutive polls.
 6. `disk_safe<>1` immediately.
 7. `swap_safe<>1` for five consecutive polls.
-8. `runtime_safe<>1` immediately.
+8. `dashboard<>1` immediately.
+9. `ports<>1` immediately.
+10. `readiness<>1` for two consecutive polls.
 
 Treat `-1` as unhealthy, not as missing data. Recover a trigger only after two consecutive
 healthy polls, except high swap, which requires five. Alert text must contain only the item
@@ -83,3 +118,10 @@ restore, migration, deployment, dashboard activation, or trading action.
 Stream continuity and capacity forecasting remain a separate on-demand inspection. Use
 `collect_quality.py` as documented in `docs/retention_readiness.md`; do not embed its
 potentially expensive full-history mode in a frequent monitoring item.
+
+## Rollback
+
+Disable the project timer, run `rollback_zabbix_monitoring.sh` with the same two Zabbix
+configuration path variables, validate the restored configuration, and restart only the
+agent if required. Rollback never touches PostgreSQL, collector, Docker resources, backups,
+or application data.

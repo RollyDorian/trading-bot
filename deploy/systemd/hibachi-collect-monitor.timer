@@ -1,0 +1,13 @@
+[Unit]
+Description=Refresh Hibachi COLLECT-only sanitized metrics
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=60s
+RandomizedDelaySec=5s
+AccuracySec=1s
+Persistent=false
+Unit=hibachi-collect-monitor.service
+
+[Install]
+WantedBy=timers.target

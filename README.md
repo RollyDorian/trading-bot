@@ -167,6 +167,8 @@ and rollback preparation are documented in the
 [COLLECT-only operations runbook](docs/operations_runbook.md).
 The bounded host-local JSON monitoring contract and provider-neutral alert examples are
 documented in [COLLECT-only monitoring](docs/monitoring.md).
+The Zabbix design uses a root-owned bounded oneshot and sanitized cache; the agent receives
+neither Docker nor sudo access.
 Operational status and monitoring share a bounded two-sample restart classifier: historical
 restart counts remain visible, while recent, advancing, unhealthy, or uncertain state blocks.
 They also share a bounded storage classifier: PostgreSQL-only collection treats disabled
