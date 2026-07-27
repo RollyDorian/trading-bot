@@ -55,7 +55,8 @@ python -m venv .venv
 
 ## Git and GitHub
 
-- Current monitoring-integration branch: `codex/zabbix-cache-integration`.
+- Monitoring integration is merged to `main`; create a focused `codex/` branch for each
+  subsequent monitoring change.
 - Preserve unrelated user changes. Do not reset, force-push, delete branches,
   merge a PR, or push new commits unless the user explicitly requests it.
 - Git for Windows must use the system OpenSSH to access the loaded Windows
