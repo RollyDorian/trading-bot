@@ -62,15 +62,11 @@ def test_retention_keeps_latest_and_bounded_number_of_exact_records(
     module = load_retention()
     directory = tmp_path / "failures"
     directory.mkdir(mode=0o700)
-    monkeypatch.setattr(
-        Path,
-        "lstat",
-        lambda self: (
-            os.stat_result((stat.S_IFDIR | 0o700, 0, 0, 1, 0, 0, 0, 0, 0, 0))
-            if self == directory
-            else Path.stat(self)
-        ),
-    )
+    def root_owned_lstat(path: Path) -> os.stat_result:
+        mode = stat.S_IFDIR | 0o700 if path == directory else stat.S_IFREG | 0o600
+        return os.stat_result((mode, 0, 0, 1, 0, 0, 0, 0, 0, 0))
+
+    monkeypatch.setattr(Path, "lstat", root_owned_lstat)
     for second in range(module.MAX_RECORDS + 2):
         record = {
             "timestamp": f"2026-01-01T00:00:{second:02d}Z",
