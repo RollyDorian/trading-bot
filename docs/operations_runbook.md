@@ -47,6 +47,24 @@ missing, malformed, or inconsistent state blocks fail closed. The observation du
 be set from 2 through 30 seconds with `HIBACHI_RESTART_OBSERVATION_SECONDS`; it never
 changes or restarts a service.
 
+## Read-only collector startup diagnostic
+
+When a stopped collector has insufficient retained logs, run the bounded diagnostic from
+the existing collector image only after the image revision containing it is deployed:
+
+```sh
+python -m trading_bot.startup_diagnostic
+```
+
+It never starts the WebSocket loop, subscribes, writes events, changes schema, or runs a
+migration. It requires only the runtime names `BOT_MODE`, `DATABASE_ROLE`, and
+`DATABASE_URL`; values are never printed. The JSON result contains fixed stages
+(`config`, `database`, `dependencies`, `complete`) and an exception class without an error
+message. Database checks use a read-only transaction and validate the required
+`market_events` and `system_events` schema columns. A failed result is fail-closed; record
+only its stage and class, then investigate before any collector restart. Database work has
+a fixed five-second timeout.
+
 ## Bounded redacted logs
 
 ```sh

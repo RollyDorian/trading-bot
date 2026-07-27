@@ -165,6 +165,10 @@ Research/test PostgreSQL isolation and the safe collection workflow are document
 Routine status, preflight, bounded logs, protected backups, isolated restore validation,
 and rollback preparation are documented in the
 [COLLECT-only operations runbook](docs/operations_runbook.md).
+For a stopped collector with unavailable logs, the deployed image also provides
+`python -m trading_bot.startup_diagnostic`: a bounded read-only prerequisite check. It does
+not start collection or modify PostgreSQL; see the operations runbook for its fail-closed
+result contract.
 The bounded host-local JSON monitoring contract and provider-neutral alert examples are
 documented in [COLLECT-only monitoring](docs/monitoring.md).
 The Zabbix design uses a root-owned bounded oneshot and sanitized cache; the agent receives
