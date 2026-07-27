@@ -43,6 +43,10 @@ def metrics(**changes: int | str) -> dict[str, int | str]:
         "dashboard_disabled": 1,
         "data_paths_writable": 2,
         "disk_safe": 1,
+        "failure_exit_code": -1,
+        "failure_oom_killed": -1,
+        "failure_summary_age_seconds": -1,
+        "failure_summary_state": 0,
         "ports_safe": 1,
         "postgres_health": 1,
         "readiness": 1,
@@ -208,6 +212,7 @@ def test_reader_returns_one_bounded_value(
     assert cache_module.read_item(cache, "restart_count", now=1000) == 4
     assert cache_module.read_item(cache, "restart_state", now=1000) == 1
     assert cache_module.read_item(cache, "readiness", now=1000) == 1
+    assert cache_module.read_item(cache, "failure_state", now=1000) == 0
     assert cache_module.read_item(cache, "arbitrary", now=1000) == -1
 
 
@@ -276,7 +281,7 @@ def test_static_installation_contract_is_least_privilege_and_bounded() -> None:
     assert "TimeoutStartSec=55" in service
     assert "RuntimeDirectoryPreserve=yes" in service
     assert "OnUnitActiveSec=60s" in timer
-    assert parameters.count("UserParameter=hibachi.collect.") == 12
+    assert parameters.count("UserParameter=hibachi.collect.") == 16
     assert "[*]" not in parameters
     for forbidden in ("docker", "sudo", "|", "DATABASE_URL", "bash -c"):
         assert forbidden not in parameters

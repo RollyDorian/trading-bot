@@ -99,6 +99,9 @@ python -m venv .venv
 - Zabbix integration uses the documented root-owned bounded oneshot and sanitized cache.
   The Zabbix account must never gain Docker-group or sudo access, and fixed UserParameters
   must never invoke Docker, Compose, Git, SQL, or project scripts.
+- Collector exit evidence is retained only by the documented root-owned bounded Docker-event
+  listener. Records must stay sanitized, fixed-schema, root-only, capped in size and count,
+  and diagnostic-only: retention must never restart a service or change readiness.
 - `scripts/collect_quality.py` provides bounded read-only stream-quality and capacity
   analysis. Exact full-history scans remain explicit opt-in; retention is a documented
   decision framework and must never delete or archive data automatically.

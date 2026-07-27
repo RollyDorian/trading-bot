@@ -38,12 +38,18 @@ install -d -o root -g root -m 0755 /usr/local/libexec
 install -o root -g root -m 0755 \
     "$HIBACHI_DEPLOY_DIR/scripts/zabbix_cache.py" \
     /usr/local/libexec/hibachi-zabbix-cache
+install -o root -g root -m 0755 \
+    "$HIBACHI_DEPLOY_DIR/scripts/collect_failure_retention.py" \
+    /usr/local/libexec/hibachi-collect-failure-retention
 install -o root -g root -m 0644 \
     "$HIBACHI_DEPLOY_DIR/deploy/systemd/hibachi-collect-monitor.service" \
     /etc/systemd/system/hibachi-collect-monitor.service
 install -o root -g root -m 0644 \
     "$HIBACHI_DEPLOY_DIR/deploy/systemd/hibachi-collect-monitor.timer" \
     /etc/systemd/system/hibachi-collect-monitor.timer
+install -o root -g root -m 0644 \
+    "$HIBACHI_DEPLOY_DIR/deploy/systemd/hibachi-collect-failure-retention.service" \
+    /etc/systemd/system/hibachi-collect-failure-retention.service
 install -d -o root -g root -m 0755 "$ZABBIX_INCLUDE_DIR"
 install -o root -g root -m 0644 \
     "$HIBACHI_DEPLOY_DIR/deploy/zabbix/hibachi-collect.conf" \
@@ -68,7 +74,8 @@ install -o root -g root -m 0600 "$config_tmp" /etc/hibachi-collect-monitor.conf
 
 systemd-analyze verify \
     /etc/systemd/system/hibachi-collect-monitor.service \
-    /etc/systemd/system/hibachi-collect-monitor.timer >/dev/null 2>&1 || fail
+    /etc/systemd/system/hibachi-collect-monitor.timer \
+    /etc/systemd/system/hibachi-collect-failure-retention.service >/dev/null 2>&1 || fail
 zabbix_agentd -t hibachi.collect.readiness -c "$ZABBIX_AGENT_CONFIG" \
     >/dev/null 2>&1 || fail
 systemctl daemon-reload
