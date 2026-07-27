@@ -198,7 +198,11 @@ def retain(record: dict[str, object], directory: Path = STATE_DIR) -> None:
     target = directory / f"failure-{stamp}.json"
     _atomic_write(target, record_bytes)
     _atomic_write(directory / "latest.json", record_bytes)
-    records = sorted(directory.glob("failure-????????T??????Z.json"))
+    records = sorted(
+        path
+        for path in directory.glob("failure-*.json")
+        if re.fullmatch(r"failure-\d{8}T\d{6}Z\.json", path.name)
+    )
     for stale in records[:-MAX_RECORDS]:
         if stale.is_file() and not stale.is_symlink() and stale.lstat().st_uid == 0:
             stale.unlink()
