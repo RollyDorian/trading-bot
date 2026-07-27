@@ -99,6 +99,9 @@ python -m venv .venv
 - Zabbix integration uses the documented root-owned bounded oneshot and sanitized cache.
   The Zabbix account must never gain Docker-group or sudo access, and fixed UserParameters
   must never invoke Docker, Compose, Git, SQL, or project scripts.
+- The root-operated monitoring installer is the only supported host-side update path. It
+  verifies a clean reviewed revision plus SHA-256 manifest before activation; do not grant the
+  deployment account passwordless sudo for an installer sourced from its writable checkout.
 - Collector exit evidence is retained only by the documented root-owned bounded Docker-event
   listener. Records must stay sanitized, fixed-schema, root-only, capped in size and count,
   and diagnostic-only: retention must never restart a service or change readiness.

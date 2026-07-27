@@ -13,7 +13,8 @@ cache=/run/hibachi-collect-monitor/metrics.json
 [ "$(stat -c %U "$cache")" = root ] || fail
 [ "$(stat -c %G "$cache")" = zabbix ] || fail
 
-for item in postgres collector restart restart_count restart_state storage backup disk swap dashboard ports readiness; do
+for item in postgres collector restart restart_count restart_state storage backup disk swap dashboard ports readiness \
+    failure_state failure_age failure_exit failure_oom; do
     value=$(zabbix_agentd -t "hibachi.collect.$item" -c "$ZABBIX_AGENT_CONFIG" 2>/dev/null \
         | sed -n 's/.*\[t|\([^]]*\)\]$/\1/p')
     case "$item:$value" in
@@ -23,6 +24,10 @@ for item in postgres collector restart restart_count restart_state storage backu
         restart_state:-1|restart_state:0|restart_state:1|restart_state:2|restart_state:3|restart_state:4)
             ;;
         readiness:-1|readiness:0|readiness:1|readiness:2)
+            ;;
+        failure_state:-1|failure_state:0|failure_state:1|failure_oom:-1|failure_oom:0|failure_oom:1)
+            ;;
+        failure_age:-1|failure_age:[0-9]|failure_age:[0-9][0-9]*|failure_exit:-1|failure_exit:[0-9]|failure_exit:[0-9][0-9]*|failure_exit:[0-9][0-9][0-9])
             ;;
         collector:-1|collector:0|collector:1|collector:2|storage:-1|storage:0|storage:1|storage:2)
             ;;
