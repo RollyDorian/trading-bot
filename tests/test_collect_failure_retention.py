@@ -83,7 +83,8 @@ def test_retention_keeps_latest_and_bounded_number_of_exact_records(
             "revision": "unknown",
         }
         module.retain(record, directory)
-    assert len(list(directory.glob("failure-*.json"))) == module.MAX_RECORDS
+    records = [path for path in directory.glob("failure-*.json") if path.name != "latest.json"]
+    assert len(records) == module.MAX_RECORDS
     assert (
         json.loads((directory / "latest.json").read_text(encoding="ascii"))["timestamp"]
         == "2026-01-01T00:00:21Z"
