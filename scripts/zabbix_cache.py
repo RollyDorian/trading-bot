@@ -90,7 +90,7 @@ def _validate_metrics(value: object) -> dict[str, int | str]:
         "disk_safe": {-1, 0, 1},
         "ports_safe": {-1, 0, 1},
         "postgres_health": {-1, 0, 1},
-        "readiness": {0, 1},
+        "readiness": {-1, 0, 1, 2},
         "runtime_safe": {-1, 0, 1},
         "swap_safe": {-1, 0, 1},
     }
@@ -105,22 +105,38 @@ def _validate_metrics(value: object) -> dict[str, int | str]:
         raise ValueError
     if metrics["storage_state"] not in STORAGE_STATES:
         raise ValueError
-    if metrics["runtime_safe"] != int(
-        metrics["dashboard_disabled"] == 1 and metrics["ports_safe"] == 1
-    ):
+    expected_runtime = (
+        SAFE_ERROR
+        if SAFE_ERROR in {metrics["dashboard_disabled"], metrics["ports_safe"]}
+        else int(metrics["dashboard_disabled"] == 1 and metrics["ports_safe"] == 1)
+    )
+    if metrics["runtime_safe"] != expected_runtime:
         raise ValueError
-    expected_ready = int(
+    hard_gates_pass = (
         metrics["postgres_health"] == 1
         and metrics["collector_health"] == 2
         and metrics["collector_restart_loop"] == 0
         and metrics["data_paths_writable"] in {1, 2}
         and metrics["backup_fresh"] == 1
         and metrics["disk_safe"] == 1
-        and metrics["swap_safe"] == 1
         and metrics["dashboard_disabled"] == 1
         and metrics["ports_safe"] == 1
     )
-    if metrics["readiness"] != expected_ready:
+    has_unknown = (
+        any(
+            metrics[key] == SAFE_ERROR
+            for key in numeric_rules
+            if key != "readiness"
+        )
+        or metrics["collector_restart_state"] == "unknown"
+        or metrics["storage_state"] == "unknown"
+    )
+    readiness = metrics["readiness"]
+    if readiness == SAFE_ERROR and not has_unknown:
+        raise ValueError
+    if readiness == 1 and (not hard_gates_pass or metrics["swap_safe"] != 1):
+        raise ValueError
+    if readiness == 2 and (not hard_gates_pass or metrics["swap_safe"] != 0):
         raise ValueError
     return metrics
 

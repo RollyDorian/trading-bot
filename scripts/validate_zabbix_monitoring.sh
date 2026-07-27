@@ -22,7 +22,11 @@ for item in postgres collector restart restart_count restart_state storage backu
             ;;
         restart_state:-1|restart_state:0|restart_state:1|restart_state:2|restart_state:3|restart_state:4)
             ;;
-        *:-1|*:0|*:1|*:2)
+        readiness:-1|readiness:0|readiness:1|readiness:2)
+            ;;
+        collector:-1|collector:0|collector:1|collector:2|storage:-1|storage:0|storage:1|storage:2)
+            ;;
+        postgres:-1|postgres:0|postgres:1|restart:-1|restart:0|restart:1|backup:-1|backup:0|backup:1|disk:-1|disk:0|disk:1|swap:-1|swap:0|swap:1|dashboard:-1|dashboard:0|dashboard:1|ports:-1|ports:0|ports:1)
             ;;
         *) fail ;;
     esac
