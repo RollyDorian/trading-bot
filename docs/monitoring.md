@@ -30,6 +30,10 @@ Keys and values are stable:
 | `dashboard_disabled` | `1` dashboard profile inactive, `0` active, `-1` unknown |
 | `ports_safe` | `1` no project host ports, `0` exposed, `-1` unknown |
 | `runtime_safe` | `1` dashboard absent/profile-gated and project ports absent, otherwise `0` or `-1` |
+| `failure_summary_state` | `0` no retained exit, `1` retained sanitized exit summary, `-1` unreadable/unsafe summary |
+| `failure_summary_age_seconds` | non-negative age when retained, otherwise `-1` |
+| `failure_exit_code` | retained collector exit code `0..255`, otherwise `-1` |
+| `failure_oom_killed` | retained OOM flag `0` or `1`, otherwise `-1` |
 | `readiness` | `1` healthy, `2` isolated low-risk swap warning, `0` confirmed critical, `-1` unknown |
 
 The 26-hour backup window supports a daily backup schedule with two hours of scheduling
@@ -65,7 +69,8 @@ The cache has a 150-second maximum age, 2 KiB size limit, exact schema, and only
 integers/enums plus an epoch timestamp. Missing, stale, malformed, oversized, duplicate-key,
 unsafe-owner, unsafe-mode, or inconsistent data returns `-1`.
 
-Repository assets are `scripts/zabbix_cache.py`, the two `deploy/systemd` unit templates,
+Repository assets include `scripts/zabbix_cache.py`, `scripts/collect_failure_retention.py`,
+the monitor timer and bounded failure-retention service templates,
 `deploy/zabbix/hibachi-collect.conf`, and the install, validation, and rollback scripts.
 Installation is separately approved privileged work. Supply required absolute paths without
 printing them:
@@ -81,7 +86,7 @@ adds one exact include line when absent, validates agent and unit syntax, and re
 systemd. It does not enable the timer or restart the agent. After a manual oneshot succeeds,
 validate the cache, restart only the agent if reload is unsupported, then enable the timer.
 
-Create ten readiness signals plus two restart-history diagnostics at a 60-second interval:
+Create ten readiness signals, two restart-history diagnostics, and four neutral failure-retention diagnostics at a 60-second interval:
 
 | Item key | Healthy value |
 | --- | --- |
@@ -97,6 +102,10 @@ Create ten readiness signals plus two restart-history diagnostics at a 60-second
 | `hibachi.collect.dashboard` | `1` |
 | `hibachi.collect.ports` | `1` |
 | `hibachi.collect.readiness` | `1` |
+| `hibachi.collect.failure_state` | `0` none, `1` retained, `-1` unsafe/unknown |
+| `hibachi.collect.failure_age` | non-negative seconds or `-1` |
+| `hibachi.collect.failure_exit` | `0..255` or `-1` |
+| `hibachi.collect.failure_oom` | `0` or `1`, otherwise `-1` |
 
 Suggested triggers:
 
@@ -150,6 +159,18 @@ restore, migration, deployment, dashboard activation, or trading action.
 Stream continuity and capacity forecasting remain a separate on-demand inspection. Use
 `collect_quality.py` as documented in `docs/retention_readiness.md`; do not embed its
 potentially expensive full-history mode in a frequent monitoring item.
+
+## Bounded failure retention
+
+The root-owned retention listener observes only Docker `die` events for the collector. It
+does not restart, recreate, or otherwise alter a container. For each observed exit it stores
+one root-only JSON summary: UTC timestamp, exit code, restart count, fixed failure stage and
+error class, at most twelve sanitized stderr lines, OOM flag, and deployed revision. It
+redacts credentials, URLs, addresses, hostnames, and paths; tracebacks are discarded. The
+state directory retains at most 20 exact service-owned records plus `latest.json`, each no
+larger than 2 KiB. The four Zabbix fields above are neutral diagnostics and never alter
+readiness or trigger recovery logic. If a summary is malformed, stale cache collection
+continues fail-closed for that diagnostic field without exposing its contents.
 
 ## Rollback
 

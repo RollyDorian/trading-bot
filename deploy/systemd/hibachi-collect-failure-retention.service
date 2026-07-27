@@ -1,0 +1,30 @@
+[Unit]
+Description=Retain bounded sanitized Hibachi collector exit evidence
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+EnvironmentFile=/etc/hibachi-collect-monitor.conf
+ExecStart=/usr/bin/python3 /usr/local/libexec/hibachi-collect-failure-retention
+Restart=on-failure
+RestartSec=5s
+StateDirectory=hibachi-collect-monitor
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadWritePaths=/var/lib/hibachi-collect-monitor
+
+[Install]
+WantedBy=multi-user.target

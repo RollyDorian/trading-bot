@@ -25,6 +25,7 @@ RestrictAddressFamilies=AF_UNIX
 RestrictSUIDSGID=yes
 LockPersonality=yes
 ReadWritePaths=/run/hibachi-collect-monitor
+ReadOnlyPaths=/var/lib/hibachi-collect-monitor/failures
 
 [Install]
 WantedBy=multi-user.target

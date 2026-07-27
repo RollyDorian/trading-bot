@@ -75,6 +75,17 @@ The command accepts only a bounded duration and at most 1000 lines. It redacts U
 credential-like assignments, addresses, and hostnames before writing to stdout. Never use
 unbounded `docker logs` in shared terminals or reports.
 
+## Retained collector failure summary
+
+After an unexpected collector exit, inspect only the root-owned bounded retention summary
+through the approved monitoring cache or a privileged local recovery procedure. It records
+the UTC exit timestamp, numeric exit/restart/OOM context, fixed stage/error class, deployed
+revision, and no more than twelve redacted stderr lines. Do not copy the artifact into a
+ticket or shared terminal. First confirm the current collector and PostgreSQL state, then run
+the read-only startup diagnostic when applicable. The listener never authorizes a restart,
+deployment, migration, or database action. Retention is limited to 20 service-owned records;
+do not delete unknown files from its state directory.
+
 ## Logical backup and bounded retention
 
 ```sh

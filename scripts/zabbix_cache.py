@@ -33,6 +33,10 @@ ITEM_KEYS: Final = {
     "dashboard": "dashboard_disabled",
     "ports": "ports_safe",
     "readiness": "readiness",
+    "failure_state": "failure_summary_state",
+    "failure_age": "failure_summary_age_seconds",
+    "failure_exit": "failure_exit_code",
+    "failure_oom": "failure_oom_killed",
 }
 BOUNDED_STATES: Final = {
     "healthy_stable",
@@ -67,6 +71,10 @@ SOURCE_KEYS: Final = {
     "dashboard_disabled",
     "data_paths_writable",
     "disk_safe",
+    "failure_exit_code",
+    "failure_oom_killed",
+    "failure_summary_age_seconds",
+    "failure_summary_state",
     "ports_safe",
     "postgres_health",
     "readiness",
@@ -88,6 +96,8 @@ def _validate_metrics(value: object) -> dict[str, int | str]:
         "dashboard_disabled": {-1, 0, 1},
         "data_paths_writable": {-1, 0, 1, 2},
         "disk_safe": {-1, 0, 1},
+        "failure_oom_killed": {-1, 0, 1},
+        "failure_summary_state": {-1, 0, 1},
         "ports_safe": {-1, 0, 1},
         "postgres_health": {-1, 0, 1},
         "readiness": {-1, 0, 1, 2},
@@ -100,6 +110,22 @@ def _validate_metrics(value: object) -> dict[str, int | str]:
             raise ValueError
     count = metrics["collector_restart_count"]
     if type(count) is not int or count < -1 or count > 1_000_000:
+        raise ValueError
+    for key, upper in (("failure_exit_code", 255), ("failure_summary_age_seconds", 31_536_000)):
+        if type(metrics[key]) is not int or metrics[key] < -1 or metrics[key] > upper:
+            raise ValueError
+    failure_values = (
+        metrics["failure_exit_code"],
+        metrics["failure_summary_age_seconds"],
+        metrics["failure_oom_killed"],
+    )
+    if metrics["failure_summary_state"] in {-1, 0} and any(value != -1 for value in failure_values):
+        raise ValueError
+    if metrics["failure_summary_state"] == 1 and (
+        metrics["failure_exit_code"] < 0
+        or metrics["failure_summary_age_seconds"] < 0
+        or metrics["failure_oom_killed"] < 0
+    ):
         raise ValueError
     if metrics["collector_restart_state"] not in BOUNDED_STATES:
         raise ValueError
@@ -126,7 +152,7 @@ def _validate_metrics(value: object) -> dict[str, int | str]:
         any(
             metrics[key] == SAFE_ERROR
             for key in numeric_rules
-            if key != "readiness"
+            if key not in {"readiness", "failure_oom_killed", "failure_summary_state"}
         )
         or metrics["collector_restart_state"] == "unknown"
         or metrics["storage_state"] == "unknown"

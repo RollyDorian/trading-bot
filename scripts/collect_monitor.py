@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import calendar
 import json
 import math
 import mmap
@@ -26,6 +27,7 @@ MAX_SWAP_USED_BYTES: Final = 256 * 1024**2
 MAX_BACKUP_AGE_SECONDS: Final = 26 * 60 * 60
 MAX_SWAP_ACTIVITY_BYTES: Final = 1024**2
 MAX_FULL_MEMORY_PRESSURE_AVG10: Final = 1.0
+FAILURE_SUMMARY_PATH: Final = Path("/var/lib/hibachi-collect-monitor/failures/latest.json")
 UNKNOWN: Final = -1
 CRITICAL: Final = 0
 HEALTHY: Final = 1
@@ -35,22 +37,30 @@ STORAGE_NOT_APPLICABLE: Final = 2
 
 MEMORY_PRESSURE_STATES: Final = {"inactive", "sustained", "unknown"}
 
-METRIC_KEYS: Final = tuple(sorted((
-    "backup_fresh",
-    "collector_health",
-    "collector_restart_count",
-    "collector_restart_loop",
-    "collector_restart_state",
-    "data_paths_writable",
-    "dashboard_disabled",
-    "disk_safe",
-    "ports_safe",
-    "postgres_health",
-    "readiness",
-    "runtime_safe",
-    "storage_state",
-    "swap_safe",
-)))
+METRIC_KEYS: Final = tuple(
+    sorted(
+        (
+            "backup_fresh",
+            "collector_health",
+            "collector_restart_count",
+            "collector_restart_loop",
+            "collector_restart_state",
+            "data_paths_writable",
+            "dashboard_disabled",
+            "disk_safe",
+            "failure_exit_code",
+            "failure_oom_killed",
+            "failure_summary_age_seconds",
+            "failure_summary_state",
+            "ports_safe",
+            "postgres_health",
+            "readiness",
+            "runtime_safe",
+            "storage_state",
+            "swap_safe",
+        )
+    )
+)
 
 
 @dataclass(frozen=True)
@@ -68,6 +78,10 @@ class Snapshot:
     memory_pressure_state: str = "unknown"
     dashboard_disabled: bool | None = None
     ports_safe: bool | None = None
+    failure_summary_state: int = 0
+    failure_summary_age_seconds: int = -1
+    failure_exit_code: int = -1
+    failure_oom_killed: int = -1
 
 
 @dataclass(frozen=True)
@@ -88,9 +102,7 @@ def evaluate(snapshot: Snapshot) -> dict[str, int | str]:
         restart = 1
     else:
         restart = UNKNOWN
-    restart_count = (
-        UNKNOWN if snapshot.collector_restarts is None else snapshot.collector_restarts
-    )
+    restart_count = UNKNOWN if snapshot.collector_restarts is None else snapshot.collector_restarts
     if snapshot.storage_state == "ready":
         data = 1
     elif snapshot.storage_state == "not_applicable":
@@ -104,9 +116,7 @@ def evaluate(snapshot: Snapshot) -> dict[str, int | str]:
     swap = _threshold_metric(snapshot.swap_used_bytes, MAX_SWAP_USED_BYTES)
     dashboard = _boolean_metric(snapshot.dashboard_disabled)
     ports = _boolean_metric(snapshot.ports_safe)
-    runtime = (
-        UNKNOWN if UNKNOWN in {dashboard, ports} else int(dashboard == 1 and ports == 1)
-    )
+    runtime = UNKNOWN if UNKNOWN in {dashboard, ports} else int(dashboard == 1 and ports == 1)
     ready = classify_readiness(
         postgres_health=postgres,
         collector_health=collector,
@@ -130,6 +140,10 @@ def evaluate(snapshot: Snapshot) -> dict[str, int | str]:
         "dashboard_disabled": dashboard,
         "storage_state": snapshot.storage_state,
         "disk_safe": disk,
+        "failure_exit_code": snapshot.failure_exit_code,
+        "failure_oom_killed": snapshot.failure_oom_killed,
+        "failure_summary_age_seconds": snapshot.failure_summary_age_seconds,
+        "failure_summary_state": snapshot.failure_summary_state,
         "postgres_health": postgres,
         "ports_safe": ports,
         "readiness": ready,
@@ -246,10 +260,7 @@ class HostProbe:
         self.runtime_env = _required_path("HIBACHI_RUNTIME_ENV", directory=False)
         self.backup_dir = _required_path("HIBACHI_BACKUP_DIR", directory=True)
         runtime_stat = self.runtime_env.stat()
-        if (
-            stat.S_IMODE(runtime_stat.st_mode) != 0o600
-            or runtime_stat.st_uid != self.expected_uid
-        ):
+        if stat.S_IMODE(runtime_stat.st_mode) != 0o600 or runtime_stat.st_uid != self.expected_uid:
             raise ValueError("invalid runtime configuration")
         self.compose = (
             "docker",
@@ -281,7 +292,62 @@ class HostProbe:
             memory_pressure_state=self._memory_pressure_state(first_memory, second_memory),
             dashboard_disabled=self._dashboard_disabled(),
             ports_safe=self._ports_safe(),
+            **self._failure_summary(),
         )
+
+    def _failure_summary(self) -> dict[str, int]:
+        try:
+            metadata = FAILURE_SUMMARY_PATH.lstat()
+            if (
+                not stat.S_ISREG(metadata.st_mode)
+                or stat.S_IMODE(metadata.st_mode) != 0o600
+                or metadata.st_uid != 0
+                or metadata.st_size <= 0
+                or metadata.st_size > 2048
+            ):
+                raise ValueError
+            value = json.loads(FAILURE_SUMMARY_PATH.read_text(encoding="ascii"))
+            if not isinstance(value, dict) or set(value) != {
+                "timestamp",
+                "exit_code",
+                "restart_count",
+                "failure_stage",
+                "error_class",
+                "stderr_lines",
+                "oom_killed",
+                "revision",
+            }:
+                raise ValueError
+            timestamp = time.strptime(str(value["timestamp"]), "%Y-%m-%dT%H:%M:%SZ")
+            age = int(time.time() - calendar.timegm(timestamp))
+            if (
+                type(value["exit_code"]) is not int
+                or not 0 <= value["exit_code"] <= 255
+                or type(value["oom_killed"]) is not int
+                or value["oom_killed"] not in {0, 1}
+                or age < 0
+            ):
+                raise ValueError
+            return {
+                "failure_summary_state": 1,
+                "failure_summary_age_seconds": age,
+                "failure_exit_code": value["exit_code"],
+                "failure_oom_killed": value["oom_killed"],
+            }
+        except FileNotFoundError:
+            return {
+                "failure_summary_state": 0,
+                "failure_summary_age_seconds": -1,
+                "failure_exit_code": -1,
+                "failure_oom_killed": -1,
+            }
+        except BaseException:
+            return {
+                "failure_summary_state": -1,
+                "failure_summary_age_seconds": -1,
+                "failure_exit_code": -1,
+                "failure_oom_killed": -1,
+            }
 
     def _run(self, *args: str) -> str:
         result = subprocess.run(

@@ -60,13 +60,17 @@ def test_monitor_contract_is_bounded_and_healthy(monitor: ModuleType) -> None:
         "dashboard_disabled": 1,
         "storage_state": "ready",
         "disk_safe": 1,
+        "failure_exit_code": -1,
+        "failure_oom_killed": -1,
+        "failure_summary_age_seconds": -1,
+        "failure_summary_state": 0,
         "postgres_health": 1,
         "ports_safe": 1,
         "readiness": 1,
         "runtime_safe": 1,
         "swap_safe": 1,
     }
-    assert len(json.dumps(metrics, separators=(",", ":"))) < 320
+    assert len(json.dumps(metrics, separators=(",", ":"))) < 420
 
 
 @pytest.mark.parametrize(
@@ -156,9 +160,7 @@ def test_unsupported_required_signal_is_unknown(
 
 
 def test_database_only_storage_is_neutral_and_ready(monitor: ModuleType) -> None:
-    metrics = monitor.evaluate(
-        healthy_snapshot(monitor, storage_state="not_applicable")
-    )
+    metrics = monitor.evaluate(healthy_snapshot(monitor, storage_state="not_applicable"))
     assert metrics["data_paths_writable"] == 2
     assert metrics["storage_state"] == "not_applicable"
     assert metrics["readiness"] == 1
