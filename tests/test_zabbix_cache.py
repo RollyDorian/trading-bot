@@ -295,6 +295,17 @@ def test_installer_and_rollback_are_idempotent_by_contract() -> None:
     assert "install -d -o root -g root -m 0755 /usr/local/libexec" in installer
     assert "zabbix_agentd -t" in installer
     assert "systemd-analyze verify" in installer
+    assert "installed-manifest" in installer
+    assert "sha256sum" in installer
+    assert "git -C \"$HIBACHI_DEPLOY_DIR\" diff --quiet" in installer
+    assert "systemctl enable --now hibachi-collect-monitor.timer" in installer
+    assert "hibachi-collect-failure-retention.service" in installer
+    assert "systemctl reload zabbix-agent.service" in installer
+    assert "systemctl restart zabbix-agent.service" in installer
+    assert "no passwordless-sudo variant" in installer
+    assert "snapshot_current" in installer
+    assert "rollback_on_error" in installer
+    assert "trap rollback_on_error" in installer
     assert "rm -f --" in rollback
     assert "systemctl disable --now hibachi-collect-monitor.timer" in rollback
     assert "id zabbix | grep -q docker && fail" in validator
@@ -303,3 +314,5 @@ def test_installer_and_rollback_are_idempotent_by_contract() -> None:
     assert "restart_count:[0-9][0-9]*" in validator
     assert "restart_state:4" in validator
     assert "readiness:-1|readiness:0|readiness:1|readiness:2" in validator
+    for item in ("failure_state", "failure_age", "failure_exit", "failure_oom"):
+        assert item in validator

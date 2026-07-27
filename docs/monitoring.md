@@ -81,10 +81,23 @@ ZABBIX_AGENT_CONFIG=... ZABBIX_INCLUDE_DIR=... \
 sh scripts/install_zabbix_monitoring.sh
 ```
 
-The installer preserves the original agent configuration, installs only project files,
-adds one exact include line when absent, validates agent and unit syntax, and reloads
-systemd. It does not enable the timer or restart the agent. After a manual oneshot succeeds,
-validate the cache, restart only the agent if reload is unsupported, then enable the timer.
+The installer is one root-operated, idempotent update command. The first installation stores
+only non-secret absolute path names in a root-only install configuration; later updates use
+that configuration and need no values on the command line. It rejects a dirty checkout,
+records the exact Git revision and SHA-256 digest of every installed helper, unit, and
+UserParameter file in a root-only manifest, and verifies source-to-installed equality before
+activation. It validates systemd and every fixed UserParameter (including the four failure
+keys), starts the bounded cache oneshot, enables only the monitor timer and failure listener,
+then reloads the agent; it restarts that agent only when reload is unsupported.
+
+Do not grant the deployment account passwordless sudo for this installer: its source checkout
+is deployment-account writable. An interactive root operator must first verify the reviewed
+revision and then run the installer. This prevents an editable checkout from becoming a root
+command source. `sh scripts/install_zabbix_monitoring.sh verify` checks the same manifest and
+all fixed keys after installation. A failed rollout must restore the prior reviewed checkout and
+rerun this installer. Before it changes a monitoring file it retains a root-only transaction
+snapshot and restores those previous monitoring files plus the agent configuration if validation
+or activation fails; it never touches collector, PostgreSQL, Docker resources, or data.
 
 Create ten readiness signals, two restart-history diagnostics, and four neutral failure-retention diagnostics at a 60-second interval:
 
