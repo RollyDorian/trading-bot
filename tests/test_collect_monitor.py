@@ -38,6 +38,8 @@ def healthy_snapshot(monitor: ModuleType, **changes: object) -> object:
         "backup_age_seconds": monitor.MAX_BACKUP_AGE_SECONDS,
         "disk_free_bytes": monitor.MIN_DISK_BYTES,
         "swap_used_bytes": monitor.MAX_SWAP_USED_BYTES,
+        "available_memory_bytes": monitor.MIN_AVAILABLE_MEMORY_BYTES,
+        "memory_pressure_state": "inactive",
         "dashboard_disabled": True,
         "ports_safe": True,
     }
@@ -68,36 +70,89 @@ def test_monitor_contract_is_bounded_and_healthy(monitor: ModuleType) -> None:
 
 
 @pytest.mark.parametrize(
-    ("changes", "key"),
+    ("changes", "key", "readiness"),
     [
-        ({"postgres_health": "unhealthy"}, "postgres_health"),
-        ({"collector_health": "unhealthy"}, "collector_health"),
+        ({"postgres_health": "unhealthy"}, "postgres_health", 0),
+        ({"collector_health": "unhealthy"}, "collector_health", 0),
         (
             {"collector_restarts": 1, "collector_restart_state": "restart_loop"},
             "collector_restart_loop",
+            0,
         ),
-        ({"storage_state": "required_path_unwritable"}, "data_paths_writable"),
-        ({"backup_age_seconds": 93601}, "backup_fresh"),
-        ({"disk_free_bytes": 3 * 1024**3 - 1}, "disk_safe"),
-        ({"swap_used_bytes": 256 * 1024**2 + 1}, "swap_safe"),
-        ({"dashboard_disabled": False}, "dashboard_disabled"),
-        ({"ports_safe": False}, "ports_safe"),
+        ({"storage_state": "required_path_unwritable"}, "data_paths_writable", 0),
+        ({"backup_age_seconds": 93601}, "backup_fresh", 0),
+        ({"disk_free_bytes": 3 * 1024**3 - 1}, "disk_safe", 0),
+        ({"swap_used_bytes": 256 * 1024**2 + 1}, "swap_safe", 2),
+        ({"dashboard_disabled": False}, "dashboard_disabled", 0),
+        ({"ports_safe": False}, "ports_safe", 0),
     ],
 )
 def test_each_failed_gate_rejects_readiness(
-    monitor: ModuleType, changes: dict[str, object], key: str
+    monitor: ModuleType,
+    changes: dict[str, object],
+    key: str,
+    readiness: int,
 ) -> None:
     metrics = monitor.evaluate(healthy_snapshot(monitor, **changes))
-    assert metrics["readiness"] == 0
+    assert metrics["readiness"] == readiness
     assert metrics[key] != monitor.evaluate(healthy_snapshot(monitor))[key]
 
 
 def test_missing_and_malformed_values_fail_closed(monitor: ModuleType) -> None:
     metrics = monitor.evaluate(monitor.Snapshot(backup_age_seconds=-1))
-    assert metrics["readiness"] == 0
+    assert metrics["readiness"] == -1
     assert metrics["postgres_health"] == -1
     assert metrics["collector_health"] == -1
-    assert metrics["backup_fresh"] == 0
+    assert metrics["backup_fresh"] == -1
+
+
+def test_swap_warning_becomes_critical_for_low_ram_or_sustained_pressure(
+    monitor: ModuleType,
+) -> None:
+    warning_swap = {"swap_used_bytes": monitor.MAX_SWAP_USED_BYTES + 1}
+    low_ram = monitor.evaluate(
+        healthy_snapshot(
+            monitor,
+            **warning_swap,
+            available_memory_bytes=monitor.MIN_AVAILABLE_MEMORY_BYTES - 1,
+        )
+    )
+    pressured = monitor.evaluate(
+        healthy_snapshot(monitor, **warning_swap, memory_pressure_state="sustained")
+    )
+    assert low_ram["readiness"] == 0
+    assert pressured["readiness"] == 0
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"available_memory_bytes": None},
+        {"memory_pressure_state": "unknown"},
+        {"memory_pressure_state": "unsupported"},
+    ],
+)
+def test_missing_or_unsupported_memory_evidence_is_unknown(
+    monitor: ModuleType, changes: dict[str, object]
+) -> None:
+    assert monitor.evaluate(healthy_snapshot(monitor, **changes))["readiness"] == -1
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"postgres_health": "unsupported"},
+        {"collector_health": "unsupported"},
+        {"backup_age_seconds": -1},
+        {"disk_free_bytes": -1},
+        {"swap_used_bytes": -1},
+        {"dashboard_disabled": "unsupported"},
+    ],
+)
+def test_unsupported_required_signal_is_unknown(
+    monitor: ModuleType, changes: dict[str, object]
+) -> None:
+    assert monitor.evaluate(healthy_snapshot(monitor, **changes))["readiness"] == -1
 
 
 def test_database_only_storage_is_neutral_and_ready(monitor: ModuleType) -> None:
@@ -110,20 +165,20 @@ def test_database_only_storage_is_neutral_and_ready(monitor: ModuleType) -> None
 
 
 @pytest.mark.parametrize(
-    "state",
+    ("state", "readiness"),
     [
-        "required_path_unwritable",
-        "required_path_missing",
-        "inconsistent",
-        "unknown",
-        "unsupported",
+        ("required_path_unwritable", 0),
+        ("required_path_missing", 0),
+        ("inconsistent", 0),
+        ("unknown", -1),
+        ("unsupported", -1),
     ],
 )
 def test_required_or_uncertain_storage_blocks_monitoring(
-    monitor: ModuleType, state: str
+    monitor: ModuleType, state: str, readiness: int
 ) -> None:
     metrics = monitor.evaluate(healthy_snapshot(monitor, storage_state=state))
-    assert metrics["readiness"] == 0
+    assert metrics["readiness"] == readiness
 
 
 def test_historical_restart_is_observable_without_blocking_readiness(
@@ -172,7 +227,33 @@ def test_run_redacts_unexpected_configuration_failure(
     assert captured.err == ""
     assert sentinel not in captured.out
     assert "password" not in captured.out
-    assert json.loads(captured.out)["readiness"] == 0
+    assert json.loads(captured.out)["readiness"] == -1
+
+
+def test_memory_pressure_classifier_is_bounded_and_conservative(
+    monitor: ModuleType,
+) -> None:
+    baseline = monitor.MemorySample(300 * 1024**2, 300 * 1024**2, 10, 10, 0.0)
+    inactive = monitor.MemorySample(
+        300 * 1024**2,
+        300 * 1024**2,
+        10,
+        10,
+        monitor.MAX_FULL_MEMORY_PRESSURE_AVG10,
+    )
+    active = monitor.MemorySample(
+        300 * 1024**2,
+        300 * 1024**2 + monitor.MAX_SWAP_ACTIVITY_BYTES + 1,
+        11,
+        11,
+        0.5,
+    )
+    pressure = monitor.MemorySample(300 * 1024**2, 300 * 1024**2, 10, 10, 1.1)
+    malformed = monitor.MemorySample(300 * 1024**2, 300 * 1024**2, 9, 10, 0.0)
+    assert monitor.HostProbe._memory_pressure_state(baseline, inactive) == "inactive"
+    assert monitor.HostProbe._memory_pressure_state(baseline, active) == "sustained"
+    assert monitor.HostProbe._memory_pressure_state(baseline, pressure) == "sustained"
+    assert monitor.HostProbe._memory_pressure_state(baseline, malformed) == "unknown"
 
 
 def test_service_state_parses_bounded_mocked_docker_state(

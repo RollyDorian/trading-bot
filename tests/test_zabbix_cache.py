@@ -103,7 +103,11 @@ def test_collect_creates_atomic_restrictive_sanitized_cache(
         metrics(disk_safe=2),
         metrics(collector_restart_count=1_000_001),
         metrics(collector_restart_state="secret-path"),
-        metrics(readiness=0),
+        metrics(readiness=3),
+        metrics(readiness=-2),
+        metrics(readiness=-1),
+        metrics(readiness=1, swap_safe=0),
+        metrics(readiness=2, swap_safe=1),
     ],
 )
 def test_invalid_collection_never_replaces_cache(
@@ -135,6 +139,49 @@ def test_timeout_and_unavailable_command_fail_closed_without_output(
     assert capsys.readouterr() == ("", "")
 
 
+@pytest.mark.parametrize(
+    ("payload", "returncode"),
+    [
+        (metrics(readiness=0), 1),
+        (metrics(swap_safe=0, readiness=2), 1),
+        (
+            metrics(
+                postgres_health=-1,
+                collector_health=-1,
+                collector_restart_count=-1,
+                collector_restart_loop=-1,
+                collector_restart_state="unknown",
+                dashboard_disabled=-1,
+                data_paths_writable=-1,
+                disk_safe=-1,
+                ports_safe=-1,
+                backup_fresh=-1,
+                runtime_safe=-1,
+                storage_state="unknown",
+                swap_safe=-1,
+                readiness=-1,
+            ),
+            1,
+        ),
+    ],
+)
+def test_cache_accepts_four_state_readiness_and_binary_compatibility(
+    cache_module: ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    payload: dict[str, int | str],
+    returncode: int,
+) -> None:
+    cache = tmp_path / "metrics.json"
+    monkeypatch.setattr(
+        cache_module.subprocess,
+        "run",
+        lambda *args, **kwargs: fake_completed(payload, returncode),
+    )
+    assert cache_module.collect(["monitor"], cache, now=1000) == 0
+    assert json.loads(cache.read_text(encoding="ascii"))["readiness"] == payload["readiness"]
+
+
 def write_cache(cache_module: ModuleType, path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload), encoding="ascii")
     path.chmod(0o640)
@@ -160,7 +207,21 @@ def test_reader_returns_one_bounded_value(
     assert cache_module.read_item(cache, "storage", now=1000) == 2
     assert cache_module.read_item(cache, "restart_count", now=1000) == 4
     assert cache_module.read_item(cache, "restart_state", now=1000) == 1
+    assert cache_module.read_item(cache, "readiness", now=1000) == 1
     assert cache_module.read_item(cache, "arbitrary", now=1000) == -1
+
+
+def test_reader_preserves_warning_readiness_value(
+    cache_module: ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = tmp_path / "cache"
+    payload = valid_cache(cache_module)
+    payload.update(swap_safe=0, readiness=2)
+    write_cache(cache_module, cache, payload)
+    mark_root_owned(monkeypatch, cache)
+    assert cache_module.read_item(cache, "readiness", now=1000) == 2
 
 
 @pytest.mark.parametrize(
@@ -236,3 +297,4 @@ def test_installer_and_rollback_are_idempotent_by_contract() -> None:
     assert r"sed -n 's/.*\[t|\([^]]*\)\]$/\1/p'" in validator
     assert "restart_count:[0-9][0-9]*" in validator
     assert "restart_state:4" in validator
+    assert "readiness:-1|readiness:0|readiness:1|readiness:2" in validator

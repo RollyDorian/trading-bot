@@ -10,8 +10,9 @@ python3 scripts/collect_monitor.py
 ```
 
 The command writes exactly one compact JSON object and no stderr. Exit `0` means aggregate
-readiness is `1`; every other result exits `1`. Unexpected errors, missing Docker access,
-missing or unsafe runtime configuration, malformed state, and uncertain values fail closed.
+readiness is `1`; Warning, Critical, and unknown results exit `1`. Unexpected errors, missing
+Docker access, missing or unsafe runtime configuration, malformed state, and uncertain values
+fail closed.
 Keys and values are stable:
 
 | Key | Values |
@@ -29,10 +30,31 @@ Keys and values are stable:
 | `dashboard_disabled` | `1` dashboard profile inactive, `0` active, `-1` unknown |
 | `ports_safe` | `1` no project host ports, `0` exposed, `-1` unknown |
 | `runtime_safe` | `1` dashboard absent/profile-gated and project ports absent, otherwise `0` or `-1` |
-| `readiness` | `1` only when every gate passes, otherwise `0` |
+| `readiness` | `1` healthy, `2` isolated low-risk swap warning, `0` confirmed critical, `-1` unknown |
 
 The 26-hour backup window supports a daily backup schedule with two hours of scheduling
 jitter. It is a monitoring threshold, not authorization to create or delete backups.
+
+## Aggregate readiness states
+
+`readiness` is the canonical four-state decision produced by the repository, not a Zabbix
+calculated item. It retains the existing `256 MiB` swap threshold and adds bounded read-only
+context from two samples taken during the existing five-second observation window.
+Pressure is sustained when available RAM falls below `256 MiB`, swap usage or combined swap
+page activity rises by more than `1 MiB` in that window, or memory PSI `full avg10` exceeds
+`1%`. These are readiness-context guards; they do not change the `256 MiB` swap threshold.
+
+- `1` is healthy only when every hard gate passes, swap is within its threshold, available RAM
+  is at least `256 MiB`, and no sustained pressure is detected.
+- `2` is Warning only when the swap threshold alone is exceeded, all other hard gates pass,
+  available RAM is at least `256 MiB`, and the bounded pressure evidence is inactive.
+- `0` is Critical for confirmed database, collector, restart, storage, backup, disk, runtime,
+  port, dashboard, low-RAM, or sustained-pressure failure.
+- `-1` is unknown for missing, stale, malformed, unsupported, or contradictory inputs. It is
+  never converted to healthy or Warning.
+
+Historical restart remains neutral, and `not_applicable` storage remains neutral for the
+database-backed collector while the dashboard profile is disabled.
 
 ## Least-privilege Zabbix integration
 
@@ -89,9 +111,19 @@ Suggested triggers:
 9. `ports<>1` immediately.
 10. `readiness<>1` for two consecutive polls.
 
-Treat `-1` as unhealthy, not as missing data. Recover a trigger only after two consecutive
-healthy polls, except high swap, which requires five. Alert text must contain only the item
-key and fixed numeric value.
+Treat `-1` as unhealthy, not as missing data. Keep the swap trigger at Warning. Replace the
+single readiness trigger with a Warning trigger for `readiness=2` and a High trigger for
+`readiness=0` or `readiness=-1`; both recover only after two consecutive `readiness=1` polls.
+The stale-cache trigger remains High. Alert text must contain only the item key and fixed
+numeric value.
+
+Roll out in this order: deploy the repository/cache implementation, deploy the exact merged
+revision, update the Zabbix readiness triggers, validate `2` as Warning and `0|-1` as High,
+then confirm recovery on `1`. Existing binary cache values `0` and `1` remain valid. During a
+mixed rollout, a new `2` can temporarily match the old `readiness<>1` High trigger; this is
+safe and must not be suppressed. Roll back by restoring the previous repository/cache revision
+and previous readiness trigger; mixed rollback also fails closed as High until binary output is
+restored.
 
 The shared bounded classifier samples twice, five seconds apart. Historical static restarts
 remain visible but do not alert. `recent_restart`, `restart_loop`, `unhealthy`, and

@@ -92,7 +92,10 @@ python -m venv .venv
   expose ports, print secrets, or delete unknown backup files.
 - `scripts/collect_monitor.py` emits one bounded numeric JSON health contract for local
   monitoring. It must remain read-only, fail closed, open no listener, print no secret or
-  host metadata, and perform no automatic remediation.
+  host metadata, and perform no automatic remediation. Aggregate readiness is four-state:
+  `1` healthy, `2` isolated low-risk swap warning, `0` confirmed critical, and `-1` unknown.
+  Unknown, stale, malformed, unsupported, or contradictory state remains strongly alerting;
+  the existing 256 MiB swap threshold is unchanged.
 - Zabbix integration uses the documented root-owned bounded oneshot and sanitized cache.
   The Zabbix account must never gain Docker-group or sudo access, and fixed UserParameters
   must never invoke Docker, Compose, Git, SQL, or project scripts.
