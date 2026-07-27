@@ -109,6 +109,10 @@ python -m venv .venv
   collector's authoritative sink; disabled dashboard dataset/report mounts are not
   applicable. Any enabled or declared filesystem sink must be mounted and writable by
   UID 10001, while inconsistent or uncertain state remains blocking.
+- `python -m trading_bot.startup_diagnostic` is a bounded fail-closed, read-only collector
+  prerequisite diagnostic. It validates required runtime names, PostgreSQL schema
+  compatibility, and dependency construction without connecting a stream, writing events,
+  or exposing runtime values.
 
 ## Suggested next milestones
 
