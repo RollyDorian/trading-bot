@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import Sequence
 from typing import Any
 from uuid import uuid4
@@ -67,6 +68,8 @@ async def test_reconnect_resumes_without_market_event_gaps() -> None:
 
     def collector_factory() -> MarketCollector:
         nonlocal created
+        if created >= len(streams):
+            raise asyncio.CancelledError
         stream = streams[created]
         created += 1
         return MarketCollector(
@@ -88,7 +91,7 @@ async def test_reconnect_resumes_without_market_event_gaps() -> None:
         sleeper=no_delay,
     )
     try:
-        with pytest.raises(ConnectionError, match="stopped unexpectedly"):
+        with pytest.raises(asyncio.CancelledError):
             await supervisor.run()
 
         async with factory() as session:
@@ -115,6 +118,6 @@ async def test_reconnect_resumes_without_market_event_gaps() -> None:
         assert created == 2
         assert all(stream.disconnected for stream in streams)
         assert any(event.event_type == "DEGRADED" for event in lifecycle_events)
-        assert any(event.event_type == "HALTED" for event in lifecycle_events)
+        assert not any(event.event_type == "HALTED" for event in lifecycle_events)
     finally:
         await engine.dispose()

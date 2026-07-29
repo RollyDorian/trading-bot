@@ -254,7 +254,7 @@ def test_orderbook_update_before_snapshot_fails_closed() -> None:
     assert sink.system_events[0]["details"]["reason"] == "missing_snapshot"
 
 
-def test_supervisor_retries_with_backoff_then_halts() -> None:
+def test_supervisor_retries_transport_failures_beyond_alert_threshold() -> None:
     sink = MemorySink()
     delays: list[float] = []
     collectors_created = 0
@@ -270,6 +270,8 @@ def test_supervisor_retries_with_backoff_then_halts() -> None:
 
     async def sleeper(delay: float) -> None:
         delays.append(delay)
+        if len(delays) == 5:
+            raise asyncio.CancelledError
 
     supervisor = CollectorSupervisor(
         collector_factory=collector_factory,
@@ -281,15 +283,18 @@ def test_supervisor_retries_with_backoff_then_halts() -> None:
         jitter=lambda low, high: (low + high) / 2,
     )
 
-    with pytest.raises(ConnectionError, match="stream failed"):
+    with pytest.raises(asyncio.CancelledError):
         asyncio.run(supervisor.run())
 
-    assert collectors_created == 3
-    assert delays == [0.5, 1.0]
-    assert [event["event_type"] for event in sink.system_events] == [
-        "DEGRADED",
-        "DEGRADED",
-        "HALTED",
+    assert collectors_created == 5
+    assert delays == [0.5, 1.0, 1.0, 1.0, 1.0]
+    assert [event["event_type"] for event in sink.system_events] == ["DEGRADED"] * 5
+    assert [event["severity"] for event in sink.system_events] == [
+        "WARNING",
+        "WARNING",
+        "ERROR",
+        "ERROR",
+        "ERROR",
     ]
     details = sink.system_events[0]["details"]
     assert details["event_kind"] == "collection_failure"
@@ -366,6 +371,8 @@ def test_backoff_has_positive_bounds_and_no_busy_loop() -> None:
 
     async def sleeper(delay: float) -> None:
         delays.append(delay)
+        if len(delays) == 6:
+            raise asyncio.CancelledError
 
     supervisor = CollectorSupervisor(
         collector_factory=FailedCollector,
@@ -376,7 +383,27 @@ def test_backoff_has_positive_bounds_and_no_busy_loop() -> None:
         sleeper=sleeper,
         jitter=lambda low, high: low,
     )
-    with pytest.raises(ConnectionError):
+    with pytest.raises(asyncio.CancelledError):
         asyncio.run(supervisor.run())
-    assert len(delays) == 3
+    assert len(delays) == 6
     assert all(1.0 <= delay <= 3.0 for delay in delays)
+
+
+def test_non_transport_failure_remains_fatal() -> None:
+    sink = MemorySink()
+
+    class FailedCollector:
+        async def run(self) -> None:
+            raise RuntimeError("database write failed")
+
+    supervisor = CollectorSupervisor(
+        collector_factory=FailedCollector,
+        sink=sink,
+        max_attempts=3,
+        initial_delay=1.0,
+        max_delay=3.0,
+    )
+    with pytest.raises(RuntimeError, match="database write failed"):
+        asyncio.run(supervisor.run())
+    assert [event["event_type"] for event in sink.system_events] == ["HALTED"]
+    assert sink.system_events[0]["severity"] == "CRITICAL"
