@@ -3,7 +3,7 @@ import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 GIB = 1024**3
 MIB = 1024**2
@@ -52,10 +52,12 @@ def _windows_rss_bytes() -> int:
 
     counters = ProcessMemoryCounters()
     counters.cb = ctypes.sizeof(counters)
-    get_current_process = ctypes.windll.kernel32.GetCurrentProcess
+    ctypes_dynamic: Any = ctypes
+    windll = ctypes_dynamic.windll
+    get_current_process = windll.kernel32.GetCurrentProcess
     get_current_process.argtypes = []
     get_current_process.restype = wintypes.HANDLE
-    get_process_memory_info = ctypes.windll.psapi.GetProcessMemoryInfo
+    get_process_memory_info = windll.psapi.GetProcessMemoryInfo
     get_process_memory_info.argtypes = [
         wintypes.HANDLE,
         ctypes.POINTER(ProcessMemoryCounters),
