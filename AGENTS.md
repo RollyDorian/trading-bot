@@ -29,8 +29,10 @@ This repository is a safety-first research service for the Hibachi
   `funding_rate_estimation` contracts. Do not enable its migration, backfill, or
   live tail in production: the 2.5% pilot projects insufficient disk headroom.
 - Normalized provenance stores `raw_event_id` without a restrictive RAW foreign
-  key. Retention remains manual/unimplemented; never expand historical books to
-  one PostgreSQL row per level.
+  key. The approved lifecycle keeps a short RAW PostgreSQL hot buffer and writes
+  normalized history directly to verified external Parquet; persistent
+  normalized PostgreSQL history remains disabled. Production retention is
+  dry-run-only and requires separate approval.
 - Record connectivity, validation, desync, and storage failures in
   `system_events` when adding operational flows.
 - The SDK's WebSocket client does not close its `aiohttp` executor by itself;
@@ -58,6 +60,10 @@ python -m venv .venv
 - `hibachi-bot normalize` is separate from collection, defaults to one 100-row
   batch, and requires an explicit capacity path. Its 3 GiB disk and 160 MiB RSS
   hard stops must not be lowered.
+- `hibachi-archive` is the bounded lifecycle interface. Filesystem storage is
+  development-only; production retention requires verified S3-compatible
+  external storage. Its 4/3 GiB disk and 128/160 MiB RSS pause/stop gates must
+  not be lowered. No production delete subcommand or automatic schedule exists.
 - The default database URL is development-only. Replace it locally through
   `.env`; never commit local credentials.
 - Collector, exporter, dashboard, and normal migrations use the explicit `research`
