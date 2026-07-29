@@ -26,3 +26,17 @@ Downgrade removes only the four envelope columns and therefore discards v2
 envelope metadata. It does not rewrite RAW payloads. A production downgrade
 requires a separate reviewed rollback decision; offline SQL generation or an
 isolated test-database downgrade does not authorize production use.
+
+Before a future production rollout, run the read-only aggregate preflight from
+the protected deployment environment:
+
+```sh
+scripts/raw_v2_preflight.sh
+```
+
+It requires the same `HIBACHI_DEPLOY_DIR` and `HIBACHI_RUNTIME_ENV` names as the
+operations interface. It verifies PostgreSQL and collector health and reports
+only PostgreSQL major/version number, exact bounded RAW row count, heap/index
+sizes, active transactions, relation/waiting locks, and free disk. The count has
+a five-second statement timeout. The script never selects payloads or prints
+runtime configuration, connection strings, query text, or container identifiers.
