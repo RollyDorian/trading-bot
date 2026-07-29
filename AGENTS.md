@@ -19,6 +19,9 @@ This repository is a safety-first research service for the Hibachi
   WebSocket collection in this milestone.
 - The market stream must fail closed: unexpected stream termination or a DB
   write failure must stop collection rather than drop events silently.
+- Classified upstream transport failures reconnect indefinitely with bounded
+  backoff and visible degraded evidence. Database, unknown, and programming
+  failures remain fatal; cancellation remains immediate and clean.
 - Keep raw payloads append-only in `market_events`; preserve source, topic, symbol,
   exchange/receipt timestamps, latency, connection ID, local/exchange sequence, and
   RAW envelope schema version.

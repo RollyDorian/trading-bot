@@ -344,7 +344,7 @@ def sanitize_error_message(error: BaseException, *, limit: int = 500) -> str:
 
 
 class CollectorSupervisor:
-    """Restarts failed collectors with bounded exponential backoff."""
+    """Reconnects transport failures indefinitely with bounded backoff."""
 
     def __init__(
         self,
@@ -358,6 +358,7 @@ class CollectorSupervisor:
         jitter: Jitter = random.uniform,
         clock: Clock = time.monotonic,
         jitter_ratio: float = 0.2,
+        stable_reset_seconds: float = 300.0,
     ) -> None:
         self._collector_factory = collector_factory
         self._sink = sink
@@ -368,9 +369,11 @@ class CollectorSupervisor:
         self._jitter = jitter
         self._clock = clock
         self._jitter_ratio = jitter_ratio
+        self._stable_reset_seconds = stable_reset_seconds
 
     def _retry_delay(self, attempt: int) -> float:
-        base = min(self._initial_delay * (2 ** (attempt - 1)), self._max_delay)
+        exponent = min(max(0, attempt - 1), 30)
+        base = min(self._initial_delay * (2**exponent), self._max_delay)
         spread = base * self._jitter_ratio
         return min(
             self._max_delay,
@@ -409,21 +412,26 @@ class CollectorSupervisor:
             except asyncio.CancelledError:
                 raise
             except Exception as error:
-                attempt += 1
-                if attempt >= self._max_attempts:
+                if not isinstance(error, (ConnectionError, TimeoutError, OSError)):
                     await self._sink.append_system_event(
                         severity="CRITICAL",
                         event_type="HALTED",
                         component="collector_supervisor",
-                        message="Market collection halted after repeated failures",
+                        message="Market collection halted after a non-transport failure",
                         details=self._failure_details(
-                            error, attempt=attempt, started_at=started_at, delay=None
+                            error,
+                            attempt=max(1, attempt + 1),
+                            started_at=started_at,
+                            delay=None,
                         ),
                     )
                     raise
+                if self._clock() - started_at >= self._stable_reset_seconds:
+                    attempt = 0
+                attempt += 1
                 delay = self._retry_delay(attempt)
                 await self._sink.append_system_event(
-                    severity="WARNING",
+                    severity="ERROR" if attempt >= self._max_attempts else "WARNING",
                     event_type="DEGRADED",
                     component="collector_supervisor",
                     message="Market collection failed; reconnect scheduled",
