@@ -18,7 +18,18 @@ from trading_bot.storage.repository import EventRepository
 REQUIRED_ENVIRONMENT_NAMES = ("BOT_MODE", "DATABASE_ROLE", "DATABASE_URL")
 REQUIRED_TABLE_COLUMNS: Mapping[str, frozenset[str]] = {
     "market_events": frozenset(
-        {"id", "received_at", "source", "event_type", "symbol", "payload"}
+        {
+            "id",
+            "received_at",
+            "source",
+            "event_type",
+            "symbol",
+            "payload",
+            "connection_id",
+            "local_sequence",
+            "exchange_sequence",
+            "schema_version",
+        }
     ),
     "system_events": frozenset(
         {"id", "occurred_at", "severity", "event_type", "component", "message", "details"}

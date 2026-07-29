@@ -83,6 +83,10 @@ def test_collect_stream_writes_raw_event_to_postgres() -> None:
             assert event.event_type == "trades"
             assert event.symbol == "ETH/USDT-P"
             assert event.sequence == 901
+            assert event.exchange_sequence == 901
+            assert event.local_sequence == 1
+            assert event.connection_id is not None
+            assert event.schema_version == 2
             assert event.payload == payload
             assert event.latency_ms is not None
             assert event.latency_ms < 5_000

@@ -2,6 +2,7 @@ import asyncio
 import random
 import re
 import time
+import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
@@ -161,6 +162,8 @@ class MarketCollector:
         self._sink = sink
         self._last_sequences: dict[str, int] = {}
         self._orderbook_snapshot_seen = False
+        self._connection_id = str(uuid.uuid4())
+        self._local_sequence = 0
 
     @staticmethod
     def _is_snapshot(payload: dict[str, Any]) -> bool:
@@ -222,6 +225,8 @@ class MarketCollector:
     async def _handle_message(self, payload: dict[str, Any]) -> None:
         received_at = datetime.now(UTC)
         exchange_at = extract_exchange_time(payload)
+        exchange_sequence = extract_sequence(payload)
+        self._local_sequence += 1
         latency_ms = None
         if exchange_at is not None:
             latency_ms = max(0.0, (received_at - exchange_at).total_seconds() * 1000)
@@ -232,9 +237,13 @@ class MarketCollector:
                 source="hibachi_ws",
                 event_type=str(payload.get("topic", "unknown")),
                 symbol=str(payload.get("symbol", self._symbol)),
-                sequence=extract_sequence(payload),
+                sequence=exchange_sequence,
                 latency_ms=latency_ms,
                 payload=payload,
+                connection_id=self._connection_id,
+                local_sequence=self._local_sequence,
+                exchange_sequence=exchange_sequence,
+                schema_version=2,
             )
         )
         await self._validate_sequence(payload)

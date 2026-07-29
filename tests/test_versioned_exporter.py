@@ -25,6 +25,10 @@ def _event(event_id: int) -> MarketEvent:
         event_type="ask_bid_price",
         symbol="ETH/USDT-P",
         sequence=event_id,
+        connection_id="11111111-1111-1111-1111-111111111111",
+        local_sequence=event_id,
+        exchange_sequence=event_id,
+        schema_version=2,
         latency_ms=1.0,
         payload={"topic": "ask_bid_price", "bidPrice": 100, "askPrice": 102},
     )
@@ -56,4 +60,32 @@ def test_versioned_export_layout_and_metadata(tmp_path: Path) -> None:
     assert manifest["version"] == "v1_20260718"
     assert manifest["exchange"] == "hibachi"
     assert manifest["row_count"] == 2
-    assert pq.read_table(parquet_path).column("id").to_pylist() == [1, 2]
+    table = pq.read_table(parquet_path)
+    assert table.column("id").to_pylist() == [1, 2]
+    assert table.column("raw_event_id").to_pylist() == [1, 2]
+    assert table.column("connection_id").to_pylist() == [
+        "11111111-1111-1111-1111-111111111111",
+        "11111111-1111-1111-1111-111111111111",
+    ]
+    assert table.column("local_sequence").to_pylist() == [1, 2]
+    assert table.column("exchange_sequence").to_pylist() == [1, 2]
+    assert table.column("raw_schema_version").to_pylist() == [2, 2]
+
+
+def test_legacy_event_exports_as_raw_v1(tmp_path: Path) -> None:
+    event = _event(1)
+    event.connection_id = None
+    event.local_sequence = None
+    event.exchange_sequence = None
+    event.schema_version = 1
+    dataset_dir = write_versioned_export(
+        events=[event],
+        output_root=tmp_path,
+        version="legacy",
+        symbol="ETH/USDT-P",
+        start=START,
+        end=START + timedelta(minutes=1),
+    )
+    table = pq.read_table(dataset_dir / "ETH-USDT-P.parquet")
+    assert table.column("raw_schema_version").to_pylist() == [1]
+    assert table.column("connection_id").to_pylist() == [None]

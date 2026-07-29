@@ -47,11 +47,16 @@ def _table(events: list[MarketEvent]) -> pa.Table:
     schema = pa.schema(
         [
             ("id", pa.int64()),
+            ("raw_event_id", pa.int64()),
             ("source", pa.string()),
             ("topic", pa.string()),
             ("symbol", pa.string()),
             ("exchange_at", pa.timestamp("us", tz="UTC")),
             ("sequence", pa.int64()),
+            ("connection_id", pa.string()),
+            ("local_sequence", pa.int64()),
+            ("exchange_sequence", pa.int64()),
+            ("raw_schema_version", pa.int16()),
             ("received_at", pa.timestamp("us", tz="UTC")),
             ("latency_ms", pa.float64()),
             ("payload_json", pa.string()),
@@ -61,11 +66,16 @@ def _table(events: list[MarketEvent]) -> pa.Table:
         [
             {
                 "id": event.id,
+                "raw_event_id": event.id,
                 "source": event.source,
                 "topic": event.event_type,
                 "symbol": event.symbol,
                 "exchange_at": event.exchange_at,
                 "sequence": event.sequence,
+                "connection_id": event.connection_id,
+                "local_sequence": event.local_sequence,
+                "exchange_sequence": event.exchange_sequence,
+                "raw_schema_version": event.schema_version or 1,
                 "received_at": event.received_at,
                 "latency_ms": event.latency_ms,
                 "payload_json": json.dumps(
@@ -100,7 +110,7 @@ def write_versioned_export(
     actual_end = end or (ordered[-1].received_at if ordered else None)
     manifest: dict[str, Any] = {
         "version": version,
-        "schema_version": 1,
+        "schema_version": 2,
         "symbol": symbol,
         "exchange": "hibachi",
         "start_utc": actual_start.astimezone(UTC).isoformat() if actual_start else None,

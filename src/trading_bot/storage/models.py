@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, DateTime, Float, Index, String, Text, func
+from sqlalchemy import BigInteger, DateTime, Float, Index, SmallInteger, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import JSON
@@ -32,6 +32,12 @@ class MarketEvent(Base):
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     symbol: Mapped[str] = mapped_column(String(32), nullable=False)
     sequence: Mapped[int | None] = mapped_column(BigInteger)
+    connection_id: Mapped[str | None] = mapped_column(String(36))
+    local_sequence: Mapped[int | None] = mapped_column(BigInteger)
+    exchange_sequence: Mapped[int | None] = mapped_column(BigInteger)
+    schema_version: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, default=1, server_default="1"
+    )
     latency_ms: Mapped[float | None] = mapped_column(Float)
     payload: Mapped[dict[str, Any]] = mapped_column(json_type, nullable=False)
 
