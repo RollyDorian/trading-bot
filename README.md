@@ -8,6 +8,8 @@ Hibachi `ETH/USDT-P` perpetual contract.
 The repository collects public data and exports immutable, checksummed datasets for
 deterministic offline research. It contains no order placement, cancellation, account,
 transfer, withdrawal, leverage, or private API commands. `BOT_MODE` remains `collect`.
+The phased RAW/NORMALIZED/RESEARCH target contract is documented in
+[`docs/data_architecture.md`](docs/data_architecture.md).
 
 ## Offline baseline research
 
