@@ -13,8 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from trading_bot.storage.models import MarketEvent
 
-SCHEMA_VERSION = 1
-SUPPORTED_SCHEMA_VERSIONS = {SCHEMA_VERSION}
+SCHEMA_VERSION = 2
+SUPPORTED_SCHEMA_VERSIONS = {1, SCHEMA_VERSION}
 DATASET_FILES = {"events.parquet", "candles_1s.parquet", "README.md"}
 
 
@@ -169,8 +169,13 @@ def _write_events(path: Path, events: list[MarketEvent]) -> None:
             ("source", pa.string()),
             ("topic", pa.string()),
             ("symbol", pa.string()),
+            ("raw_event_id", pa.int64()),
             ("exchange_at", pa.timestamp("us", tz="UTC")),
             ("sequence", pa.int64()),
+            ("connection_id", pa.string()),
+            ("local_sequence", pa.int64()),
+            ("exchange_sequence", pa.int64()),
+            ("raw_schema_version", pa.int16()),
             ("received_at", pa.timestamp("us", tz="UTC")),
             ("latency_ms", pa.float64()),
             ("payload_json", pa.string()),
@@ -181,8 +186,13 @@ def _write_events(path: Path, events: list[MarketEvent]) -> None:
             "source": event.source,
             "topic": event.event_type,
             "symbol": event.symbol,
+            "raw_event_id": event.id,
             "exchange_at": event.exchange_at,
             "sequence": event.sequence,
+            "connection_id": event.connection_id,
+            "local_sequence": event.local_sequence,
+            "exchange_sequence": event.exchange_sequence,
+            "raw_schema_version": event.schema_version or 1,
             "received_at": event.received_at,
             "latency_ms": event.latency_ms,
             "payload_json": json.dumps(

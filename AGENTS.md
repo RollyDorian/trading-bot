@@ -19,8 +19,11 @@ This repository is a safety-first research service for the Hibachi
   WebSocket collection in this milestone.
 - The market stream must fail closed: unexpected stream termination or a DB
   write failure must stop collection rather than drop events silently.
-- Keep raw payloads append-only in `market_events`; preserve normalized source,
-  topic, symbol, exchange timestamp, sequence, receipt timestamp, and latency.
+- Keep raw payloads append-only in `market_events`; preserve source, topic, symbol,
+  exchange/receipt timestamps, latency, connection ID, local/exchange sequence, and
+  RAW envelope schema version.
+- Existing RAW schema-version-1 rows and payloads must never be rewritten. New
+  WebSocket rows use schema version 2; exports retain both legacy and v2 envelope fields.
 - Record connectivity, validation, desync, and storage failures in
   `system_events` when adding operational flows.
 - The SDK's WebSocket client does not close its `aiohttp` executor by itself;

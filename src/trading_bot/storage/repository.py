@@ -18,6 +18,10 @@ class MarketEventInput:
     sequence: int | None
     latency_ms: float | None
     payload: dict[str, Any]
+    connection_id: str | None = None
+    local_sequence: int | None = None
+    exchange_sequence: int | None = None
+    schema_version: int = 1
 
 
 class EventRepository:

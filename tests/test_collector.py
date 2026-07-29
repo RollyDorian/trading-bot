@@ -100,6 +100,10 @@ def test_collector_persists_raw_message_and_fails_on_closed_stream() -> None:
     assert len(sink.events) == 1
     assert sink.events[0].payload == payload
     assert sink.events[0].sequence == 9
+    assert sink.events[0].exchange_sequence == 9
+    assert sink.events[0].local_sequence == 1
+    assert sink.events[0].connection_id is not None
+    assert sink.events[0].schema_version == 2
 
 
 def test_collector_preserves_receipt_order_and_topic_exchange_times() -> None:
@@ -144,6 +148,8 @@ def test_collector_preserves_receipt_order_and_topic_exchange_times() -> None:
     assert sink.events[1].exchange_at is None
     assert sink.events[0].latency_ms is not None
     assert sink.events[0].latency_ms >= 0
+    assert [event.local_sequence for event in sink.events] == [1, 2]
+    assert sink.events[0].connection_id == sink.events[1].connection_id
 
 
 def test_collector_disconnects_after_connect_failure() -> None:
