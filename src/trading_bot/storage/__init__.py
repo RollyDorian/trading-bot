@@ -6,13 +6,29 @@ from trading_bot.storage.maintenance import (
     ReplayFilter,
     RetentionResult,
 )
-from trading_bot.storage.models import Base, MarketEvent, SystemEvent
+from trading_bot.storage.models import (
+    Base,
+    BestQuote,
+    FundingEstimate,
+    MarketEvent,
+    NormalizationError,
+    NormalizerCheckpoint,
+    OrderBookEvent,
+    ReferencePrice,
+    SystemEvent,
+)
 
 __all__ = [
     "Base",
+    "BestQuote",
     "DailyQualityMetric",
     "DataMaintenance",
+    "FundingEstimate",
     "MarketEvent",
+    "NormalizationError",
+    "NormalizerCheckpoint",
+    "OrderBookEvent",
+    "ReferencePrice",
     "ReplayFilter",
     "RetentionResult",
     "SystemEvent",
