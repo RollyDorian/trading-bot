@@ -3,6 +3,11 @@
 Safety-first Python service for researching short-horizon strategies on the
 Hibachi `ETH/USDT-P` perpetual contract.
 
+The review-only normalized-data core is documented in
+[`docs/normalization.md`](docs/normalization.md). Its real-data capacity pilot
+blocks production activation on the current disk budget; collection remains
+RAW-only.
+
 ## Current milestone
 
 The repository collects public data and exports immutable, checksummed datasets for

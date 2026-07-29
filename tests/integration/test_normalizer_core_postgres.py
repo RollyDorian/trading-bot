@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy import func, select, text
 
 from tests.integration.database import require_test_database_url
+from trading_bot.normalization.pilot import _wal_delta, _wal_lsn
 from trading_bot.normalization.resources import GIB, MIB
 from trading_bot.normalization.runner import (
     ConcurrentNormalizerError,
@@ -204,6 +205,20 @@ def test_normalized_tables_do_not_reference_raw_with_foreign_keys() -> None:
                     )
                 )
             assert count == 0
+        finally:
+            await engine.dispose()
+
+    asyncio.run(check())
+
+
+def test_pilot_wal_measurement_uses_a_typed_lsn() -> None:
+    async def check() -> None:
+        engine = create_engine(require_test_database_url())
+        factory = create_session_factory(engine)
+        try:
+            async with factory() as session:
+                start = await _wal_lsn(session)
+                assert await _wal_delta(session, start) >= 0
         finally:
             await engine.dispose()
 
