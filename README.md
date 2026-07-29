@@ -15,8 +15,10 @@ deterministic offline research. It contains no order placement, cancellation, ac
 transfer, withdrawal, leverage, or private API commands. `BOT_MODE` remains `collect`.
 The phased RAW/NORMALIZED/RESEARCH target contract is documented in
 [`docs/data_architecture.md`](docs/data_architecture.md).
-Collector transport-reconnect and fatal-error boundaries are documented in
-[`docs/collector_resilience.md`](docs/collector_resilience.md).
+
+The verified external archive, capacity planner, and dry-run retention gates
+are documented in [`docs/storage_lifecycle.md`](docs/storage_lifecycle.md).
+
 
 ## Offline baseline research
 

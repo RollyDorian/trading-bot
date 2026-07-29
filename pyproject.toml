@@ -31,6 +31,7 @@ dev = [
 
 [project.scripts]
 hibachi-bot = "trading_bot.cli:main"
+hibachi-archive = "trading_bot.archive_cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/trading_bot"]

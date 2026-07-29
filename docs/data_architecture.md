@@ -114,3 +114,9 @@ handling. Shared mutable response buffers are prohibited.
 
 No phase enables PAPER/LIVE, order placement, private account access, automatic
 retention, or full production backfill.
+
+The reviewed lifecycle decision is RAW PostgreSQL as a short hot buffer plus
+direct normalized Parquet in durable external storage. Persistent normalized
+PostgreSQL history remains disabled. Daily RAW and typed Parquet partitions,
+external checkpoints, verified manifests, and dry-run-only retention are
+defined in `docs/storage_lifecycle.md`.
