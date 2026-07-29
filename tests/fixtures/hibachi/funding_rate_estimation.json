@@ -1,0 +1,10 @@
+{
+  "topic": "funding_rate_estimation",
+  "symbol": "ETH/USDT-P",
+  "data": {
+    "fundingRateEstimation": {
+      "estimatedFundingRate": "-0.000125",
+      "nextFundingTimestamp": 1785283200
+    }
+  }
+}
