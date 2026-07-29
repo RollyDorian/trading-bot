@@ -1,0 +1,20 @@
+{
+  "topic": "orderbook",
+  "symbol": "ETH/USDT-P",
+  "messageType": "Update",
+  "depth": 20,
+  "granularity": "0.01",
+  "timestamp_ms": 1785283202000,
+  "data": {
+    "bid": {
+      "startPrice": "1999.50",
+      "endPrice": "1999.50",
+      "levels": []
+    },
+    "ask": {
+      "startPrice": "2000.00",
+      "endPrice": "2000.00",
+      "levels": []
+    }
+  }
+}

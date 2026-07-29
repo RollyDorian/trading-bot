@@ -13,6 +13,7 @@ import structlog
 from trading_bot.collector import build_supervisor
 from trading_bot.config import Settings
 from trading_bot.exchange import HibachiPublicExchange
+from trading_bot.normalization import RawEventNormalizer
 from trading_bot.paper import PaperEngine
 from trading_bot.research.admission import (
     AdmissionInputError,
@@ -154,6 +155,26 @@ def _parse_admit_command(arguments: list[str]) -> argparse.Namespace:
     return args
 
 
+def _parse_normalize_command(arguments: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="hibachi-bot normalize")
+    parser.add_argument("--consumer", required=True)
+    parser.add_argument("--batch-size", type=int, default=100)
+    parser.add_argument("--max-batches", type=int, default=1)
+    parser.add_argument("--follow", action="store_true")
+    parser.add_argument("--poll-seconds", type=float, default=1.0)
+    parser.add_argument("--capacity-path", type=Path, required=True)
+    args = parser.parse_args(arguments)
+    if not 1 <= args.batch_size <= 1000:
+        parser.error("--batch-size must be between 1 and 1000")
+    if not 1 <= args.max_batches <= 100:
+        parser.error("--max-batches must be between 1 and 100")
+    if not 0.1 <= args.poll_seconds <= 60:
+        parser.error("--poll-seconds must be between 0.1 and 60")
+    if args.follow and args.max_batches != 1:
+        parser.error("--max-batches cannot be combined with --follow")
+    return args
+
+
 def _admission_summary(report: dict[str, Any]) -> str:
     failed = report["failed_criteria"]
     result = "PASS" if report["admitted"] else "FAIL"
@@ -175,6 +196,25 @@ async def _versioned_export(args: argparse.Namespace, settings: Settings) -> Pat
             start=args.start,
             end=args.end,
         )
+    finally:
+        await engine.dispose()
+
+
+async def _normalize(args: argparse.Namespace, settings: Settings) -> None:
+    engine = create_engine(settings.database_url)
+    normalizer = RawEventNormalizer(
+        create_session_factory(engine),
+        consumer=args.consumer,
+        batch_size=args.batch_size,
+        capacity_path=args.capacity_path,
+    )
+    try:
+        if args.follow:
+            await normalizer.follow(poll_seconds=args.poll_seconds)
+            return
+        results = await normalizer.backfill(max_batches=args.max_batches)
+        for result in results:
+            print(json.dumps(asdict(result), sort_keys=True))
     finally:
         await engine.dispose()
 
@@ -320,6 +360,10 @@ async def _maintenance(args: argparse.Namespace, settings: Settings) -> None:
 
 
 def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] == "normalize":
+        normalize_args = _parse_normalize_command(sys.argv[2:])
+        asyncio.run(_normalize(normalize_args, Settings()))
+        return
     if len(sys.argv) > 1 and sys.argv[1] == "export-dataset":
         export_args = _parse_export_command(sys.argv[2:])
         print(asyncio.run(_versioned_export(export_args, Settings())))

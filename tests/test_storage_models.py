@@ -3,7 +3,16 @@ from datetime import UTC, datetime
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
 
-from trading_bot.storage.models import MarketEvent, SystemEvent
+from trading_bot.storage.models import (
+    BestQuote,
+    FundingEstimate,
+    MarketEvent,
+    NormalizationError,
+    NormalizerCheckpoint,
+    OrderBookEvent,
+    ReferencePrice,
+    SystemEvent,
+)
 from trading_bot.storage.repository import MarketEventInput
 
 
@@ -50,3 +59,27 @@ def test_legacy_market_event_input_defaults_to_raw_v1() -> None:
     assert event.connection_id is None
     assert event.local_sequence is None
     assert event.exchange_sequence is None
+
+
+def test_normalized_core_uses_separate_schemas_and_complete_provenance() -> None:
+    provenance = {
+        "raw_event_id",
+        "received_at",
+        "available_at",
+        "exchange_at",
+        "symbol",
+        "source",
+        "connection_id",
+        "local_sequence",
+        "exchange_sequence",
+        "raw_schema_version",
+        "pipeline_version",
+        "data_quality",
+    }
+    for model in (BestQuote, ReferencePrice, FundingEstimate, OrderBookEvent):
+        assert model.__table__.schema == "normalized"
+        assert provenance <= set(model.__table__.columns.keys())
+        assert not model.__table__.foreign_keys
+    assert NormalizerCheckpoint.__table__.schema == "pipeline"
+    assert NormalizationError.__table__.schema == "pipeline"
+    assert not NormalizationError.__table__.foreign_keys

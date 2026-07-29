@@ -1,0 +1,7 @@
+{
+  "topic": "spot_price",
+  "symbol": "ETH/USDT-P",
+  "data": {
+    "spotPrice": "1999.25"
+  }
+}

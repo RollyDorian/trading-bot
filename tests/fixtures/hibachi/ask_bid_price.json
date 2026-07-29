@@ -1,0 +1,10 @@
+{
+  "topic": "ask_bid_price",
+  "symbol": "ETH/USDT-P",
+  "data": {
+    "bidPrice": "1999.50",
+    "bidSize": "1.25",
+    "askPrice": "2000.00",
+    "askSize": "2.50"
+  }
+}

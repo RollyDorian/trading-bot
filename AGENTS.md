@@ -24,6 +24,13 @@ This repository is a safety-first research service for the Hibachi
   RAW envelope schema version.
 - Existing RAW schema-version-1 rows and payloads must never be rewritten. New
   WebSocket rows use schema version 2; exports retain both legacy and v2 envelope fields.
+- The normalized-data core is review-only and supports only captured public
+  `orderbook`, `ask_bid_price`, `mark_price`, `spot_price`, and
+  `funding_rate_estimation` contracts. Do not enable its migration, backfill, or
+  live tail in production: the 2.5% pilot projects insufficient disk headroom.
+- Normalized provenance stores `raw_event_id` without a restrictive RAW foreign
+  key. Retention remains manual/unimplemented; never expand historical books to
+  one PostgreSQL row per level.
 - Record connectivity, validation, desync, and storage failures in
   `system_events` when adding operational flows.
 - The SDK's WebSocket client does not close its `aiohttp` executor by itself;
@@ -48,6 +55,9 @@ python -m venv .venv
 - `hibachi-bot` validates public contract metadata and exits.
 - `hibachi-bot --stream` is the explicit continuous collection command; do not
   launch it against a database unless migrations have been applied.
+- `hibachi-bot normalize` is separate from collection, defaults to one 100-row
+  batch, and requires an explicit capacity path. Its 3 GiB disk and 160 MiB RSS
+  hard stops must not be lowered.
 - The default database URL is development-only. Replace it locally through
   `.env`; never commit local credentials.
 - Collector, exporter, dashboard, and normal migrations use the explicit `research`

@@ -40,9 +40,14 @@ unimplemented until a documented unauthenticated source exists.
 
 ## NORMALIZED contract
 
-Typed channels are physically separate: `trades`, `best_quotes`,
-`reference_prices`, `funding_estimates`, `funding_rates`, `open_interest`,
-`orderbook_events`, `orderbook_levels`, and `instrument_versions`.
+The implemented core is deliberately limited to payloads confirmed in bounded
+RAW samples: `normalized.best_quotes`, `normalized.reference_prices`,
+`normalized.funding_estimates`, and `normalized.orderbook_events`. Trades,
+actual funding, open interest, exchange info, and klines remain unsupported
+until their isolated ingestion source and sanitized fixtures exist.
+
+Orderbook events use one compact validated JSONB change set per RAW event. The
+normalizer does not materialize one PostgreSQL row per level.
 
 Every typed row identifies its `raw_event_id` and normalizer version. Unique
 constraints make retry idempotent. A batch, validation errors, and its checkpoint
@@ -79,6 +84,14 @@ closed.
 
 A 1–5% copied-RAW pilot must measure source rows, produced rows, heap/index
 growth, WAL estimate, peak RSS, and duration before full backfill approval.
+
+The first contiguous pilot copied 62,931 RAW rows from the latest snapshot
+boundary into isolated PostgreSQL 16. It demonstrated parser and reconstruction
+correctness, but estimated roughly 493 MB/day of normalized heap plus indexes.
+With the observed constrained-host free space, that is only about 2.6 days above
+the existing 3 GiB hard floor. Therefore production migration, live tail, and
+historical backfill remain unapproved. Capacity must be added or a compact
+streaming Parquet normalized layer must be reviewed before activation.
 
 ## REST isolation
 
