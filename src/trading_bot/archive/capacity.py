@@ -3,6 +3,8 @@ from math import floor
 
 MIB = 1024**2
 GIB = 1024**3
+MIN_RAW_HOT_DAYS = 3
+DEGRADED_RAW_HOT_DAYS = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -14,8 +16,9 @@ class CapacityInputs:
     parquet_mib_per_day: float = 0.0
     wal_mib_per_day: float = 0.0
     measured_days: float = 0.0
-    requested_raw_hot_days: int = 2
+    requested_raw_hot_days: int = MIN_RAW_HOT_DAYS
     requested_normalized_hot_days: int = 0
+    allow_degraded_two_day: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,7 +43,14 @@ def plan_capacity(inputs: CapacityInputs) -> CapacityPlan:
     )
     if inputs.disk_free_bytes < 0 or any(value < 0 for value in values):
         raise ValueError("capacity inputs must be non-negative")
-    if inputs.requested_raw_hot_days < 1 or inputs.requested_normalized_hot_days < 0:
+    degraded_requested = (
+        inputs.requested_raw_hot_days == DEGRADED_RAW_HOT_DAYS
+        and inputs.allow_degraded_two_day
+    )
+    if (
+        inputs.requested_raw_hot_days < MIN_RAW_HOT_DAYS
+        and not degraded_requested
+    ) or inputs.requested_normalized_hot_days < 0:
         raise ValueError("hot-window days are invalid")
     raw_daily = inputs.raw_mib_per_day * MIB
     normalized_daily = inputs.normalized_mib_per_day * MIB
@@ -56,15 +66,19 @@ def plan_capacity(inputs: CapacityInputs) -> CapacityPlan:
     pause_days = max(0, inputs.disk_free_bytes - pause_reserve) / growth if growth > 0 else None
     confidence = "measured" if inputs.measured_days >= 3 else "extrapolated"
     affordable_raw_days = floor(usable / raw_daily) if raw_daily > 0 else 0
-    raw_hot = min(inputs.requested_raw_hot_days, affordable_raw_days)
+    raw_hot = (
+        inputs.requested_raw_hot_days
+        if affordable_raw_days >= inputs.requested_raw_hot_days
+        else 0
+    )
     state = "safe"
     if (
         hot_bytes > usable
-        or raw_hot < 1
+        or raw_hot == 0
         or inputs.disk_free_bytes <= pause_reserve
     ):
         state = "blocked"
-    elif hard_days is not None and hard_days <= 7:
+    elif degraded_requested or (hard_days is not None and hard_days <= 7):
         state = "warning"
     return CapacityPlan(
         state=state,

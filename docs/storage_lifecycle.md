@@ -47,8 +47,9 @@ previous verified manifest's maximum RAW ID through `--initial-raw-event-id`.
 This keeps daily reads on the primary-key path and avoids rescanning historical
 JSONB. Skipping a preceding verified manifest makes the retention gap check fail.
 
-Filesystem storage is development-only. Production retention requires
-S3-compatible external storage. Runtime names are:
+Server-local filesystem storage is development/canary-only. Durable external
+storage can be S3-compatible or an owner-protected operator PC. S3 runtime
+names are:
 
 - `ARCHIVE_S3_BUCKET`
 - `ARCHIVE_S3_PREFIX`
@@ -58,6 +59,59 @@ S3-compatible external storage. Runtime names are:
 
 Values remain in the existing protected runtime environment and are never
 printed. The only archive copy must not remain on the VPS.
+
+### Direct PC archive
+
+`pc-export-day` runs on the operator PC. It invokes the system OpenSSH client
+with a reviewed alias, executes a fixed read-only `COPY (SELECT ...)` through
+the existing private deployment channel, and writes bounded Zstandard Parquet
+directly to the PC. PostgreSQL remains unpublished. Database credentials stay
+inside the existing server-local container environment and are neither copied
+to the PC nor printed. The remote side creates no archive file.
+
+```powershell
+hibachi-archive pc-export-day `
+  --start 2026-07-21T00:00:00+00:00 `
+  --end 2026-07-22T00:00:00+00:00 `
+  --symbol ETH/USDT-P `
+  --root <OWNER_ONLY_PC_ARCHIVE_ROOT> `
+  --work-dir <OWNER_ONLY_PC_WORK_DIR> `
+  --capacity-path <LOCAL_CAPACITY_PATH> `
+  --ssh-alias <REVIEWED_ALIAS> `
+  --ssh-config <OPTIONAL_SSH_CONFIG> `
+  --remote-project-dir <DEPLOYMENT_DIRECTORY> `
+  --remote-env-file <PROTECTED_RUNTIME_ENV>
+```
+
+The default PC batch is 1,000 rows, the hard maximum is 5,000, and a
+ten-second inter-batch delay protects the collector by default. Server canary
+runs should also use an explicit measured delay whenever the unpaced pilot
+affects collector health. Each SSH batch sets PostgreSQL
+`default_transaction_read_only=on` and a five-second statement timeout.
+Completed objects and manifests use owner-only modes,
+temporary names, atomic finalize, full read-back, checksums, row counts, RAW-ID
+digests, and deterministic keys. Re-running a verified day performs validation
+without querying or duplicating data. A PC filesystem manifest is external
+retention evidence only while that protected archive remains available and
+verified; it is not redundant until independently backed up.
+
+Daily operator sequence:
+
+1. Confirm collector and PostgreSQL are healthy, VPS free space exceeds the
+   4 GiB pause threshold, and the PC destination is owner-only with sufficient
+   capacity.
+2. Select the oldest closed UTC day. Use RAW ID zero for the first archive and
+   the previous verified manifest maximum for each later day.
+3. Run `pc-export-day` with the default throttle. A health, disk, SSH, timeout,
+   or format failure stops after the last published checkpoint.
+4. Repeat the identical command. Success must report identical object counts,
+   bytes, checksums, row counts, RAW-ID digest, timestamps, and event-type
+   counts without creating duplicate objects.
+5. Copy the PC archive to an independently protected medium before treating it
+   as durable. Keep the manifest with its objects.
+6. Run `retention-plan --hot-raw-days 3` only as a dry run. Review contiguous
+   verified days, PostgreSQL/WAL capacity, and collector health; request
+   separate approval before any production delete.
 
 ## Resource and capacity gates
 
@@ -76,21 +130,23 @@ hibachi-archive capacity \
   --parquet-mib-day <measured> \
   --wal-mib-day <measured> \
   --measured-days <days> \
-  --raw-hot-days 2 \
+  --raw-hot-days 3 \
   --normalized-hot-days 0
 ```
 
-The provisional target is two closed RAW days and zero normalized PostgreSQL
-days. This is a maximum, not permission: the planner may reduce or block it.
-The 3 GiB reserve is immutable. Actual RAW and Parquet daily rates require a
-bounded archive canary before any retention approval.
+The normal target is three closed RAW days and zero normalized PostgreSQL
+days. The planner blocks rather than shortening this window. A two-day window
+is degraded emergency planning only through
+`--allow-degraded-two-day`; it remains a warning and requires separate human
+retention approval. The 3 GiB reserve is immutable. Actual RAW and Parquet
+daily rates require a bounded archive canary before any retention approval.
 
 ## Retention
 
 No automatic deletion, timer, or production delete command is enabled.
 `hibachi-archive retention-plan` is dry-run only. A closed daily range is
 eligible only when its external manifest is verified, its destination is
-S3-compatible, RAW count and identity coverage match, adjacent selected UTC
+external (`s3` or `pc_filesystem`), RAW count and identity coverage match, adjacent selected UTC
 intervals have no gap, and the configured hot window remains.
 
 The library contains a separately guarded bounded executor for synthetic
@@ -98,7 +154,11 @@ integration proof. It requires an exact confirmation token, writes an external
 audit record before and after a transaction, deletes at most 1,000 locked rows,
 and is not exposed through the production CLI. Future production activation
 requires separate review and approval. Large DELETE transactions, cascade
-deletes, partition drops, VACUUM, and automatic retention are prohibited.
+deletes, partition drops, VACUUM FULL, `pg_repack`, and automatic retention are
+prohibited. A future approved delete uses at most 1,000 rows per transaction
+with health pauses. Ordinary DELETE makes PostgreSQL pages reusable but
+normally does not return relation files to the operating system; filesystem
+recovery requires later natural reuse, not a rewrite on the constrained host.
 
 ## Existing 2.5M RAW rows
 
@@ -110,7 +170,8 @@ upgrade are independently approved:
 3. verify every object and manifest from external storage;
 4. run a dry-run retention plan;
 5. perform an isolated bounded canary on synthetic/test data;
-6. request separate approval before any production deletion.
+6. preserve at least three complete hot days and the 3 GiB reserve;
+7. request separate approval before any production deletion.
 
 Legacy v1 rows retain null session/sequence fields and schema version 1.
 Missing trades, open interest, or funding are never synthesized. RAW Parquet,

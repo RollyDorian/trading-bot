@@ -63,10 +63,15 @@ python -m venv .venv
 - `hibachi-bot normalize` is separate from collection, defaults to one 100-row
   batch, and requires an explicit capacity path. Its 3 GiB disk and 160 MiB RSS
   hard stops must not be lowered.
-- `hibachi-archive` is the bounded lifecycle interface. Filesystem storage is
-  development-only; production retention requires verified S3-compatible
-  external storage. Its 4/3 GiB disk and 128/160 MiB RSS pause/stop gates must
-  not be lowered. No production delete subcommand or automatic schedule exists.
+- `hibachi-archive` is the bounded lifecycle interface. Server-local filesystem
+  storage is canary-only. Verified external storage may be S3-compatible or an
+  owner-protected PC filesystem reached by bounded read-only SSH transport; the
+  latter must never stage completed Parquet on the VPS or expose PostgreSQL.
+  Its 4/3 GiB disk and 128/160 MiB RSS pause/stop gates must not be lowered.
+  No production delete subcommand or automatic schedule exists.
+- The normal RAW hot window is at least three days. Two days is degraded
+  emergency planning only and requires an explicit flag, warning, and separate
+  retention approval; the planner must not shorten the window automatically.
 - The default database URL is development-only. Replace it locally through
   `.env`; never commit local credentials.
 - Collector, exporter, dashboard, and normal migrations use the explicit `research`

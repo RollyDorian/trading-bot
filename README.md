@@ -18,6 +18,9 @@ The phased RAW/NORMALIZED/RESEARCH target contract is documented in
 
 The verified external archive, capacity planner, and dry-run retention gates
 are documented in [`docs/storage_lifecycle.md`](docs/storage_lifecycle.md).
+External history can be written to S3-compatible storage or directly to an
+owner-protected operator PC through SSH without publishing PostgreSQL or
+staging completed Parquet on the collector host.
 
 
 ## Offline baseline research

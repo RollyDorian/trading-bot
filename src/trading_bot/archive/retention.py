@@ -11,6 +11,7 @@ from trading_bot.archive.store import ArchiveStore
 from trading_bot.storage.models import MarketEvent
 
 MAX_DELETE_CHUNK = 1000
+VERIFIED_EXTERNAL_DESTINATIONS = frozenset({"s3", "pc_filesystem"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,7 +53,8 @@ def plan_retention(
         end = datetime.fromisoformat(manifest.interval_end_utc)
         if (
             manifest.verification_status != "verified"
-            or manifest.destination != "s3"
+            or manifest.destination not in VERIFIED_EXTERNAL_DESTINATIONS
+            or manifest.dataset_group != "raw_and_normalized"
             or end > cutoff
             or end - start != timedelta(days=1)
         ):
