@@ -18,7 +18,7 @@ from trading_bot.archive.exporter import (
 )
 from trading_bot.archive.manifest import ArchiveManifest, ArchiveObject, raw_id_digest
 from trading_bot.archive.retention import plan_retention
-from trading_bot.archive.store import LocalArchiveStore, S3ArchiveStore
+from trading_bot.archive.store import LocalArchiveStore, PcArchiveStore, S3ArchiveStore
 
 
 def test_capacity_plan_preserves_reserve_and_rejects_unsafe_window() -> None:
@@ -30,11 +30,11 @@ def test_capacity_plan_preserves_reserve_and_rejects_unsafe_window() -> None:
             parquet_mib_per_day=100,
             wal_mib_per_day=100,
             measured_days=4,
-            requested_raw_hot_days=2,
+            requested_raw_hot_days=3,
         )
     )
     assert safe.state == "safe"
-    assert safe.raw_hot_days == 2
+    assert safe.raw_hot_days == 3
     assert safe.normalized_hot_days == 0
     assert safe.confidence == "measured"
     blocked = plan_capacity(
@@ -48,6 +48,24 @@ def test_capacity_plan_preserves_reserve_and_rejects_unsafe_window() -> None:
     assert blocked.state == "blocked"
     assert blocked.raw_hot_days == 0
     assert blocked.confidence == "extrapolated"
+    with pytest.raises(ValueError, match="hot-window"):
+        plan_capacity(
+            CapacityInputs(
+                disk_free_bytes=8 * GIB,
+                requested_raw_hot_days=2,
+            )
+        )
+    degraded = plan_capacity(
+        CapacityInputs(
+            disk_free_bytes=8 * GIB,
+            raw_mib_per_day=100,
+            measured_days=3,
+            requested_raw_hot_days=2,
+            allow_degraded_two_day=True,
+        )
+    )
+    assert degraded.state == "warning"
+    assert degraded.raw_hot_days == 2
 
 
 def test_partition_request_is_one_aligned_utc_day(tmp_path: Path) -> None:
@@ -62,6 +80,8 @@ def test_partition_request_is_one_aligned_utc_day(tmp_path: Path) -> None:
     assert request.batch_size == 5000
     with pytest.raises(ValueError, match="one UTC day"):
         replace(request, end=start + timedelta(hours=1))
+    with pytest.raises(ValueError, match="inter-batch delay"):
+        replace(request, inter_batch_delay_seconds=10.1)
 
 
 def test_rows_preserve_raw_and_separate_normalized_contracts() -> None:
@@ -102,6 +122,12 @@ def test_local_and_s3_adapters_publish_without_partial_objects(tmp_path: Path) -
     assert s3.destination_label == "s3"
     assert s3.read_bytes("manifest.json") == b"verified"
     assert not list(subtree_root.rglob("*.partial"))
+
+    pc = PcArchiveStore(tmp_path / "pc")
+    pc.publish_bytes("manifest.json", b"verified")
+    assert pc.destination_label == "pc_filesystem"
+    assert pc.read_bytes("manifest.json") == b"verified"
+    assert not list((tmp_path / "pc").rglob("*.partial-*"))
 
 
 def _manifest(tmp_path: Path, destination: str = "s3") -> ArchiveManifest:
@@ -176,6 +202,15 @@ def test_retention_plan_requires_external_verified_contiguous_days(tmp_path: Pat
             hot_raw_days=2,
         ).state
         == "nothing_eligible"
+    )
+    pc_external = replace(first, destination="pc_filesystem")
+    assert (
+        plan_retention(
+            [(pc_external, "a" * 64)],
+            now=datetime(2026, 7, 10, tzinfo=UTC),
+            hot_raw_days=3,
+        ).state
+        == "eligible"
     )
 
 

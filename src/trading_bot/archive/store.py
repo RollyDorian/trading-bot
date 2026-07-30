@@ -29,15 +29,40 @@ def _safe_key(key: str) -> PurePosixPath:
 
 
 class LocalArchiveStore:
-    def __init__(self, root: Path) -> None:
+    def __init__(
+        self,
+        root: Path,
+        *,
+        destination_label: str = "filesystem",
+        protected: bool = False,
+    ) -> None:
         self._root = root.resolve()
+        self._destination_label = destination_label
+        self._protected = protected
+        self._root.mkdir(parents=True, exist_ok=True)
+        if self._protected:
+            self._root.chmod(0o700)
 
     @property
     def destination_label(self) -> str:
-        return "filesystem"
+        return self._destination_label
 
     def _path(self, key: str) -> Path:
         return self._root.joinpath(*_safe_key(key).parts)
+
+    def _prepare_parent(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if self._protected:
+            current = path.parent
+            while current != self._root.parent:
+                current.chmod(0o700)
+                if current == self._root:
+                    break
+                current = current.parent
+
+    def _protect_file(self, path: Path) -> None:
+        if self._protected:
+            path.chmod(0o600)
 
     def exists(self, key: str) -> bool:
         return self._path(key).is_file()
@@ -47,26 +72,41 @@ class LocalArchiveStore:
 
     def publish_bytes(self, key: str, value: bytes) -> None:
         path = self._path(key)
-        path.parent.mkdir(parents=True, exist_ok=True)
+        self._prepare_parent(path)
         temporary = path.with_name(f".{path.name}.partial-{os.getpid()}")
         try:
             temporary.write_bytes(value)
+            self._protect_file(temporary)
             os.replace(temporary, path)
+            self._protect_file(path)
         finally:
             temporary.unlink(missing_ok=True)
 
     def publish_file(self, key: str, source: Path) -> None:
         path = self._path(key)
-        path.parent.mkdir(parents=True, exist_ok=True)
+        self._prepare_parent(path)
         temporary = path.with_name(f".{path.name}.partial-{os.getpid()}")
         try:
             shutil.copyfile(source, temporary)
+            self._protect_file(temporary)
             os.replace(temporary, path)
+            self._protect_file(path)
         finally:
             temporary.unlink(missing_ok=True)
 
     def download_file(self, key: str, destination: Path) -> None:
         shutil.copyfile(self._path(key), destination)
+
+
+class PcArchiveStore(LocalArchiveStore):
+    """Owner-protected archive located off the collector host."""
+
+    def __init__(self, root: Path) -> None:
+        super().__init__(
+            root,
+            destination_label="pc_filesystem",
+            protected=True,
+        )
 
 
 class S3ArchiveStore:

@@ -1,6 +1,8 @@
+import asyncio
 import hashlib
 import json
 import tempfile
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -41,6 +43,10 @@ from trading_bot.storage.models import MarketEvent
 
 DEFAULT_ARCHIVE_BATCH_SIZE = 5000
 MAX_ARCHIVE_BATCH_SIZE = 10000
+ArchiveBatchReader = Callable[
+    ["ArchiveRequest", int],
+    Awaitable[list[MarketEvent]],
+]
 SUPPORTED_EVENT_TYPES = frozenset(
     {
         "ask_bid_price",
@@ -61,6 +67,7 @@ class ArchiveRequest:
     capacity_path: Path
     batch_size: int = DEFAULT_ARCHIVE_BATCH_SIZE
     initial_raw_event_id: int = 0
+    inter_batch_delay_seconds: float = 0.0
 
     def __post_init__(self) -> None:
         if self.start.tzinfo is None or self.end.tzinfo is None:
@@ -77,6 +84,8 @@ class ArchiveRequest:
             raise ValueError(f"archive batch size must be between 1 and {MAX_ARCHIVE_BATCH_SIZE}")
         if self.initial_raw_event_id < 0:
             raise ValueError("initial RAW event ID must be non-negative")
+        if not 0 <= self.inter_batch_delay_seconds <= 10:
+            raise ValueError("archive inter-batch delay must be between 0 and 10 seconds")
 
 
 def _symbol_slug(symbol: str) -> str:
@@ -221,13 +230,17 @@ def _write_chunk(
 class ArchiveExporter:
     def __init__(
         self,
-        session_factory: async_sessionmaker[AsyncSession],
+        session_factory: async_sessionmaker[AsyncSession] | None,
         store: ArchiveStore,
         *,
+        batch_reader: ArchiveBatchReader | None = None,
         resource_probe: ResourceProbe | None = None,
         resource_limits: ResourceLimits | None = None,
     ) -> None:
+        if session_factory is None and batch_reader is None:
+            raise ValueError("archive source is required")
         self._factory = session_factory
+        self._batch_reader = batch_reader
         self._store = store
         self._probe = resource_probe or SystemResourceProbe()
         self._limits = resource_limits or ResourceLimits(
@@ -279,6 +292,8 @@ class ArchiveExporter:
                 objects=tuple(objects),
             )
             self._store.publish_bytes(_checkpoint_key(request), checkpoint.to_bytes())
+            if request.inter_batch_delay_seconds:
+                await asyncio.sleep(request.inter_batch_delay_seconds)
         raw_objects = [item for item in objects if item.dataset == "raw"]
         if not raw_objects:
             raise RuntimeError("archive interval is empty")
@@ -323,6 +338,10 @@ class ArchiveExporter:
         request: ArchiveRequest,
         last_id: int,
     ) -> list[MarketEvent]:
+        if self._batch_reader is not None:
+            return await self._batch_reader(request, last_id)
+        if self._factory is None:
+            raise RuntimeError("archive source is unavailable")
         async with self._factory() as session, session.begin():
             await session.execute(text("SET TRANSACTION READ ONLY"))
             await session.execute(text("SET LOCAL statement_timeout = '5s'"))
