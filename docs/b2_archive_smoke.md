@@ -99,3 +99,10 @@ pytest tests/integration/test_archive_b2_network.py
 ```
 
 Default `pytest` runs use mocks only.
+
+## Production window export
+
+Bounded RAW window export, logical/physical checksums, attempt markers, and
+restore verification are documented in [b2_archive_window.md](b2_archive_window.md).
+Production uploads use ``S3ArchiveStore.for_b2`` (``BotoS3ArchiveStore``); smoke
+remains on ``B2ArchiveClient``.

@@ -22,7 +22,28 @@ from trading_bot.archive.exporter import ArchiveExporter, ArchiveRequest
 from trading_bot.archive.manifest import ArchiveManifest, sha256_bytes
 from trading_bot.archive.retention import plan_retention
 from trading_bot.archive.ssh_source import SshArchiveBatchReader
-from trading_bot.archive.store import LocalArchiveStore, PcArchiveStore, S3ArchiveStore
+from trading_bot.archive.store import (
+    BotoS3ArchiveStore,
+    LocalArchiveStore,
+    PcArchiveStore,
+    S3ArchiveStore,
+)
+from trading_bot.archive.window import (
+    DEFAULT_MAX_BUNDLE_BYTES,
+    DEFAULT_MAX_DURATION_SECONDS,
+    DEFAULT_MAX_ROWS,
+    DEFAULT_MIN_FREE_DISK_BYTES,
+    HARD_MAX_BUNDLE_BYTES,
+    HARD_MAX_DURATION_SECONDS,
+    HARD_MAX_ROWS,
+    OPERATIONAL_DISK_FLOOR_BYTES,
+    WindowExportError,
+    WindowExportLimits,
+    build_archive_bundle,
+    load_window_events,
+    upload_archive_bundle,
+    verify_restore_archive,
+)
 from trading_bot.config import Settings
 from trading_bot.storage.database import create_engine, create_session_factory
 
@@ -75,7 +96,146 @@ def _parser() -> argparse.ArgumentParser:
     subparsers.add_parser("archive-check-config")
     smoke = subparsers.add_parser("archive-roundtrip-smoke")
     smoke.add_argument("--size-bytes", default=2048, type=int)
+    export_window = subparsers.add_parser("archive-export-window")
+    export_window.add_argument("--start", required=True, type=datetime.fromisoformat)
+    export_window.add_argument("--end", required=True, type=datetime.fromisoformat)
+    export_window.add_argument("--output-dir", required=True, type=Path)
+    export_window.add_argument("--provider", choices=("b2",), default="b2")
+    export_window.add_argument("--confirm-upload", action="store_true")
+    export_window.add_argument("--symbol", default=None)
+    export_window.add_argument(
+        "--max-duration-seconds",
+        default=DEFAULT_MAX_DURATION_SECONDS,
+        type=int,
+    )
+    export_window.add_argument("--max-rows", default=DEFAULT_MAX_ROWS, type=int)
+    export_window.add_argument(
+        "--max-bytes",
+        default=DEFAULT_MAX_BUNDLE_BYTES,
+        type=int,
+    )
+    export_window.add_argument(
+        "--min-disk-bytes",
+        default=DEFAULT_MIN_FREE_DISK_BYTES,
+        type=int,
+    )
+    export_window.add_argument("--allow-quality-warnings", action="store_true")
+    export_window.add_argument("--gap-warning-seconds", default=60.0, type=float)
+    export_window.add_argument("--price-discontinuity-percent", default=20.0, type=float)
+    export_window.add_argument(
+        "--exchange-boundary-tolerance-seconds",
+        default=5.0,
+        type=float,
+    )
+    verify_restore = subparsers.add_parser("archive-verify-restore")
+    verify_restore.add_argument("--dataset-id", required=True)
+    verify_restore.add_argument("--output-dir", required=True, type=Path)
+    verify_restore.add_argument("--provider", choices=("b2",), default="b2")
+    verify_restore.add_argument("--gap-warning-seconds", default=60.0, type=float)
+    verify_restore.add_argument("--price-discontinuity-percent", default=20.0, type=float)
+    verify_restore.add_argument(
+        "--exchange-boundary-tolerance-seconds",
+        default=5.0,
+        type=float,
+    )
     return parser
+
+
+def _b2_store() -> BotoS3ArchiveStore:
+    config = B2ArchiveConfig.from_environ()
+    return S3ArchiveStore.for_b2(config)
+
+
+def _window_limits(args: argparse.Namespace) -> WindowExportLimits:
+    if args.max_duration_seconds > HARD_MAX_DURATION_SECONDS:
+        raise ValueError("max-duration-seconds exceeds hard cap")
+    if args.max_rows > HARD_MAX_ROWS:
+        raise ValueError("max-rows exceeds hard cap")
+    if args.max_bytes > HARD_MAX_BUNDLE_BYTES:
+        raise ValueError("max-bytes exceeds hard cap")
+    if args.min_disk_bytes < OPERATIONAL_DISK_FLOOR_BYTES:
+        raise ValueError(
+            f"--min-disk-bytes cannot be below operational floor "
+            f"({OPERATIONAL_DISK_FLOOR_BYTES})"
+        )
+    return WindowExportLimits(
+        max_duration_seconds=args.max_duration_seconds,
+        max_rows=args.max_rows,
+        max_bundle_bytes=args.max_bytes,
+        min_free_disk_bytes=args.min_disk_bytes,
+    )
+
+
+async def _archive_export_window(args: argparse.Namespace) -> dict[str, object]:
+    settings = Settings()
+    symbol = args.symbol or settings.hibachi_symbol
+    limits = _window_limits(args)
+    engine = create_engine(settings.database_url)
+    try:
+        events = await load_window_events(
+            create_session_factory(engine),
+            symbol,
+            args.start,
+            args.end,
+            max_rows=limits.max_rows,
+        )
+        bundle_dir = build_archive_bundle(
+            symbol=symbol,
+            start=args.start,
+            end=args.end,
+            output_dir=args.output_dir,
+            events=events,
+            limits=limits,
+            gap_warning_seconds=args.gap_warning_seconds,
+            price_discontinuity_percent=args.price_discontinuity_percent,
+            exchange_boundary_tolerance_seconds=args.exchange_boundary_tolerance_seconds,
+        )
+    finally:
+        await engine.dispose()
+
+    summary: dict[str, object] = {
+        "dataset_id": bundle_dir.name,
+        "bundle_dir": str(bundle_dir),
+        "row_count": len(events),
+        "status": "local_ready",
+    }
+    if args.confirm_upload:
+        if args.provider != "b2":
+            raise ValueError("upload requires provider b2")
+        upload_summary = upload_archive_bundle(
+            bundle_dir,
+            _b2_store(),
+            confirm_upload=True,
+            allow_quality_warnings=args.allow_quality_warnings,
+            verification_root=args.output_dir / "_verification",
+            gap_warning_seconds=args.gap_warning_seconds,
+            price_discontinuity_percent=args.price_discontinuity_percent,
+            exchange_boundary_tolerance_seconds=args.exchange_boundary_tolerance_seconds,
+        )
+        summary.update(upload_summary)
+    else:
+        dry_run = upload_archive_bundle(
+            bundle_dir,
+            LocalArchiveStore(args.output_dir / ".dry-run-store"),
+            confirm_upload=False,
+            allow_quality_warnings=args.allow_quality_warnings,
+            verification_root=args.output_dir / "_verification",
+        )
+        summary["upload"] = dry_run
+    return summary
+
+
+def _archive_verify_restore(args: argparse.Namespace) -> dict[str, object]:
+    if args.provider != "b2":
+        raise ValueError("restore verification requires provider b2")
+    return verify_restore_archive(
+        _b2_store(),
+        args.dataset_id,
+        args.output_dir,
+        gap_warning_seconds=args.gap_warning_seconds,
+        price_discontinuity_percent=args.price_discontinuity_percent,
+        exchange_boundary_tolerance_seconds=args.exchange_boundary_tolerance_seconds,
+    )
 
 
 def _store(args: argparse.Namespace) -> LocalArchiveStore | S3ArchiveStore:
@@ -217,6 +377,26 @@ def _archive_roundtrip_smoke(args: argparse.Namespace) -> None:
 
 def main() -> None:
     args = _parser().parse_args()
+    if args.command == "archive-export-window":
+        try:
+            summary = asyncio.run(_archive_export_window(args))
+        except (WindowExportError, ValueError) as error:
+            print(f"archive-export-window: {error}", file=sys.stderr)
+            raise SystemExit(2) from error
+        print(json.dumps(summary, separators=(",", ":"), sort_keys=True))
+        if summary.get("status") in {"failed"}:
+            raise SystemExit(1)
+        return
+    if args.command == "archive-verify-restore":
+        try:
+            summary = _archive_verify_restore(args)
+        except (WindowExportError, ValueError) as error:
+            print(f"archive-verify-restore: {error}", file=sys.stderr)
+            raise SystemExit(2) from error
+        print(json.dumps(summary, separators=(",", ":"), sort_keys=True))
+        if summary.get("status") != "verified":
+            raise SystemExit(1)
+        return
     if args.command == "archive-check-config":
         _archive_check_config()
         return

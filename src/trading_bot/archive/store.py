@@ -1,9 +1,32 @@
+"""Archive object storage.
+
+Production Backblaze B2 uploads use ``BotoS3ArchiveStore`` via
+``S3ArchiveStore.for_b2`` (explicit boto3 credentials, no overwrite, no delete).
+The legacy PyArrow ``S3ArchiveStore`` remains for ``ARCHIVE_S3_*`` export-day.
+``B2ArchiveClient`` in ``b2.py`` is smoke-only and must not become a second
+production uploader stack.
+"""
+
+from __future__ import annotations
+
 import os
 import shutil
+from collections.abc import Callable
 from pathlib import Path, PurePosixPath
-from typing import Protocol
+from typing import Any, Protocol
 
+import boto3  # type: ignore[import-untyped]
 import pyarrow.fs as pafs  # type: ignore[import-untyped]
+from botocore.exceptions import ClientError  # type: ignore[import-untyped]
+
+from trading_bot.archive.b2 import B2ArchiveConfig
+from trading_bot.collector import sanitize_error_message
+
+ClientFactory = Callable[..., Any]
+
+
+class ArchiveStoreError(RuntimeError):
+    """Raised for archive store failures with redacted messages."""
 
 
 class ArchiveStore(Protocol):
@@ -109,8 +132,108 @@ class PcArchiveStore(LocalArchiveStore):
         )
 
 
+class BotoS3ArchiveStore:
+    """Production S3/B2 transport via boto3; never deletes or overwrites objects."""
+
+    def __init__(
+        self,
+        config: B2ArchiveConfig,
+        *,
+        prefix: str = "",
+        client_factory: ClientFactory | None = None,
+    ) -> None:
+        self._config = config
+        self._prefix = str(_safe_key(prefix)).strip("/") if prefix else ""
+        factory = client_factory or boto3.client
+        self._client = factory(
+            "s3",
+            endpoint_url=config.endpoint,
+            region_name=config.region,
+            aws_access_key_id=config.access_key_id,
+            aws_secret_access_key=config.secret_access_key,
+            config=config.botocore_config(),
+        )
+
+    @property
+    def destination_label(self) -> str:
+        return "b2_s3"
+
+    def _object_key(self, key: str) -> str:
+        suffix = str(_safe_key(key))
+        if self._prefix:
+            return f"{self._prefix}/{suffix}"
+        return suffix
+
+    def _wrap_client_error(self, action: str, error: ClientError) -> ArchiveStoreError:
+        message = sanitize_error_message(error)
+        return ArchiveStoreError(f"S3 {action} failed: {message}")
+
+    def exists(self, key: str) -> bool:
+        object_key = self._object_key(key)
+        try:
+            self._client.head_object(Bucket=self._config.bucket, Key=object_key)
+        except ClientError as error:
+            code = error.response.get("Error", {}).get("Code")
+            if code in {"404", "NoSuchKey", "NotFound"}:
+                return False
+            raise self._wrap_client_error("head_object", error) from error
+        return True
+
+    def read_bytes(self, key: str) -> bytes:
+        object_key = self._object_key(key)
+        try:
+            response = self._client.get_object(
+                Bucket=self._config.bucket,
+                Key=object_key,
+            )
+        except ClientError as error:
+            raise self._wrap_client_error("get_object", error) from error
+        body = response.get("Body")
+        if body is None:
+            raise ArchiveStoreError("S3 get_object returned no body")
+        return bytes(body.read())
+
+    def publish_bytes(self, key: str, value: bytes) -> None:
+        if self.exists(key):
+            raise ArchiveStoreError(f"refusing overwrite for existing key: {key}")
+        object_key = self._object_key(key)
+        try:
+            self._client.put_object(
+                Bucket=self._config.bucket,
+                Key=object_key,
+                Body=value,
+            )
+        except ClientError as error:
+            raise self._wrap_client_error("put_object", error) from error
+
+    def publish_file(self, key: str, source: Path) -> None:
+        if self.exists(key):
+            raise ArchiveStoreError(f"refusing overwrite for existing key: {key}")
+        object_key = self._object_key(key)
+        try:
+            self._client.upload_file(
+                str(source),
+                self._config.bucket,
+                object_key,
+            )
+        except ClientError as error:
+            raise self._wrap_client_error("upload_file", error) from error
+
+    def download_file(self, key: str, destination: Path) -> None:
+        object_key = self._object_key(key)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            self._client.download_file(
+                self._config.bucket,
+                object_key,
+                str(destination),
+            )
+        except ClientError as error:
+            raise self._wrap_client_error("download_file", error) from error
+
+
 class S3ArchiveStore:
-    """S3-compatible store; credentials are constructor inputs and are never logged."""
+    """Legacy PyArrow S3-compatible store for ``ARCHIVE_S3_*`` export-day."""
 
     def __init__(
         self,
@@ -131,6 +254,11 @@ class S3ArchiveStore:
             access_key=access_key,
             secret_key=secret_key,
         )
+
+    @classmethod
+    def for_b2(cls, config: B2ArchiveConfig, *, prefix: str = "") -> BotoS3ArchiveStore:
+        """Production B2 adapter; prefer this over ``B2ArchiveClient`` for uploads."""
+        return BotoS3ArchiveStore(config, prefix=prefix)
 
     @property
     def destination_label(self) -> str:
