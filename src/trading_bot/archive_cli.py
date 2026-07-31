@@ -11,6 +11,12 @@ from pathlib import Path
 
 import pyarrow.parquet as pq  # type: ignore[import-untyped]
 
+from trading_bot.archive.b2 import (
+    DEFAULT_SMOKE_MAX_SIZE_BYTES,
+    B2ArchiveClient,
+    B2ArchiveConfig,
+    run_roundtrip_smoke,
+)
 from trading_bot.archive.capacity import CapacityInputs, plan_capacity
 from trading_bot.archive.exporter import ArchiveExporter, ArchiveRequest
 from trading_bot.archive.manifest import ArchiveManifest, sha256_bytes
@@ -66,6 +72,9 @@ def _parser() -> argparse.ArgumentParser:
     retention.add_argument("--now", required=True, type=datetime.fromisoformat)
     retention.add_argument("--store", required=True, choices=("filesystem", "s3"))
     retention.add_argument("--root", type=Path)
+    subparsers.add_parser("archive-check-config")
+    smoke = subparsers.add_parser("archive-roundtrip-smoke")
+    smoke.add_argument("--size-bytes", default=2048, type=int)
     return parser
 
 
@@ -183,8 +192,41 @@ async def _pc_export(args: argparse.Namespace) -> None:
     )
 
 
+def _archive_check_config() -> None:
+    summary = B2ArchiveConfig.from_environ().redacted_summary()
+    print(json.dumps(summary, separators=(",", ":"), sort_keys=True))
+
+
+def _archive_roundtrip_smoke(args: argparse.Namespace) -> None:
+    if args.size_bytes <= 0 or args.size_bytes > DEFAULT_SMOKE_MAX_SIZE_BYTES:
+        raise ValueError("size-bytes exceeds smoke maximum")
+    config = B2ArchiveConfig.from_environ()
+    client = B2ArchiveClient(config)
+    with tempfile.TemporaryDirectory() as temporary:
+        result = run_roundtrip_smoke(
+            client,
+            work_dir=Path(temporary),
+            size_bytes=args.size_bytes,
+            max_size_bytes=DEFAULT_SMOKE_MAX_SIZE_BYTES,
+        )
+    print(json.dumps(result, separators=(",", ":"), sort_keys=True))
+    # Fail closed when body/metadata verification did not succeed.
+    if result.get("verified") is not True:
+        raise SystemExit(1)
+
+
 def main() -> None:
     args = _parser().parse_args()
+    if args.command == "archive-check-config":
+        _archive_check_config()
+        return
+    if args.command == "archive-roundtrip-smoke":
+        try:
+            _archive_roundtrip_smoke(args)
+        except Exception:
+            print("B2 archive smoke failed", file=sys.stderr)
+            raise SystemExit(2) from None
+        return
     if args.command == "capacity":
         inputs = CapacityInputs(
             disk_free_bytes=int(args.disk_free_mib * 1024**2),
