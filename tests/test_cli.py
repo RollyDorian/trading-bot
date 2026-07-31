@@ -90,3 +90,41 @@ def test_evaluate_subcommand_arguments() -> None:
     )
     assert args.window == 30
     assert args.threshold_bps == 8
+
+
+def test_validate_dataset_exchange_boundary_tolerance_argument(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "hibachi-bot",
+            "validate-dataset",
+            "--dataset",
+            "datasets/v1",
+            "--exchange-boundary-tolerance-seconds",
+            "0",
+        ],
+    )
+    args = _parse_args()
+    assert args.exchange_boundary_tolerance_seconds == 0.0
+
+
+def test_validate_dataset_rejects_negative_exchange_boundary_tolerance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "hibachi-bot",
+            "validate-dataset",
+            "--dataset",
+            "datasets/v1",
+            "--exchange-boundary-tolerance-seconds",
+            "-1",
+        ],
+    )
+    with pytest.raises(SystemExit):
+        _parse_args()

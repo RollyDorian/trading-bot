@@ -193,6 +193,41 @@ def _software_revision() -> str | None:
     return result.stdout.strip() or None
 
 
+def _sorted_sequence_availability(quality: dict[str, Any]) -> dict[str, str]:
+    raw = quality.get("sequence_availability")
+    if not isinstance(raw, dict):
+        return {}
+    availability: dict[str, str] = {}
+    for stream_key, value in raw.items():
+        if isinstance(stream_key, str) and isinstance(value, str):
+            availability[stream_key] = value
+    return dict(sorted(availability.items()))
+
+
+def _evidence_limitations(datasets: list[dict[str, Any]]) -> list[str]:
+    """Human-readable evidence gaps; informational only — never flips admission."""
+    limitations: list[str] = []
+    for item in datasets:
+        if item.get("quality_status") != "pass":
+            continue
+        dataset_id = str(item.get("version", ""))
+        if not dataset_id:
+            continue
+        sequence_availability = item.get("sequence_availability")
+        if not isinstance(sequence_availability, dict):
+            continue
+        for stream_key, availability in sorted(sequence_availability.items()):
+            if availability != "absent":
+                continue
+            if not isinstance(stream_key, str):
+                continue
+            limitations.append(
+                f"sequence_availability_absent:{dataset_id}:{stream_key} — "
+                "exchange sequence continuity unproven; not invented"
+            )
+    return limitations
+
+
 def _covered_days(ranges: list[tuple[datetime, datetime]]) -> int:
     days: set[date] = set()
     for start, end in ranges:
@@ -256,6 +291,7 @@ def evaluate_admission(
                     "start_utc": start.isoformat(),
                     "end_utc": end.isoformat(),
                     "quality_status": "pass",
+                    "sequence_availability": _sorted_sequence_availability(quality),
                     "admissible": True,
                     "configuration_hash": replay["configuration_hash"],
                     "trades": replay["trades"],
@@ -382,6 +418,7 @@ def evaluate_admission(
         "acceptance_thresholds": asdict(thresholds),
         "criteria": criteria,
         "failed_criteria": failed,
+        "evidence_limitations": _evidence_limitations(datasets),
         "admitted": not failed,
         "disclaimer": DISCLAIMER,
     }

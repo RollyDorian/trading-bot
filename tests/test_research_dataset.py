@@ -63,6 +63,67 @@ def test_candle_aggregation_is_chronological_and_does_not_invent_volume() -> Non
     assert candles[1].volume == 2.0
 
 
+def test_candle_aggregation_reads_nested_captured_trade_contract() -> None:
+    event = MarketEvent(
+        id=1,
+        received_at=START,
+        exchange_at=START,
+        source="hibachi_ws",
+        event_type="trades",
+        symbol="ETH/USDT-P",
+        sequence=1,
+        connection_id="11111111-1111-1111-1111-111111111111",
+        local_sequence=1,
+        exchange_sequence=None,
+        schema_version=2,
+        latency_ms=1.0,
+        payload={
+            "topic": "trades",
+            "symbol": "ETH/USDT-P",
+            "data": {
+                "trade": {
+                    "price": "2000.25",
+                    "quantity": "0.50",
+                    "takerSide": "Buy",
+                    "timestamp": 1785283201000,
+                }
+            },
+        },
+    )
+    candles = aggregate_candles([event])
+    assert len(candles) == 1
+    assert candles[0].open == 2000.25
+    assert candles[0].close == 2000.25
+    assert candles[0].volume == 0.5
+    assert candles[0].trade_count == 1
+
+
+def test_candle_aggregation_rejects_unknown_nested_price_and_nonfinite() -> None:
+    unknown = MarketEvent(
+        id=1,
+        received_at=START,
+        exchange_at=START,
+        source="hibachi_ws",
+        event_type="trades",
+        symbol="ETH/USDT-P",
+        sequence=1,
+        latency_ms=1.0,
+        payload={"topic": "trades", "data": {"other": {"price": "2000"}}},
+    )
+    nonfinite = MarketEvent(
+        id=2,
+        received_at=START + timedelta(seconds=1),
+        exchange_at=START + timedelta(seconds=1),
+        source="hibachi_ws",
+        event_type="trades",
+        symbol="ETH/USDT-P",
+        sequence=2,
+        latency_ms=1.0,
+        payload={"topic": "trades", "data": {"trade": {"price": "nan", "quantity": "1"}}},
+    )
+    assert aggregate_candles([unknown, nonfinite]) == []
+
+
 def test_checksums_and_manifest_validation_fail_closed(tmp_path: Path) -> None:
     dataset_dir = write_dataset(
         events=[_event(1, 0, "100", "1")],
@@ -130,6 +191,44 @@ def test_dataset_artifact_checksums_are_reproducible(tmp_path: Path) -> None:
     first = write_dataset(**arguments, output_root=tmp_path / "first")
     second = write_dataset(**arguments, output_root=tmp_path / "second")
     assert validate_manifest(first)["checksums"] == validate_manifest(second)["checksums"]
+
+
+def test_write_dataset_row_order_and_checksums_are_deterministic(tmp_path: Path) -> None:
+    shared_received_at = START + timedelta(seconds=10)
+    events = [
+        MarketEvent(
+            id=event_id,
+            received_at=shared_received_at,
+            exchange_at=START + timedelta(seconds=event_id),
+            source="hibachi_ws",
+            event_type="trades",
+            symbol="ETH/USDT-P",
+            sequence=event_id,
+            connection_id="11111111-1111-1111-1111-111111111111",
+            local_sequence=event_id,
+            exchange_sequence=event_id,
+            schema_version=2,
+            latency_ms=50.0,
+            payload={"topic": "trades", "price": str(100 + event_id), "quantity": "1"},
+        )
+        for event_id in (3, 1, 2)
+    ]
+    arguments = {
+        "events": events,
+        "symbol": "ETH/USDT-P",
+        "start": START,
+        "end": START + timedelta(minutes=1),
+    }
+    first = write_dataset(**arguments, output_root=tmp_path / "root_a")
+    second = write_dataset(**arguments, output_root=tmp_path / "root_b")
+    first_manifest = validate_manifest(first)
+    second_manifest = validate_manifest(second)
+    assert first_manifest["checksums"] == second_manifest["checksums"]
+    first_rows = pq.read_table(first / "events.parquet").to_pylist()
+    second_rows = pq.read_table(second / "events.parquet").to_pylist()
+    assert [row["raw_event_id"] for row in first_rows] == [1, 2, 3]
+    assert [row["raw_event_id"] for row in second_rows] == [1, 2, 3]
+    assert first_rows == second_rows
 
 
 def test_raw_v2_envelope_round_trips_to_parquet(tmp_path: Path) -> None:

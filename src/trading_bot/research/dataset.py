@@ -1,5 +1,6 @@
 import hashlib
 import json
+import math
 import subprocess
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -76,6 +77,11 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _event_order_key(event: MarketEvent) -> tuple[datetime, int]:
+    """Receipt-time order; ``event.id`` is the immutable RAW id written as ``raw_event_id``."""
+    return (event.received_at, event.id)
+
+
 def _number(value: Any, *, positive: bool = False) -> float | None:
     if value is None or isinstance(value, bool):
         return None
@@ -83,17 +89,26 @@ def _number(value: Any, *, positive: bool = False) -> float | None:
         number = float(value)
     except (TypeError, ValueError):
         return None
+    if not math.isfinite(number):
+        return None
     if positive and number <= 0:
         return None
     return number
 
 
-def _payload_number(payload: dict[str, Any], names: tuple[str, ...]) -> float | None:
+def _payload_containers(payload: dict[str, Any]) -> list[dict[str, Any]]:
     containers = [payload]
     data = payload.get("data")
     if isinstance(data, dict):
         containers.append(data)
-    for container in containers:
+        trade = data.get("trade")
+        if isinstance(trade, dict):
+            containers.append(trade)
+    return containers
+
+
+def _payload_number(payload: dict[str, Any], names: tuple[str, ...]) -> float | None:
+    for container in _payload_containers(payload):
         for name in names:
             if name in container:
                 return _number(container[name], positive=True)
@@ -102,7 +117,7 @@ def _payload_number(payload: dict[str, Any], names: tuple[str, ...]) -> float | 
 
 def aggregate_candles(events: list[MarketEvent]) -> list[Candle]:
     builders: dict[datetime, _CandleBuilder] = {}
-    for event in sorted(events, key=lambda item: (item.received_at, item.id)):
+    for event in sorted(events, key=_event_order_key):
         if event.event_type != "trades":
             continue
         price = _payload_number(event.payload, ("price", "tradePrice", "trade_price", "p"))
@@ -289,6 +304,7 @@ class DatasetExporter:
                 MarketEvent.received_at >= start,
                 MarketEvent.received_at < end,
             )
+            # RAW query order matches write_dataset sort: (received_at, id) → raw_event_id.
             .order_by(MarketEvent.received_at, MarketEvent.id)
         )
         async with self._session_factory() as session:
@@ -316,7 +332,7 @@ def write_dataset(
     dataset_dir = output_root / dataset_id
     if dataset_dir.exists():
         raise FileExistsError(f"Dataset already exists: {dataset_dir}")
-    events = sorted(events, key=lambda item: (item.received_at, item.id))
+    events = sorted(events, key=_event_order_key)
     candles = aggregate_candles(events)
     dataset_dir.mkdir(parents=True)
     events_path = dataset_dir / "events.parquet"

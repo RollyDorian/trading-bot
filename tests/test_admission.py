@@ -119,6 +119,12 @@ def test_happy_path_uses_chronological_oos_only(tmp_path: Path) -> None:
     ]
     assert report["oos_aggregate"]["net_pnl"] == 20
     assert all(item["admissible"] for item in report["datasets"])
+    assert isinstance(report["evidence_limitations"], list)
+    assert all(
+        item.get("sequence_availability") is not None
+        for item in report["datasets"]
+        if item["quality_status"] == "pass"
+    )
 
 
 def test_default_gate_passes_minimal_valid_synthetic_fixture(tmp_path: Path) -> None:
@@ -272,3 +278,103 @@ def test_admission_report_requires_force_to_overwrite(tmp_path: Path) -> None:
         write_admission_report({"admitted": True}, path)
     write_admission_report({"admitted": True}, path, force=True)
     assert json.loads(path.read_text(encoding="utf-8"))["admitted"] is True
+
+
+def test_pass_report_surfaces_absent_sequence_evidence_limitations(tmp_path: Path) -> None:
+    mark_payload = {
+        "topic": "mark_price",
+        "symbol": "ETH/USDT-P",
+        "data": {"markPrice": "100.5"},
+    }
+    root = tmp_path / "absent"
+    datasets = [_dataset(root, day) for day in range(3)]
+    start = START + timedelta(days=3)
+    events = [
+        MarketEvent(
+            id=index + 1,
+            received_at=start + timedelta(seconds=index),
+            exchange_at=start + timedelta(seconds=index),
+            source="fixture",
+            event_type="trades",
+            symbol="ETH/USDT-P",
+            sequence=index + 1,
+            latency_ms=0.0,
+            payload={"price": 100 + index, "quantity": 1},
+        )
+        for index in range(2)
+    ]
+    events.append(
+        MarketEvent(
+            id=10,
+            received_at=start + timedelta(seconds=5),
+            exchange_at=start + timedelta(seconds=5),
+            source="fixture",
+            event_type="mark_price",
+            symbol="ETH/USDT-P",
+            sequence=None,
+            latency_ms=0.0,
+            payload=mark_payload,
+        )
+    )
+    mixed_dir = write_dataset(
+        events=events,
+        symbol="ETH/USDT-P",
+        start=start,
+        end=start + timedelta(days=1),
+        output_root=root,
+    )
+    validate_dataset(mixed_dir, now=start + timedelta(days=1))
+    signal = BaselineConfig()
+    costs = CostConfig()
+    trades = [
+        {
+            "direction": 1,
+            "entry_time": (start + timedelta(minutes=60 * index)).isoformat(),
+            "exit_time": (start + timedelta(minutes=60 * index + 30)).isoformat(),
+            "entry_price": 100,
+            "exit_price": 101,
+            "gross_pnl": 13,
+            "fees": 1,
+            "funding": 1,
+            "slippage": 1,
+            "net_pnl": 10,
+        }
+        for index in range(1)
+    ]
+    (mixed_dir / "offline_replay.json").write_text(
+        json.dumps(
+            {
+                "result_type": "offline_research_simulation",
+                "dataset_id": mixed_dir.name,
+                "configuration_hash": configuration_hash(signal, costs),
+                "configuration": {"signal": asdict(signal), "costs": asdict(costs)},
+                "simulated_exits": 1,
+                "gross_pnl": 13,
+                "fees": 1,
+                "funding": 1,
+                "slippage_and_latency": 1,
+                "net_pnl": 10,
+                "trades": trades,
+                "dataset_quality_status": "pass",
+                "quality_warnings_allowed": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    datasets.append(mixed_dir)
+
+    report = evaluate_admission(
+        datasets, validation_count=1, oos_count=2, thresholds=PASSING
+    )
+    assert report["admitted"] is True
+    mixed_item = next(item for item in report["datasets"] if item["version"] == mixed_dir.name)
+    assert mixed_item["sequence_availability"]["fixture:mark_price"] == "absent"
+    assert mixed_item["sequence_availability"]["fixture:trades"] == "present"
+    limitations = report["evidence_limitations"]
+    assert any(
+        limitation.startswith(
+            f"sequence_availability_absent:{mixed_dir.name}:fixture:mark_price"
+        )
+        for limitation in limitations
+    )
+    assert "exchange sequence continuity unproven; not invented" in limitations[0]

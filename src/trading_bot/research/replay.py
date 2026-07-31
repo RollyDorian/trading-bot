@@ -15,22 +15,32 @@ from trading_bot.research.quality import require_acceptable_quality
 type SignalCallback[ReplayResult] = Callable[[dict[str, Any]], ReplayResult | None]
 
 
+def _parquet_row_order_key(row: dict[str, Any]) -> tuple[Any, Any, int]:
+    tie_breaker = row.get("raw_event_id")
+    if tie_breaker is None:
+        tie_breaker = row.get("id")
+    if tie_breaker is None:
+        raise ValueError("Versioned event dataset row lacks raw_event_id or id.")
+    return (
+        row["exchange_at"] or row["received_at"],
+        row["received_at"],
+        int(tie_breaker),
+    )
+
+
 def replay_parquet[ReplayResult](
     parquet_path: Path,
     callback: SignalCallback[ReplayResult],
 ) -> list[ReplayResult]:
     table = pq.read_table(parquet_path)
-    required = {"id", "exchange_at", "received_at", "payload_json"}
-    if not required.issubset(table.column_names):
+    required = {"exchange_at", "received_at", "payload_json"}
+    columns = set(table.column_names)
+    if not required.issubset(columns):
+        raise ValueError("Versioned event dataset schema is incompatible.")
+    if "raw_event_id" not in columns and "id" not in columns:
         raise ValueError("Versioned event dataset schema is incompatible.")
     rows = cast(list[dict[str, Any]], table.to_pylist())
-    rows.sort(
-        key=lambda row: (
-            row["exchange_at"] or row["received_at"],
-            row["received_at"],
-            row["id"],
-        )
-    )
+    rows.sort(key=_parquet_row_order_key)
     results: list[ReplayResult] = []
     for row in rows:
         row["payload"] = json.loads(row["payload_json"])
