@@ -377,15 +377,66 @@ def _window_is_storage_complete(status: str) -> bool:
     return _normalize_window_status(status) in STORAGE_COMPLETE_WINDOW_STATES
 
 
+def _window_eligibility_flags(entry: dict[str, Any]) -> tuple[str, bool, bool]:
+    """Return (normalized_status, quarantined, admission_eligible).
+
+    Derive report flags from normalized status; use entry fields only for
+    explicit contradiction detection. Fail closed on contradictions.
+    """
+    raw_status = str(entry.get("status", WINDOW_STATE_PENDING))
+    normalized = _normalize_window_status(raw_status)
+    entry_quarantined = entry.get("quarantined")
+    entry_admission = entry.get("admission_eligible")
+
+    if normalized in {
+        WINDOW_STATE_COMPLETED_ADMISSIBLE,
+        WINDOW_STATE_SKIPPED_VERIFIED,
+    }:
+        derived_quarantined = False
+        derived_admission = True
+    elif normalized in {
+        WINDOW_STATE_COMPLETED_QUARANTINED,
+        WINDOW_STATE_SKIPPED_QUARANTINED,
+    }:
+        derived_quarantined = True
+        derived_admission = False
+    else:
+        derived_quarantined = False
+        derived_admission = False
+
+    if normalized in {
+        WINDOW_STATE_COMPLETED_ADMISSIBLE,
+        WINDOW_STATE_SKIPPED_VERIFIED,
+    }:
+        if entry_quarantined is True:
+            raise BatchArchiveError(
+                f"window status {normalized!r} contradicts quarantined=true"
+            )
+        if entry_admission is False:
+            raise BatchArchiveError(
+                f"window status {normalized!r} contradicts admission_eligible=false"
+            )
+    elif normalized in {
+        WINDOW_STATE_COMPLETED_QUARANTINED,
+        WINDOW_STATE_SKIPPED_QUARANTINED,
+    }:
+        if entry_quarantined is False:
+            raise BatchArchiveError(
+                f"window status {normalized!r} contradicts quarantined=false"
+            )
+        if entry_admission is True:
+            raise BatchArchiveError(
+                f"window status {normalized!r} contradicts admission_eligible=true"
+            )
+
+    return normalized, derived_quarantined, derived_admission
+
+
 def _window_is_admissible(status: str, *, quarantined: bool = False) -> bool:
     if quarantined:
         return False
-    normalized = _normalize_window_status(status)
-    if normalized == WINDOW_STATE_SKIPPED_QUARANTINED:
-        return False
-    if normalized == WINDOW_STATE_COMPLETED_QUARANTINED:
-        return False
-    return normalized in ADMISSIBLE_WINDOW_STATES
+    _, _, admission_eligible = _window_eligibility_flags({"status": status})
+    return admission_eligible
 
 
 def _storage_complete_status_from_metadata(metadata: dict[str, Any]) -> str:
@@ -924,18 +975,9 @@ def reconcile_batch(
     for window in windows_plan:
         entry = _window_entry(progress, int(window["index"]))
         raw_status = str(entry.get("status", WINDOW_STATE_PENDING))
-        status = _normalize_window_status(raw_status)
+        status, quarantined, admission_eligible = _window_eligibility_flags(entry)
         dataset_id = str(window["dataset_id"])
         dataset_ids.append(dataset_id)
-        quarantined = bool(entry.get("quarantined"))
-        if status in {
-            WINDOW_STATE_SKIPPED_QUARANTINED,
-            WINDOW_STATE_COMPLETED_QUARANTINED,
-        } or (
-            status == WINDOW_STATE_SKIPPED_VERIFIED
-            and entry.get("quarantined") is True
-        ):
-            quarantined = True
 
         if not _window_is_storage_complete(raw_status):
             all_storage_complete = False
@@ -943,7 +985,6 @@ def reconcile_batch(
             if status in {
                 WINDOW_STATE_COMPLETED_ADMISSIBLE,
                 WINDOW_STATE_COMPLETED_QUARANTINED,
-                LEGACY_WINDOW_STATE_COMPLETED,
             }:
                 event_count = int(window["expected_event_count"])
             else:
@@ -953,7 +994,7 @@ def reconcile_batch(
             storage_event_total += event_count
             if quarantined:
                 quarantined_event_total += event_count
-            elif _window_is_admissible(status, quarantined=quarantined):
+            elif admission_eligible:
                 admissible_event_total += event_count
 
         if entry.get("verify", {}).get("status") == "failed":
@@ -964,8 +1005,7 @@ def reconcile_batch(
                 "dataset_id": dataset_id,
                 "status": status,
                 "quarantined": quarantined,
-                "admission_eligible": bool(entry.get("admission_eligible"))
-                and not quarantined,
+                "admission_eligible": admission_eligible,
                 "expected_event_count": window["expected_event_count"],
                 "expected_trade_count": window["expected_trade_count"],
             }

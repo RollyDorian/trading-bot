@@ -1250,6 +1250,114 @@ def test_reconcile_detects_boundary_continuity() -> None:
     assert report["status"] == RUN_STATUS_FAILED
 
 
+def _legacy_three_window_plan() -> dict[str, Any]:
+    window0_end = START + timedelta(hours=1)
+    window1_end = START + timedelta(hours=2)
+    window2_end = START + timedelta(hours=3)
+    return {
+        "plan_id": "legacy-live-rerun",
+        "range_expected_event_count": 179534,
+        "windows": [
+            {
+                "index": 0,
+                "dataset_id": "eth-usdt-p_window0",
+                "start_utc": START.isoformat(),
+                "end_utc": window0_end.isoformat(),
+                "expected_event_count": 60000,
+                "expected_trade_count": 0,
+            },
+            {
+                "index": 1,
+                "dataset_id": "eth-usdt-p_window1",
+                "start_utc": window0_end.isoformat(),
+                "end_utc": window1_end.isoformat(),
+                "expected_event_count": 59669,
+                "expected_trade_count": 0,
+            },
+            {
+                "index": 2,
+                "dataset_id": "eth-usdt-p_window2",
+                "start_utc": window1_end.isoformat(),
+                "end_utc": window2_end.isoformat(),
+                "expected_event_count": 59865,
+                "expected_trade_count": 0,
+            },
+        ],
+    }
+
+
+def test_reconcile_legacy_progress_derives_admission_eligible() -> None:
+    """Legacy completed windows without admission_eligible must reconcile as admissible."""
+    plan = _legacy_three_window_plan()
+    progress = {
+        "windows": {
+            "0": {"status": WINDOW_STATE_COMPLETED},
+            "1": {"status": WINDOW_STATE_COMPLETED_ADMISSIBLE},
+            "2": {
+                "status": WINDOW_STATE_COMPLETED_QUARANTINED,
+                "quarantined": True,
+                "admission_eligible": False,
+            },
+        }
+    }
+    report = reconcile_batch(plan, progress, plan_sha256="abc")
+
+    assert report["windows"][0]["status"] == WINDOW_STATE_COMPLETED_ADMISSIBLE
+    assert report["windows"][0]["quarantined"] is False
+    assert report["windows"][0]["admission_eligible"] is True
+    assert report["windows"][1]["status"] == WINDOW_STATE_COMPLETED_ADMISSIBLE
+    assert report["windows"][1]["quarantined"] is False
+    assert report["windows"][1]["admission_eligible"] is True
+    assert report["windows"][2]["status"] == WINDOW_STATE_COMPLETED_QUARANTINED
+    assert report["windows"][2]["quarantined"] is True
+    assert report["windows"][2]["admission_eligible"] is False
+
+    assert report["admissible_event_total"] == 119669
+    assert report["quarantined_event_total"] == 59865
+    assert report["storage_coverage_continuous"] is True
+    assert report["admissible_coverage_continuous"] is False
+    assert report["retention_authorized"] is False
+    assert report["status"] == RUN_STATUS_PASS
+
+
+def test_reconcile_legacy_progress_is_idempotent() -> None:
+    plan = _legacy_three_window_plan()
+    progress = {
+        "windows": {
+            "0": {"status": WINDOW_STATE_COMPLETED},
+            "1": {"status": WINDOW_STATE_COMPLETED_ADMISSIBLE},
+            "2": {
+                "status": WINDOW_STATE_COMPLETED_QUARANTINED,
+                "quarantined": True,
+                "admission_eligible": False,
+            },
+        }
+    }
+    first = reconcile_batch(plan, progress, plan_sha256="abc")
+    second = reconcile_batch(plan, progress, plan_sha256="abc")
+    assert first == second
+
+
+def test_reconcile_rejects_admissible_status_with_quarantined_true() -> None:
+    plan = _legacy_three_window_plan()
+    progress = {
+        "windows": {
+            "0": {
+                "status": WINDOW_STATE_COMPLETED_ADMISSIBLE,
+                "quarantined": True,
+            },
+            "1": {"status": WINDOW_STATE_COMPLETED_ADMISSIBLE},
+            "2": {
+                "status": WINDOW_STATE_COMPLETED_QUARANTINED,
+                "quarantined": True,
+                "admission_eligible": False,
+            },
+        }
+    }
+    with pytest.raises(BatchArchiveError, match="contradicts quarantined=true"):
+        reconcile_batch(plan, progress, plan_sha256="abc")
+
+
 def test_local_store_list_keys_finds_incomplete_marker(tmp_path: Path) -> None:
     store = LocalArchiveStore(tmp_path / "remote")
     dataset_id = "eth-usdt-p_test"
