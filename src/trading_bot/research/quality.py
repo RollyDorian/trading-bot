@@ -86,8 +86,14 @@ def validate_dataset(
     price_discontinuity_percent: float = 20.0,
     exchange_boundary_tolerance_seconds: float = 5.0,
     now: datetime | None = None,
+    write_report: bool = True,
 ) -> dict[str, Any]:
-    """Validate an immutable export; large price moves are review warnings only."""
+    """Validate an immutable export; large price moves are review warnings only.
+
+    When ``write_report`` is ``True`` (default), ``quality_report.json`` is written
+    into ``dataset_dir``. When ``False``, the report is computed and returned in
+    memory only; no files inside ``dataset_dir`` are created or modified.
+    """
     if gap_warning_seconds <= 0 or price_discontinuity_percent <= 0:
         raise ValueError("Quality thresholds must be positive.")
     if exchange_boundary_tolerance_seconds < 0:
@@ -279,11 +285,12 @@ def validate_dataset(
         "status": status,
         "findings": findings,
     }
-    (dataset_dir / QUALITY_REPORT).write_text(
-        json.dumps(report, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-        newline="\n",
-    )
+    if write_report:
+        (dataset_dir / QUALITY_REPORT).write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
     return report
 
 

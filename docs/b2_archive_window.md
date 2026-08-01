@@ -16,7 +16,9 @@ Production uploads use ``S3ArchiveStore.for_b2`` (boto3 ``BotoS3ArchiveStore``).
    ``provenance.json``, ``logical_checksums.sha256``, and ``checksums.sha256``.
 3. **Confirm upload** — re-run with ``--confirm-upload`` after operator approval.
 4. **Remote verify** — upload path downloads each object and compares SHA-256.
-5. **Restore validate** — full bundle is re-downloaded and ``validate_dataset`` runs.
+5. **Restore validate** — full bundle is re-downloaded; ``validate_dataset`` runs
+   read-only (``write_report=False``). Derived ``restore_validation.json`` is written
+   only under ``{work_dir}/_verification/{dataset_id}/``.
 6. **Canonical publish** — ``archives/<dataset_id>/COMPLETED`` is written only after
    all checks pass.
 7. **Later restore check** — ``archive-verify-restore`` on another host (reads

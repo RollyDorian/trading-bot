@@ -27,14 +27,17 @@ from trading_bot.archive.window import (
     VERIFICATION_DIRNAME,
     WindowExportError,
     WindowExportLimits,
+    _logical_artifact_digest,
     _read_logical_checksums,
     _read_physical_checksums,
+    _restore_validate_bundle,
     _write_logical_checksums,
     _write_physical_checksums,
     build_archive_bundle,
     upload_archive_bundle,
     verify_restore_archive,
 )
+from trading_bot.research.dataset import sha256_file
 from trading_bot.storage.models import MarketEvent
 
 START = datetime(2026, 7, 18, tzinfo=UTC)
@@ -109,6 +112,23 @@ def _build_bundle(
         events=events or _events(),
         limits=limits,
     )
+
+
+def _bundle_file_digests(bundle_dir: Path) -> dict[str, str]:
+    return {
+        str(path.relative_to(bundle_dir)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted(bundle_dir.rglob("*"))
+        if path.is_file()
+    }
+
+
+def _assert_checksums_still_verify(bundle_dir: Path) -> None:
+    physical = _read_physical_checksums(bundle_dir)
+    logical = _read_logical_checksums(bundle_dir)
+    for name, expected in physical.items():
+        assert sha256_file(bundle_dir / name) == expected
+    for name, expected in logical.items():
+        assert _logical_artifact_digest(name, bundle_dir / name) == expected
 
 
 class _FakeBotoClient:
@@ -479,6 +499,78 @@ def test_verify_restore_refuses_without_completed_marker(tmp_path: Path) -> None
     assert "COMPLETED" in str(result.get("error", ""))
 
 
+def test_restore_validation_is_byte_immutable_for_local_bundle(tmp_path: Path) -> None:
+    bundle = _build_bundle(tmp_path)
+    before_digests = _bundle_file_digests(bundle)
+    before_files = set(before_digests)
+
+    result = _restore_validate_bundle(
+        bundle,
+        gap_warning_seconds=60.0,
+        price_discontinuity_percent=20.0,
+        exchange_boundary_tolerance_seconds=5.0,
+    )
+    assert result["status"] == "verified"
+
+    after_digests = _bundle_file_digests(bundle)
+    assert after_digests == before_digests
+    assert set(after_digests) == before_files
+    assert not (bundle / VERIFICATION_DIRNAME).exists()
+    _assert_checksums_still_verify(bundle)
+
+
+def test_verify_restore_download_is_byte_immutable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "trading_bot.archive.window._new_attempt_id",
+        lambda: "fixed-attempt",
+    )
+    bundle = _build_bundle(tmp_path)
+    store = LocalArchiveStore(tmp_path / "remote")
+    dataset_id = bundle.name
+    upload = upload_archive_bundle(
+        bundle,
+        store,
+        confirm_upload=True,
+        verification_root=tmp_path / VERIFICATION_DIRNAME,
+    )
+    assert upload["status"] == "verified"
+
+    work_dir = tmp_path / "restore-work"
+    result = verify_restore_archive(store, dataset_id, work_dir)
+    assert result["status"] == "verified"
+
+    restore_dir = work_dir / dataset_id
+    attempt_prefix = f"archives/{dataset_id}/attempts/fixed-attempt"
+    for name in UPLOAD_ARTIFACTS:
+        key = f"{attempt_prefix}/{name}"
+        expected = hashlib.sha256(store.read_bytes(key)).hexdigest()
+        assert sha256_file(restore_dir / name) == expected
+
+    before_digests = _bundle_file_digests(restore_dir)
+    second = _restore_validate_bundle(
+        restore_dir,
+        gap_warning_seconds=60.0,
+        price_discontinuity_percent=20.0,
+        exchange_boundary_tolerance_seconds=5.0,
+    )
+    assert second["status"] == "verified"
+    assert _bundle_file_digests(restore_dir) == before_digests
+    _assert_checksums_still_verify(restore_dir)
+
+    validation_path = work_dir / VERIFICATION_DIRNAME / dataset_id / "restore_validation.json"
+    assert validation_path.is_file()
+    assert not (restore_dir / "restore_validation.json").exists()
+    assert not (restore_dir / VERIFICATION_DIRNAME).exists()
+    validation = json.loads(validation_path.read_text(encoding="utf-8"))
+    assert validation["dataset_id"] == dataset_id
+    assert validation["status"] == "verified"
+    assert validation["quality_status"] == "pass"
+    assert validation["attempt_id"] == "fixed-attempt"
+
+
 def test_verify_restore_round_trip(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -501,6 +593,11 @@ def test_verify_restore_round_trip(
     assert result["status"] == "verified"
     assert result["quality_status"] == "pass"
     assert result["attempt_id"] == "fixed-attempt"
+    validation_path = (
+        tmp_path / "restore" / VERIFICATION_DIRNAME / dataset_id / "restore_validation.json"
+    )
+    assert validation_path.is_file()
+    assert result["restore_validation_report"] == str(validation_path)
 
 
 def test_boto_store_refuses_overwrite(tmp_path: Path) -> None:

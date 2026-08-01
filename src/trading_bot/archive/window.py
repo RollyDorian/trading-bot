@@ -336,6 +336,26 @@ def _verification_report_path(verification_root: Path, dataset_id: str) -> Path:
     return verification_root / dataset_id / "remote_verification.json"
 
 
+def _restore_validation_report_path(verification_root: Path, dataset_id: str) -> Path:
+    return verification_root / dataset_id / "restore_validation.json"
+
+
+def _write_restore_validation_report(
+    verification_root: Path,
+    dataset_id: str,
+    summary: dict[str, Any],
+) -> Path:
+    """Persist derived restore validation outside the immutable bundle directory."""
+    path = _restore_validation_report_path(verification_root, dataset_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(summary, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    return path
+
+
 def _write_verification_report(
     verification_root: Path,
     dataset_id: str,
@@ -516,11 +536,13 @@ def _restore_validate_bundle(
             "error": "logical checksum verification failed",
             "checksum_results": logical_results,
         }
+    # Restore validation must not mutate immutable bundle bytes (checksums.sha256).
     quality_report = validate_dataset(
         bundle_dir,
         gap_warning_seconds=gap_warning_seconds,
         price_discontinuity_percent=price_discontinuity_percent,
         exchange_boundary_tolerance_seconds=exchange_boundary_tolerance_seconds,
+        write_report=False,
     )
     if quality_report.get("quality_report_version") != QUALITY_REPORT_VERSION:
         return {
@@ -666,6 +688,25 @@ def upload_archive_bundle(
         )
         return summary
 
+    summary["restore_validation_report"] = str(
+        _write_restore_validation_report(
+            verification_dir,
+            dataset_id,
+            {
+                "dataset_id": dataset_id,
+                "attempt_id": attempt_id,
+                "status": restore_result.get("status"),
+                "quality_status": restore_result.get("quality_status"),
+                "physical_checksum_results": restore_result.get(
+                    "physical_checksum_results"
+                ),
+                "logical_checksum_results": restore_result.get(
+                    "logical_checksum_results"
+                ),
+            },
+        )
+    )
+
     completed_payload = {
         "status": COMPLETED_MARKER_NAME,
         "dataset_id": dataset_id,
@@ -712,7 +753,13 @@ def verify_restore_archive(
     price_discontinuity_percent: float = 20.0,
     exchange_boundary_tolerance_seconds: float = 5.0,
 ) -> dict[str, Any]:
-    """Download a completed remote attempt, verify checksums, and re-run validate-dataset."""
+    """Download a completed remote attempt and verify it read-only.
+
+    Checksums are verified and ``validate_dataset`` runs with ``write_report=False``
+    so bundle bytes stay immutable. A derived ``restore_validation.json`` is written
+    only under ``{work_dir}/_verification/{dataset_id}/``, never inside the dataset
+    directory.
+    """
     try:
         completed = _load_completed_marker(store, dataset_id)
     except WindowExportError as error:
@@ -778,6 +825,22 @@ def verify_restore_archive(
             "downloaded_keys": downloaded,
         }
 
+    verification_root = work_dir / VERIFICATION_DIRNAME
+    restore_validation_report = _write_restore_validation_report(
+        verification_root,
+        dataset_id,
+        {
+            "dataset_id": dataset_id,
+            "attempt_id": attempt_id,
+            "status": "verified",
+            "quality_status": restore_result.get("quality_status"),
+            "physical_checksum_results": restore_result.get("physical_checksum_results"),
+            "logical_checksum_results": restore_result.get("logical_checksum_results"),
+            "logical_checksums_sha256": actual_logical,
+            "downloaded_keys": downloaded,
+        },
+    )
+
     return {
         "dataset_id": dataset_id,
         "status": "verified",
@@ -788,4 +851,5 @@ def verify_restore_archive(
         "downloaded_keys": downloaded,
         "schema_version": SCHEMA_VERSION,
         "logical_checksums_sha256": actual_logical,
+        "restore_validation_report": str(restore_validation_report),
     }

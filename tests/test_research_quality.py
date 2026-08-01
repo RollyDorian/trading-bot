@@ -70,6 +70,22 @@ def test_clean_dataset_is_valid(tmp_path: Path) -> None:
     assert replay_dataset(dataset)["dataset_quality_status"] == "pass"
 
 
+def test_validate_dataset_write_report_false_does_not_mutate_file(tmp_path: Path) -> None:
+    dataset = _dataset(tmp_path, [100, 101, 102])
+    validate_dataset(dataset)
+    quality_path = dataset / "quality_report.json"
+    before_bytes = quality_path.read_bytes()
+    fixed_now = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
+
+    report = validate_dataset(dataset, write_report=False, now=fixed_now)
+
+    assert quality_path.read_bytes() == before_bytes
+    assert isinstance(report, dict)
+    assert report["status"] == "pass"
+    assert report["quality_report_version"] == 5
+    assert report["validated_at_utc"] == fixed_now.isoformat()
+
+
 def test_duplicates_are_warning(tmp_path: Path) -> None:
     dataset = _dataset(tmp_path, [100, 101])
     rows = pq.read_table(dataset / "events.parquet").to_pylist()
