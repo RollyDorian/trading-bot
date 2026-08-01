@@ -17,6 +17,21 @@ from trading_bot.archive.b2 import (
     B2ArchiveConfig,
     run_roundtrip_smoke,
 )
+from trading_bot.archive.batch import (
+    DEFAULT_BATCH_MAX_WINDOWS,
+    DEFAULT_BATCH_PLAN_DURATION_SECONDS,
+    DEFAULT_MAX_UPLOAD_BYTES_PER_RUN,
+    DEFAULT_WINDOW_SECONDS,
+    HARD_BATCH_MAX_WINDOWS,
+    HARD_BATCH_PLAN_DURATION_SECONDS,
+    BatchArchiveError,
+    BatchPlanLimits,
+    BatchRunLimits,
+    build_batch_plan,
+    redacted_plan_summary,
+    run_batch_plan,
+    write_batch_plan,
+)
 from trading_bot.archive.capacity import CapacityInputs, plan_capacity
 from trading_bot.archive.exporter import ArchiveExporter, ArchiveRequest
 from trading_bot.archive.manifest import ArchiveManifest, sha256_bytes
@@ -138,12 +153,138 @@ def _parser() -> argparse.ArgumentParser:
         default=5.0,
         type=float,
     )
+    batch_plan = subparsers.add_parser("archive-batch-plan")
+    batch_plan.add_argument("--start", required=True, type=datetime.fromisoformat)
+    batch_plan.add_argument("--end", required=True, type=datetime.fromisoformat)
+    batch_plan.add_argument("--output-dir", required=True, type=Path)
+    batch_plan.add_argument("--symbol", default=None)
+    batch_plan.add_argument("--window-seconds", default=DEFAULT_WINDOW_SECONDS, type=int)
+    batch_plan.add_argument(
+        "--max-plan-duration-seconds",
+        default=DEFAULT_BATCH_PLAN_DURATION_SECONDS,
+        type=int,
+    )
+    batch_plan.add_argument("--max-rows", default=HARD_MAX_ROWS, type=int)
+    batch_plan.add_argument("--max-bytes", default=HARD_MAX_BUNDLE_BYTES, type=int)
+    batch_plan.add_argument(
+        "--min-disk-bytes",
+        default=OPERATIONAL_DISK_FLOOR_BYTES,
+        type=int,
+    )
+    batch_run = subparsers.add_parser("archive-batch-run")
+    batch_run.add_argument("--plan", required=True, type=Path)
+    batch_run.add_argument("--provider", choices=("b2",), default="b2")
+    batch_run.add_argument("--confirm-upload", action="store_true")
+    batch_run.add_argument("--max-windows", default=DEFAULT_BATCH_MAX_WINDOWS, type=int)
+    batch_run.add_argument("--output-dir", type=Path)
+    batch_run.add_argument("--allow-new-attempt-after-incomplete", action="store_true")
+    batch_run.add_argument(
+        "--max-upload-bytes",
+        default=DEFAULT_MAX_UPLOAD_BYTES_PER_RUN,
+        type=int,
+    )
+    batch_run.add_argument(
+        "--min-disk-bytes",
+        default=OPERATIONAL_DISK_FLOOR_BYTES,
+        type=int,
+    )
+    batch_run.add_argument("--allow-quality-warnings", action="store_true")
+    batch_run.add_argument("--gap-warning-seconds", default=60.0, type=float)
+    batch_run.add_argument("--price-discontinuity-percent", default=20.0, type=float)
+    batch_run.add_argument(
+        "--exchange-boundary-tolerance-seconds",
+        default=5.0,
+        type=float,
+    )
     return parser
 
 
 def _b2_store() -> BotoS3ArchiveStore:
     config = B2ArchiveConfig.from_environ()
     return S3ArchiveStore.for_b2(config)
+
+
+def _batch_plan_limits(args: argparse.Namespace) -> BatchPlanLimits:
+    if args.max_plan_duration_seconds > HARD_BATCH_PLAN_DURATION_SECONDS:
+        raise ValueError("max-plan-duration-seconds exceeds hard cap")
+    if args.max_rows > HARD_MAX_ROWS:
+        raise ValueError("max-rows exceeds hard cap")
+    if args.max_bytes > HARD_MAX_BUNDLE_BYTES:
+        raise ValueError("max-bytes exceeds hard cap")
+    if args.min_disk_bytes < OPERATIONAL_DISK_FLOOR_BYTES:
+        raise ValueError(
+            f"--min-disk-bytes cannot be below operational floor "
+            f"({OPERATIONAL_DISK_FLOOR_BYTES})"
+        )
+    return BatchPlanLimits(
+        max_rows=args.max_rows,
+        max_bundle_bytes=args.max_bytes,
+        min_free_disk_bytes=args.min_disk_bytes,
+        max_plan_duration_seconds=args.max_plan_duration_seconds,
+        window_seconds=args.window_seconds,
+    )
+
+
+def _batch_run_limits(args: argparse.Namespace) -> BatchRunLimits:
+    if args.max_windows > HARD_BATCH_MAX_WINDOWS:
+        raise ValueError("max-windows exceeds hard cap")
+    if args.min_disk_bytes < OPERATIONAL_DISK_FLOOR_BYTES:
+        raise ValueError(
+            f"--min-disk-bytes cannot be below operational floor "
+            f"({OPERATIONAL_DISK_FLOOR_BYTES})"
+        )
+    return BatchRunLimits(
+        max_windows=args.max_windows,
+        max_upload_bytes=args.max_upload_bytes,
+        min_free_disk_bytes=args.min_disk_bytes,
+        allow_quality_warnings=args.allow_quality_warnings,
+        allow_new_attempt_after_incomplete=args.allow_new_attempt_after_incomplete,
+        gap_warning_seconds=args.gap_warning_seconds,
+        price_discontinuity_percent=args.price_discontinuity_percent,
+        exchange_boundary_tolerance_seconds=args.exchange_boundary_tolerance_seconds,
+    )
+
+
+async def _archive_batch_plan(args: argparse.Namespace) -> dict[str, object]:
+    settings = Settings()
+    symbol = args.symbol or settings.hibachi_symbol
+    limits = _batch_plan_limits(args)
+    engine = create_engine(settings.database_url)
+    try:
+        plan = await build_batch_plan(
+            symbol=symbol,
+            start=args.start,
+            end=args.end,
+            window_seconds=args.window_seconds,
+            limits=limits,
+            session_factory=create_session_factory(engine),
+        )
+    finally:
+        await engine.dispose()
+    plan_path, sha_path = write_batch_plan(plan, args.output_dir)
+    summary = redacted_plan_summary(plan, plan_path, sha_path)
+    return summary
+
+
+async def _archive_batch_run(args: argparse.Namespace) -> dict[str, object]:
+    if args.provider != "b2":
+        raise ValueError("batch run requires provider b2")
+    settings = Settings()
+    engine = create_engine(settings.database_url)
+    try:
+        return await run_batch_plan(
+            args.plan,
+            batch_root=args.output_dir,
+            store=_b2_store() if args.confirm_upload else LocalArchiveStore(
+                (args.output_dir or args.plan.parent) / ".dry-run-store"
+            ),
+            session_factory=create_session_factory(engine),
+            confirm_upload=args.confirm_upload,
+            run_limits=_batch_run_limits(args),
+            provider=args.provider,
+        )
+    finally:
+        await engine.dispose()
 
 
 def _window_limits(args: argparse.Namespace) -> WindowExportLimits:
@@ -377,6 +518,24 @@ def _archive_roundtrip_smoke(args: argparse.Namespace) -> None:
 
 def main() -> None:
     args = _parser().parse_args()
+    if args.command == "archive-batch-plan":
+        try:
+            summary = asyncio.run(_archive_batch_plan(args))
+        except (BatchArchiveError, ValueError) as error:
+            print(f"archive-batch-plan: {error}", file=sys.stderr)
+            raise SystemExit(2) from error
+        print(json.dumps(summary, separators=(",", ":"), sort_keys=True))
+        return
+    if args.command == "archive-batch-run":
+        try:
+            summary = asyncio.run(_archive_batch_run(args))
+        except (BatchArchiveError, ValueError) as error:
+            print(f"archive-batch-run: {error}", file=sys.stderr)
+            raise SystemExit(2) from error
+        print(json.dumps(summary, separators=(",", ":"), sort_keys=True))
+        if summary.get("status") == "failed":
+            raise SystemExit(1)
+        return
     if args.command == "archive-export-window":
         try:
             summary = asyncio.run(_archive_export_window(args))

@@ -35,6 +35,8 @@ class ArchiveStore(Protocol):
 
     def exists(self, key: str) -> bool: ...
 
+    def list_keys(self, prefix: str) -> list[str]: ...
+
     def read_bytes(self, key: str) -> bytes: ...
 
     def publish_bytes(self, key: str, value: bytes) -> None: ...
@@ -89,6 +91,19 @@ class LocalArchiveStore:
 
     def exists(self, key: str) -> bool:
         return self._path(key).is_file()
+
+    def list_keys(self, prefix: str) -> list[str]:
+        safe_prefix = _safe_key(prefix)
+        base = self._root.joinpath(*safe_prefix.parts)
+        if not base.exists():
+            return []
+        keys: list[str] = []
+        for path in base.rglob("*"):
+            if not path.is_file():
+                continue
+            relative = path.relative_to(self._root).as_posix()
+            keys.append(relative)
+        return sorted(keys)
 
     def read_bytes(self, key: str) -> bytes:
         return self._path(key).read_bytes()
@@ -178,6 +193,38 @@ class BotoS3ArchiveStore:
                 return False
             raise self._wrap_client_error("head_object", error) from error
         return True
+
+    def list_keys(self, prefix: str) -> list[str]:
+        object_prefix = self._object_key(prefix)
+        if object_prefix and not object_prefix.endswith("/"):
+            object_prefix = f"{object_prefix}/"
+        keys: list[str] = []
+        continuation: str | None = None
+        while True:
+            request: dict[str, Any] = {
+                "Bucket": self._config.bucket,
+                "Prefix": object_prefix,
+            }
+            if continuation:
+                request["ContinuationToken"] = continuation
+            try:
+                response = self._client.list_objects_v2(**request)
+            except ClientError as error:
+                raise self._wrap_client_error("list_objects_v2", error) from error
+            for item in response.get("Contents", []):
+                key = str(item.get("Key", ""))
+                if not key:
+                    continue
+                if self._prefix and key.startswith(f"{self._prefix}/"):
+                    keys.append(key[len(self._prefix) + 1 :])
+                elif not self._prefix:
+                    keys.append(key)
+            if not response.get("IsTruncated"):
+                break
+            continuation = response.get("NextContinuationToken")
+            if not continuation:
+                break
+        return sorted(keys)
 
     def read_bytes(self, key: str) -> bytes:
         object_key = self._object_key(key)
@@ -273,6 +320,26 @@ class S3ArchiveStore:
         return bool(
             self._filesystem.get_file_info(self._path(key)).type == pafs.FileType.File
         )
+
+    def list_keys(self, prefix: str) -> list[str]:
+        safe_prefix = str(_safe_key(prefix))
+        base_path = self._path(safe_prefix)
+        if not base_path.endswith("/"):
+            base_path = f"{base_path}/"
+        selector = pafs.FileSelector(base_path, recursive=True)
+        keys: list[str] = []
+        bucket_prefix = f"{self._bucket}/"
+        middle = f"{self._prefix}/" if self._prefix else ""
+        for info in self._filesystem.get_file_info(selector):
+            if info.type != pafs.FileType.File:
+                continue
+            full_path = info.path
+            if full_path.startswith(bucket_prefix):
+                full_path = full_path[len(bucket_prefix) :]
+            if middle and full_path.startswith(middle):
+                full_path = full_path[len(middle) :]
+            keys.append(full_path)
+        return sorted(keys)
 
     def read_bytes(self, key: str) -> bytes:
         with self._filesystem.open_input_file(self._path(key)) as stream:

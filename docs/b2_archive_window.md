@@ -9,6 +9,8 @@ report → logical + physical checksums → upload via consolidated
 Smoke-only transport remains in ``B2ArchiveClient`` (``archive-roundtrip-smoke``).
 Production uploads use ``S3ArchiveStore.for_b2`` (boto3 ``BotoS3ArchiveStore``).
 
+For multi-window operator-bounded runs, see [b2_archive_batch.md](b2_archive_batch.md).
+
 ## Lifecycle
 
 1. **Export locally** — ``archive-export-window`` without ``--confirm-upload``.

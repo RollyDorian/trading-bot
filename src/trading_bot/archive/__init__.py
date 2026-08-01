@@ -1,5 +1,13 @@
 """Verified, bounded RAW and normalized Parquet archival."""
 
+from trading_bot.archive.batch import (
+    BatchArchiveError,
+    BatchPlanLimits,
+    BatchRunLimits,
+    build_batch_plan,
+    run_batch_plan,
+    write_batch_plan,
+)
 from trading_bot.archive.capacity import CapacityInputs, CapacityPlan, plan_capacity
 from trading_bot.archive.exporter import ArchiveExporter, ArchiveRequest
 from trading_bot.archive.manifest import ArchiveManifest
@@ -23,6 +31,10 @@ from trading_bot.archive.window import (
 
 __all__ = [
     "ArchiveExporter",
+    "BatchArchiveError",
+    "BatchPlanLimits",
+    "BatchRunLimits",
+    "build_batch_plan",
     "ArchiveManifest",
     "ArchiveRequest",
     "ArchiveStore",
@@ -39,6 +51,8 @@ __all__ = [
     "build_archive_bundle",
     "load_window_events",
     "plan_capacity",
+    "run_batch_plan",
+    "write_batch_plan",
     "upload_archive_bundle",
     "verify_restore_archive",
 ]
