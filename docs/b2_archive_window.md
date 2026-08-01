@@ -22,7 +22,8 @@ For multi-window operator-bounded runs, see [b2_archive_batch.md](b2_archive_bat
    read-only (``write_report=False``). Derived ``restore_validation.json`` is written
    only under ``{work_dir}/_verification/{dataset_id}/``.
 6. **Canonical publish** — ``archives/<dataset_id>/COMPLETED`` is written only after
-   all checks pass.
+   all checks pass. ``COMPLETED`` means **storage completeness**, not research
+   admission eligibility.
 7. **Later restore check** — ``archive-verify-restore`` on another host (reads
    ``COMPLETED`` to locate the successful attempt).
 
@@ -35,7 +36,12 @@ For multi-window operator-bounded runs, see [b2_archive_batch.md](b2_archive_bat
 | Local bundle only | default (no network) |
 | Upload to B2 | ``--confirm-upload`` + ``B2_S3_*`` credentials |
 | Upload with quality warnings | ``--allow-quality-warnings`` |
+| Quarantine upload (rejected quality) | ``--confirm-quarantine-upload`` **and** ``--confirm-upload`` |
 | Restore verification | ``archive-verify-restore`` (read-only download) |
+
+``--allow-quality-warnings`` does **not** unlock ``rejected`` quality; only
+``--confirm-quarantine-upload`` permits storage-complete upload of structurally
+valid quarantined bundles.
 
 Credentials stay outside Git in an operator-owned env file (mode ``0600``). CLI
 output is redacted JSON only.
@@ -63,6 +69,18 @@ hibachi-archive archive-export-window `
   --end 2026-07-18T01:00:00+00:00 `
   --output-dir D:\archive-work `
   --confirm-upload `
+  --provider b2
+```
+
+Quarantined upload (rejected quality, structurally valid bundle):
+
+```powershell
+hibachi-archive archive-export-window `
+  --start 2026-07-18T00:00:00+00:00 `
+  --end 2026-07-18T01:00:00+00:00 `
+  --output-dir D:\archive-work `
+  --confirm-upload `
+  --confirm-quarantine-upload `
   --provider b2
 ```
 
@@ -116,7 +134,7 @@ Build aborts with ``WindowExportError`` when either gate fails.
 | ``candles_1s.parquet`` | Trade-derived candles | yes |
 | ``README.md`` | Dataset notes | yes |
 | ``quality_report.json`` | Schema **5** quality evidence | yes |
-| ``archive_metadata.json`` | Window bounds, sources, topics, row counts | yes |
+| ``archive_metadata.json`` | Window bounds, sources, topics, row counts, quarantine flags | yes |
 | ``logical_checksums.sha256`` | SHA-256 listing of logical artifacts | no (manifest of identity) |
 | ``manifest.json`` | Research schema v2 metadata (includes real git SHA) | no (physical only) |
 | ``provenance.json`` | Real ``git_commit``, tool version, export time | no (physical only) |
@@ -127,6 +145,18 @@ digests). Rebuilding with a different git commit changes ``provenance.json`` and
 ``manifest.json`` but not logical identity when event content is unchanged.
 The logical digest for ``quality_report.json`` excludes provenance-volatile
 fields ``manifest_sha256`` and ``validated_at_utc``.
+
+``archive_metadata.json`` also records research eligibility at build time:
+
+| Field | Meaning |
+| --- | --- |
+| ``quarantined`` | ``true`` when ``research_quality_status`` is ``rejected`` |
+| ``research_quality_status`` | ``pass``, ``warning``, or ``rejected`` |
+| ``admission_eligible`` | ``true`` only when status is ``pass`` |
+| ``quarantine_reasons`` | Quality report findings when quarantined |
+
+These fields support future proof that RAW deletion is safe independently of
+admission; **no retention or delete APIs** are implemented yet.
 
 ``remote_verification.json`` is written under
 ``{output_dir}/_verification/{dataset_id}/`` and is never part of either checksum
@@ -146,7 +176,28 @@ objects are never overwritten.
 | Marker | Location | When |
 | --- | --- | --- |
 | ``INCOMPLETE`` | ``archives/<dataset_id>/attempts/<attempt_id>/INCOMPLETE`` | Partial upload or failed verification |
-| ``COMPLETED`` | ``archives/<dataset_id>/COMPLETED`` | All upload + checksum + restore checks passed |
+| ``COMPLETED`` | ``archives/<dataset_id>/COMPLETED`` | Storage checks passed (includes quarantined) |
+
+The ``COMPLETED`` payload includes ``quarantined``, ``admission_eligible``, and
+``research_quality_status`` copied from ``archive_metadata.json``.
+
+### Quarantine registry
+
+On successful quarantined upload, one append-only JSON line is written to:
+
+```text
+archives/quarantine/registry.jsonl
+```
+
+Registry entries are evidence only; they do not authorize retention or deletion.
+If registry append fails, upload is marked failed and ``INCOMPLETE`` is published
+instead of ``COMPLETED``.
+
+**Single-writer limitation:** remote registry append is read-modify-write
+(``get_object`` then ``put_object`` of prior bytes + one new line). Concurrent
+quarantine uploads can race; operator runs must remain single-writer for
+``archives/quarantine/registry.jsonl``. Local filesystem append uses the same
+read-extend-replace pattern.
 
 ``archive-verify-restore`` reads ``COMPLETED`` to locate the attempt prefix and
 refuses when only ``INCOMPLETE`` markers exist. **No delete APIs** are called;

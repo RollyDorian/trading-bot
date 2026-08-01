@@ -55,9 +55,34 @@ DEFAULT_MAX_UPLOAD_BYTES_PER_RUN = 3 * HARD_MAX_BUNDLE_BYTES
 
 WINDOW_STATE_PENDING = "pending"
 WINDOW_STATE_RUNNING = "running"
-WINDOW_STATE_COMPLETED = "completed"
+WINDOW_STATE_COMPLETED_ADMISSIBLE = "completed_admissible"
+WINDOW_STATE_COMPLETED_QUARANTINED = "completed_quarantined"
 WINDOW_STATE_SKIPPED_VERIFIED = "skipped_verified"
-WINDOW_STATE_FAILED = "failed"
+WINDOW_STATE_SKIPPED_QUARANTINED = "skipped_quarantined"
+WINDOW_STATE_FAILED_STORAGE = "failed_storage"
+
+# Backward-compatible aliases and legacy progress-file values.
+WINDOW_STATE_COMPLETED = WINDOW_STATE_COMPLETED_ADMISSIBLE
+WINDOW_STATE_FAILED = WINDOW_STATE_FAILED_STORAGE
+LEGACY_WINDOW_STATE_COMPLETED = "completed"
+LEGACY_WINDOW_STATE_FAILED = "failed"
+
+STORAGE_COMPLETE_WINDOW_STATES = frozenset(
+    {
+        WINDOW_STATE_COMPLETED_ADMISSIBLE,
+        WINDOW_STATE_COMPLETED_QUARANTINED,
+        WINDOW_STATE_SKIPPED_VERIFIED,
+        WINDOW_STATE_SKIPPED_QUARANTINED,
+        LEGACY_WINDOW_STATE_COMPLETED,
+    }
+)
+ADMISSIBLE_WINDOW_STATES = frozenset(
+    {
+        WINDOW_STATE_COMPLETED_ADMISSIBLE,
+        WINDOW_STATE_SKIPPED_VERIFIED,
+        LEGACY_WINDOW_STATE_COMPLETED,
+    }
+)
 
 RUN_STATUS_PARTIAL = "partial"
 RUN_STATUS_RUNNING = "running"
@@ -94,6 +119,7 @@ class BatchRunLimits:
     max_upload_bytes: int = DEFAULT_MAX_UPLOAD_BYTES_PER_RUN
     min_free_disk_bytes: int = OPERATIONAL_DISK_FLOOR_BYTES
     allow_quality_warnings: bool = False
+    confirm_quarantine_upload: bool = False
     allow_new_attempt_after_incomplete: bool = False
     gap_warning_seconds: float = 60.0
     price_discontinuity_percent: float = 20.0
@@ -339,6 +365,37 @@ def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def _normalize_window_status(status: str) -> str:
+    if status == LEGACY_WINDOW_STATE_COMPLETED:
+        return WINDOW_STATE_COMPLETED_ADMISSIBLE
+    if status == LEGACY_WINDOW_STATE_FAILED:
+        return WINDOW_STATE_FAILED_STORAGE
+    return status
+
+
+def _window_is_storage_complete(status: str) -> bool:
+    return _normalize_window_status(status) in STORAGE_COMPLETE_WINDOW_STATES
+
+
+def _window_is_admissible(status: str, *, quarantined: bool = False) -> bool:
+    if quarantined:
+        return False
+    normalized = _normalize_window_status(status)
+    if normalized == WINDOW_STATE_SKIPPED_QUARANTINED:
+        return False
+    if normalized == WINDOW_STATE_COMPLETED_QUARANTINED:
+        return False
+    return normalized in ADMISSIBLE_WINDOW_STATES
+
+
+def _storage_complete_status_from_metadata(metadata: dict[str, Any]) -> str:
+    if metadata.get("quarantined"):
+        return WINDOW_STATE_COMPLETED_QUARANTINED
+    if metadata.get("admission_eligible"):
+        return WINDOW_STATE_COMPLETED_ADMISSIBLE
+    return WINDOW_STATE_COMPLETED_QUARANTINED
+
+
 def _initial_progress(plan: dict[str, Any]) -> dict[str, Any]:
     return {
         "plan_id": plan["plan_id"],
@@ -425,18 +482,16 @@ def _verify_completed_window(
         exchange_boundary_tolerance_seconds=run_limits.exchange_boundary_tolerance_seconds,
     )
     if result.get("status") != "verified":
-        return {"status": WINDOW_STATE_FAILED, "error": result.get("error"), "verify": result}
-
-    quality_status = result.get("quality_status")
-    if quality_status == "rejected":
         return {
-            "status": WINDOW_STATE_FAILED,
-            "error": "quality status rejected blocks batch reuse",
+            "status": WINDOW_STATE_FAILED_STORAGE,
+            "error": result.get("error"),
             "verify": result,
         }
+
+    quality_status = result.get("quality_status")
     if quality_status == "warning" and not run_limits.allow_quality_warnings:
         return {
-            "status": WINDOW_STATE_FAILED,
+            "status": WINDOW_STATE_FAILED_STORAGE,
             "error": "quality status warning requires allow_quality_warnings",
             "verify": result,
         }
@@ -449,11 +504,12 @@ def _verify_completed_window(
         dict[str, Any],
         json.loads(store.read_bytes(metadata_key).decode("utf-8")),
     )
+    quarantined = bool(metadata.get("quarantined"))
     archived_events = int(metadata.get("row_counts", {}).get("events", -1))
     expected_events = int(window["expected_event_count"])
     if archived_events != expected_events:
         return {
-            "status": WINDOW_STATE_FAILED,
+            "status": WINDOW_STATE_FAILED_STORAGE,
             "error": "archived event count mismatch vs plan",
             "expected_event_count": expected_events,
             "archived_event_count": archived_events,
@@ -465,17 +521,28 @@ def _verify_completed_window(
         expected_trades = int(window["expected_trade_count"])
         if archived_trades != expected_trades:
             return {
-                "status": WINDOW_STATE_FAILED,
+                "status": WINDOW_STATE_FAILED_STORAGE,
                 "error": "archived trade count mismatch vs plan",
                 "expected_trade_count": expected_trades,
                 "archived_trade_count": archived_trades,
                 "verify": result,
             }
 
+    if quarantined:
+        return {
+            "status": WINDOW_STATE_SKIPPED_QUARANTINED,
+            "verify": result,
+            "archived_event_count": archived_events,
+            "quarantined": True,
+            "admission_eligible": False,
+        }
+
     return {
         "status": WINDOW_STATE_SKIPPED_VERIFIED,
         "verify": result,
         "archived_event_count": archived_events,
+        "quarantined": False,
+        "admission_eligible": bool(metadata.get("admission_eligible")),
     }
 
 
@@ -524,6 +591,7 @@ async def _export_and_upload_window(
         store,
         confirm_upload=confirm_upload,
         allow_quality_warnings=run_limits.allow_quality_warnings,
+        confirm_quarantine_upload=run_limits.confirm_quarantine_upload,
         verification_root=verify_root,
         gap_warning_seconds=run_limits.gap_warning_seconds,
         price_discontinuity_percent=run_limits.price_discontinuity_percent,
@@ -531,15 +599,20 @@ async def _export_and_upload_window(
     )
     if upload.get("status") != "verified":
         return {
-            "status": WINDOW_STATE_FAILED,
+            "status": WINDOW_STATE_FAILED_STORAGE,
             "error": upload.get("error", "upload failed"),
             "upload": upload,
         }
+    metadata = json.loads(
+        (bundle_dir / "archive_metadata.json").read_text(encoding="utf-8")
+    )
     return {
-        "status": WINDOW_STATE_COMPLETED,
+        "status": _storage_complete_status_from_metadata(metadata),
         "upload": upload,
         "row_count": len(events),
         "bundle_dir": str(bundle_dir),
+        "quarantined": bool(metadata.get("quarantined")),
+        "admission_eligible": bool(metadata.get("admission_eligible")),
     }
 
 
@@ -552,21 +625,47 @@ def reconcile_batch(
     windows_plan = cast(list[dict[str, Any]], plan["windows"])
     window_statuses: list[dict[str, Any]] = []
     dataset_ids: list[str] = []
-    event_total = 0
+    admissible_event_total = 0
+    quarantined_event_total = 0
+    storage_event_total = 0
     checksums_valid = True
-    all_done = True
+    all_storage_complete = True
 
     for window in windows_plan:
         entry = _window_entry(progress, int(window["index"]))
-        status = str(entry.get("status", WINDOW_STATE_PENDING))
+        raw_status = str(entry.get("status", WINDOW_STATE_PENDING))
+        status = _normalize_window_status(raw_status)
         dataset_id = str(window["dataset_id"])
         dataset_ids.append(dataset_id)
-        if status not in {WINDOW_STATE_COMPLETED, WINDOW_STATE_SKIPPED_VERIFIED}:
-            all_done = False
-        if status == WINDOW_STATE_COMPLETED:
-            event_total += int(window["expected_event_count"])
-        elif status == WINDOW_STATE_SKIPPED_VERIFIED:
-            event_total += int(entry.get("archived_event_count", window["expected_event_count"]))
+        quarantined = bool(entry.get("quarantined"))
+        if status in {
+            WINDOW_STATE_SKIPPED_QUARANTINED,
+            WINDOW_STATE_COMPLETED_QUARANTINED,
+        } or (
+            status == WINDOW_STATE_SKIPPED_VERIFIED
+            and entry.get("quarantined") is True
+        ):
+            quarantined = True
+
+        if not _window_is_storage_complete(raw_status):
+            all_storage_complete = False
+        else:
+            if status in {
+                WINDOW_STATE_COMPLETED_ADMISSIBLE,
+                WINDOW_STATE_COMPLETED_QUARANTINED,
+                LEGACY_WINDOW_STATE_COMPLETED,
+            }:
+                event_count = int(window["expected_event_count"])
+            else:
+                event_count = int(
+                    entry.get("archived_event_count", window["expected_event_count"])
+                )
+            storage_event_total += event_count
+            if quarantined:
+                quarantined_event_total += event_count
+            elif _window_is_admissible(status, quarantined=quarantined):
+                admissible_event_total += event_count
+
         if entry.get("verify", {}).get("status") == "failed":
             checksums_valid = False
         window_statuses.append(
@@ -574,6 +673,9 @@ def reconcile_batch(
                 "index": window["index"],
                 "dataset_id": dataset_id,
                 "status": status,
+                "quarantined": quarantined,
+                "admission_eligible": bool(entry.get("admission_eligible"))
+                and not quarantined,
                 "expected_event_count": window["expected_event_count"],
                 "expected_trade_count": window["expected_trade_count"],
             }
@@ -584,29 +686,49 @@ def reconcile_batch(
         for index in range(len(windows_plan) - 1)
     )
     unique_ids = len(set(dataset_ids)) == len(dataset_ids)
-    event_reconciled = event_total == int(plan["range_expected_event_count"])
-    all_completed_or_skipped = all_done and not any(
-        _window_entry(progress, int(window["index"]))["status"] == WINDOW_STATE_FAILED
+    range_expected = int(plan["range_expected_event_count"])
+    storage_event_reconciled = storage_event_total == range_expected
+    admissible_event_reconciled = admissible_event_total == range_expected
+    has_failed_storage = any(
+        _normalize_window_status(
+            str(_window_entry(progress, int(window["index"]))["status"])
+        )
+        == WINDOW_STATE_FAILED_STORAGE
         for window in windows_plan
+    )
+    has_quarantined = any(item["quarantined"] for item in window_statuses)
+    admissible_coverage_continuous = (
+        all_storage_complete
+        and not has_quarantined
+        and not has_failed_storage
+        and admissible_event_reconciled
     )
 
     passed = (
-        all_completed_or_skipped
+        all_storage_complete
         and unique_ids
         and boundary_ok
-        and event_reconciled
+        and storage_event_reconciled
         and checksums_valid
+        and not has_failed_storage
     )
 
     return {
         "plan_id": plan["plan_id"],
         "plan_sha256": plan_sha256,
         "windows": window_statuses,
-        "all_completed_or_skipped": all_completed_or_skipped,
+        "all_storage_complete": all_storage_complete,
+        "all_completed_or_skipped": all_storage_complete,
         "unique_dataset_ids": unique_ids,
         "boundary_continuity": boundary_ok,
-        "event_total_reconciled": event_reconciled,
+        "event_total_reconciled": storage_event_reconciled,
+        "storage_event_total_reconciled": storage_event_reconciled,
+        "admissible_event_total_reconciled": admissible_event_reconciled,
+        "admissible_event_total": admissible_event_total,
+        "quarantined_event_total": quarantined_event_total,
+        "admissible_coverage_continuous": admissible_coverage_continuous,
         "checksums_valid": checksums_valid,
+        "failed_storage": has_failed_storage,
         "status": RUN_STATUS_PASS if passed else RUN_STATUS_FAILED,
         "retention_authorized": False,
         "note": "batch archive does not authorize retention or delete",
@@ -637,7 +759,7 @@ async def run_batch_plan(
     # Fail closed when prior failures exist.
     for window in cast(list[dict[str, Any]], plan["windows"]):
         entry = _window_entry(progress, int(window["index"]))
-        if entry.get("status") == WINDOW_STATE_FAILED:
+        if _normalize_window_status(str(entry.get("status", ""))) == WINDOW_STATE_FAILED_STORAGE:
             summary = {
                 "plan_id": plan_id,
                 "status": RUN_STATUS_FAILED,
@@ -655,9 +777,9 @@ async def run_batch_plan(
         index = int(window["index"])
         entry = _window_entry(progress, index)
         status = str(entry.get("status", WINDOW_STATE_PENDING))
-        if status in {WINDOW_STATE_COMPLETED, WINDOW_STATE_SKIPPED_VERIFIED}:
+        if _window_is_storage_complete(status):
             continue
-        if status == WINDOW_STATE_FAILED:
+        if _normalize_window_status(status) == WINDOW_STATE_FAILED_STORAGE:
             break
         if processed >= run_limits.max_windows:
             progress["status"] = RUN_STATUS_PARTIAL
@@ -709,7 +831,7 @@ async def run_batch_plan(
             elif _has_incomplete_attempts(store, dataset_id):
                 if not run_limits.allow_new_attempt_after_incomplete:
                     outcome = {
-                        "status": WINDOW_STATE_FAILED,
+                        "status": WINDOW_STATE_FAILED_STORAGE,
                         "error": "incomplete attempt exists; fail-closed policy",
                     }
                 else:
@@ -733,20 +855,27 @@ async def run_batch_plan(
                     run_limits=run_limits,
                 )
         except (WindowExportError, BatchArchiveError) as error:
-            outcome = {"status": WINDOW_STATE_FAILED, "error": str(error)}
+            outcome = {"status": WINDOW_STATE_FAILED_STORAGE, "error": str(error)}
 
         entry.update(outcome)
         entry["dataset_id"] = dataset_id
-        if outcome.get("status") == WINDOW_STATE_COMPLETED:
+        if _normalize_window_status(str(outcome.get("status", ""))) in {
+            WINDOW_STATE_COMPLETED_ADMISSIBLE,
+            WINDOW_STATE_COMPLETED_QUARANTINED,
+            LEGACY_WINDOW_STATE_COMPLETED,
+        }:
             upload_used += max_bundle
             progress["upload_bytes_this_run"] = upload_used
-        if outcome.get("status") == WINDOW_STATE_SKIPPED_VERIFIED:
+        if outcome.get("status") in {
+            WINDOW_STATE_SKIPPED_VERIFIED,
+            WINDOW_STATE_SKIPPED_QUARANTINED,
+        }:
             entry["archived_event_count"] = outcome.get("archived_event_count")
 
         _save_progress(root, plan_id, progress)
         processed += 1
 
-        if outcome.get("status") == WINDOW_STATE_FAILED:
+        if _normalize_window_status(str(outcome.get("status", ""))) == WINDOW_STATE_FAILED_STORAGE:
             progress["status"] = RUN_STATUS_FAILED
             _save_progress(root, plan_id, progress)
             return {
@@ -760,8 +889,9 @@ async def run_batch_plan(
     # Final reconciliation when every window is completed or skipped.
     reconciliation = reconcile_batch(plan, progress, plan_sha256=plan_sha256)
     all_terminal = all(
-        _window_entry(progress, int(window["index"]))["status"]
-        in {WINDOW_STATE_COMPLETED, WINDOW_STATE_SKIPPED_VERIFIED}
+        _window_is_storage_complete(
+            str(_window_entry(progress, int(window["index"]))["status"])
+        )
         for window in windows_plan
     )
     if all_terminal:

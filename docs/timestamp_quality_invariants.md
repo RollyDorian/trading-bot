@@ -91,3 +91,28 @@ per-stream ordering rejection. Schema 5 adds explicit sequence-availability clas
 and bounded exchange boundary tolerance without weakening rejection of far-out-of-range
 timestamps such as the stale 2024 integration-fixture timestamp found in the local 2026
 slice.
+
+## Replay ordering by event type
+
+Research replay must not invent a mixed global clock from `exchange_at`. Quality may still
+reject exchange-clock regressions within a stream; replay and reconstruction use the
+contracts below instead.
+
+| Event type | Ordering contract |
+| --- | --- |
+| `orderbook`, sequence absent | `received_at`, then `raw_event_id` / `id` |
+| `orderbook`, sequence present | `exchange_sequence` (fallback `sequence`), then `received_at`, then `raw_event_id` / `id` |
+| `trades`, `mark_price`, `spot_price`, `ask_bid_price`, `funding_rate_estimation`, and all other topics | `received_at`, then `raw_event_id` / `id` |
+
+Rules:
+
+1. `exchange_at` is metadata only. It must never reorder orderbook delta updates.
+2. Global mixed-topic replay (`replay_parquet`, `order_events_for_replay`) uses receipt
+   order for every topic. This preserves known exchange-clock regressions where a later
+   receipt carries an earlier `exchange_at` (for example raw_event_id `1126466` before
+   `1126478` with a 310 ms exchange-clock regression).
+3. Orderbook reconstruction (`orderbook_replay_rows`) applies the orderbook-specific
+   contract above. Mixed present/absent sequence metadata within one orderbook stream
+   fails closed.
+4. Candle aggregation in dataset export may continue to bucket by
+   `exchange_at or received_at`; that path is separate from replay ordering.

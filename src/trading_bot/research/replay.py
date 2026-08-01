@@ -14,18 +14,66 @@ from trading_bot.research.quality import require_acceptable_quality
 
 type SignalCallback[ReplayResult] = Callable[[dict[str, Any]], ReplayResult | None]
 
+# Replay ordering contract (see docs/timestamp_quality_invariants.md):
+# - Non-orderbook streams and global mixed-topic replay use receipt order only.
+# - Orderbook with absent sequence metadata also uses receipt order.
+# - Orderbook reconstruction with present sequence orders by exchange sequence.
+# - exchange_at is metadata only; it must never reorder orderbook deltas.
 
-def _parquet_row_order_key(row: dict[str, Any]) -> tuple[Any, Any, int]:
+
+def _row_id(row: dict[str, Any]) -> int:
     tie_breaker = row.get("raw_event_id")
     if tie_breaker is None:
         tie_breaker = row.get("id")
     if tie_breaker is None:
         raise ValueError("Versioned event dataset row lacks raw_event_id or id.")
-    return (
-        row["exchange_at"] or row["received_at"],
-        row["received_at"],
-        int(tie_breaker),
-    )
+    return int(tie_breaker)
+
+
+def _receipt_order_key(row: dict[str, Any]) -> tuple[datetime, int]:
+    return (row["received_at"], _row_id(row))
+
+
+def _orderbook_sequence(row: dict[str, Any]) -> int | None:
+    exchange_sequence = row.get("exchange_sequence")
+    if isinstance(exchange_sequence, int):
+        return exchange_sequence
+    sequence = row.get("sequence")
+    if isinstance(sequence, int):
+        return sequence
+    return None
+
+
+def _orderbook_order_key(row: dict[str, Any]) -> tuple[Any, ...]:
+    sequence = _orderbook_sequence(row)
+    received_at = row["received_at"]
+    row_id = _row_id(row)
+    if sequence is not None:
+        return (sequence, received_at, row_id)
+    return (received_at, row_id)
+
+
+def orderbook_replay_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return orderbook rows in replay-safe order for reconstruction."""
+    orderbook_rows = [row for row in rows if row.get("topic") == "orderbook"]
+    if not orderbook_rows:
+        return []
+    sequences = [_orderbook_sequence(row) for row in orderbook_rows]
+    has_sequence = [sequence is not None for sequence in sequences]
+    if any(has_sequence) and not all(has_sequence):
+        raise ValueError(
+            "Orderbook replay rows mix present and absent exchange sequence metadata."
+        )
+    ordered = list(orderbook_rows)
+    ordered.sort(key=_orderbook_order_key)
+    return ordered
+
+
+def order_events_for_replay(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return dataset rows in global replay order using receipt time only."""
+    ordered = list(rows)
+    ordered.sort(key=_receipt_order_key)
+    return ordered
 
 
 def replay_parquet[ReplayResult](
@@ -40,7 +88,7 @@ def replay_parquet[ReplayResult](
     if "raw_event_id" not in columns and "id" not in columns:
         raise ValueError("Versioned event dataset schema is incompatible.")
     rows = cast(list[dict[str, Any]], table.to_pylist())
-    rows.sort(key=_parquet_row_order_key)
+    rows = order_events_for_replay(rows)
     results: list[ReplayResult] = []
     for row in rows:
         row["payload"] = json.loads(row["payload_json"])

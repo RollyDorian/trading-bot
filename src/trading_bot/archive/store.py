@@ -45,6 +45,8 @@ class ArchiveStore(Protocol):
 
     def download_file(self, key: str, destination: Path) -> None: ...
 
+    def append_bytes(self, key: str, value: bytes) -> None: ...
+
 
 def _safe_key(key: str) -> PurePosixPath:
     path = PurePosixPath(key)
@@ -134,6 +136,20 @@ class LocalArchiveStore:
 
     def download_file(self, key: str, destination: Path) -> None:
         shutil.copyfile(self._path(key), destination)
+
+    def append_bytes(self, key: str, value: bytes) -> None:
+        """Append-only update for bounded evidence registries (e.g. quarantine JSONL)."""
+        path = self._path(key)
+        self._prepare_parent(path)
+        temporary = path.with_name(f".{path.name}.partial-{os.getpid()}")
+        try:
+            existing = path.read_bytes() if path.is_file() else b""
+            temporary.write_bytes(existing + value)
+            self._protect_file(temporary)
+            os.replace(temporary, path)
+            self._protect_file(path)
+        finally:
+            temporary.unlink(missing_ok=True)
 
 
 class PcArchiveStore(LocalArchiveStore):
@@ -278,6 +294,31 @@ class BotoS3ArchiveStore:
         except ClientError as error:
             raise self._wrap_client_error("download_file", error) from error
 
+    def append_bytes(self, key: str, value: bytes) -> None:
+        """Append-only update for bounded evidence registries (e.g. quarantine JSONL)."""
+        object_key = self._object_key(key)
+        existing = b""
+        try:
+            response = self._client.get_object(
+                Bucket=self._config.bucket,
+                Key=object_key,
+            )
+            body = response.get("Body")
+            if body is not None:
+                existing = bytes(body.read())
+        except ClientError as error:
+            code = error.response.get("Error", {}).get("Code")
+            if code not in {"404", "NoSuchKey", "NotFound"}:
+                raise self._wrap_client_error("get_object", error) from error
+        try:
+            self._client.put_object(
+                Bucket=self._config.bucket,
+                Key=object_key,
+                Body=existing + value,
+            )
+        except ClientError as error:
+            raise self._wrap_client_error("put_object", error) from error
+
 
 class S3ArchiveStore:
     """Legacy PyArrow S3-compatible store for ``ARCHIVE_S3_*`` export-day."""
@@ -370,3 +411,7 @@ class S3ArchiveStore:
             destination.open("wb") as output_stream,
         ):
             shutil.copyfileobj(input_stream, output_stream, length=1024 * 1024)
+
+    def append_bytes(self, key: str, value: bytes) -> None:
+        existing = self.read_bytes(key) if self.exists(key) else b""
+        self.publish_bytes(key, existing + value)

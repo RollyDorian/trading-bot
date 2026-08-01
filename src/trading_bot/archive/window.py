@@ -74,6 +74,7 @@ ARCHIVE_KEY_PREFIX = "archives"
 COMPLETED_MARKER_NAME = "COMPLETED"
 INCOMPLETE_MARKER_NAME = "INCOMPLETE"
 VERIFICATION_DIRNAME = "_verification"
+QUARANTINE_REGISTRY_KEY = f"{ARCHIVE_KEY_PREFIX}/quarantine/registry.jsonl"
 
 
 class WindowExportError(ValueError):
@@ -161,9 +162,16 @@ def _write_archive_metadata(
     end: datetime,
     events: list[MarketEvent],
     manifest: dict[str, Any],
+    quality_report: dict[str, Any],
 ) -> dict[str, Any]:
     source_counts = Counter(event.source for event in events)
     topic_counts = Counter(event.event_type for event in events)
+    research_quality_status = str(quality_report.get("status", "rejected"))
+    quarantined = research_quality_status == "rejected"
+    admission_eligible = research_quality_status == "pass"
+    quarantine_reasons = (
+        list(quality_report.get("findings", [])) if quarantined else []
+    )
     metadata = {
         "schema_version": manifest["schema_version"],
         "dataset_id": manifest["dataset_id"],
@@ -173,6 +181,10 @@ def _write_archive_metadata(
         "row_counts": manifest["row_counts"],
         "sources": {name: source_counts[name] for name in sorted(source_counts)},
         "topics": {name: topic_counts[name] for name in sorted(topic_counts)},
+        "quarantined": quarantined,
+        "research_quality_status": research_quality_status,
+        "admission_eligible": admission_eligible,
+        "quarantine_reasons": quarantine_reasons,
     }
     path = bundle_dir / "archive_metadata.json"
     path.write_text(
@@ -480,6 +492,7 @@ def build_archive_bundle(
         end=end,
         events=events,
         manifest=manifest,
+        quality_report=quality_report,
     )
     _write_provenance(dataset_dir, manifest)
     _write_logical_checksums(dataset_dir)
@@ -492,25 +505,83 @@ def build_archive_bundle(
     return dataset_dir
 
 
-def _quality_blocks_upload(
-    bundle_dir: Path,
-    *,
-    allow_quality_warnings: bool,
-) -> str | None:
+def _read_archive_metadata(bundle_dir: Path) -> dict[str, Any]:
+    metadata_path = bundle_dir / "archive_metadata.json"
+    if not metadata_path.is_file():
+        raise WindowExportError("archive_metadata.json is missing")
+    return cast(dict[str, Any], json.loads(metadata_path.read_text(encoding="utf-8")))
+
+
+def _read_quality_report(bundle_dir: Path) -> dict[str, Any]:
     quality_path = bundle_dir / "quality_report.json"
     if not quality_path.is_file():
-        return "quality_report.json is missing"
-    report = cast(dict[str, Any], json.loads(quality_path.read_text(encoding="utf-8")))
-    if report.get("quality_report_version") != QUALITY_REPORT_VERSION:
+        raise WindowExportError("quality_report.json is missing")
+    return cast(dict[str, Any], json.loads(quality_path.read_text(encoding="utf-8")))
+
+
+def _quality_blocks_upload(
+    quality_report: dict[str, Any],
+    *,
+    allow_quality_warnings: bool,
+    confirm_quarantine_upload: bool,
+) -> str | None:
+    if quality_report.get("quality_report_version") != QUALITY_REPORT_VERSION:
         return "quality_report_version must be schema 5"
-    status = report.get("status")
+    status = quality_report.get("status")
     if status == "rejected":
+        if confirm_quarantine_upload:
+            return None
         return "quality status rejected blocks upload"
     if status == "warning" and not allow_quality_warnings:
         return "quality status warning requires allow_quality_warnings"
     if status not in {"pass", "warning", "rejected"}:
         return "quality status is invalid"
     return None
+
+
+def _quarantine_metadata_matches_rejected(metadata: dict[str, Any]) -> bool:
+    return (
+        metadata.get("quarantined") is True
+        and metadata.get("admission_eligible") is False
+        and metadata.get("research_quality_status") == "rejected"
+    )
+
+
+def _upload_eligibility_from_quality(
+    quality_report: dict[str, Any],
+    archive_metadata: dict[str, Any],
+) -> tuple[Any, bool, bool]:
+    """Derive upload summary/COMPLETED eligibility from quality report at upload time."""
+    report_status = quality_report.get("status")
+    if report_status == "rejected":
+        return "rejected", True, False
+    return (
+        archive_metadata.get("research_quality_status"),
+        bool(archive_metadata.get("quarantined")),
+        bool(archive_metadata.get("admission_eligible")),
+    )
+
+
+def _append_quarantine_registry(
+    store: ArchiveStore,
+    *,
+    dataset_id: str,
+    attempt_id: str,
+    metadata: dict[str, Any],
+    logical_checksums_sha256: str,
+) -> None:
+    record = {
+        "dataset_id": dataset_id,
+        "attempt_id": attempt_id,
+        "completed_at": datetime.now(UTC).isoformat(),
+        "research_quality_status": metadata.get("research_quality_status"),
+        "admission_eligible": False,
+        "quarantine_reasons": metadata.get("quarantine_reasons", []),
+        "logical_checksums_sha256": logical_checksums_sha256,
+        "row_counts": metadata.get("row_counts"),
+    }
+    line = json.dumps(record, sort_keys=True) + "\n"
+    store.append_bytes(QUARANTINE_REGISTRY_KEY, line.encode("utf-8"))
 
 
 def _restore_validate_bundle(
@@ -563,6 +634,7 @@ def upload_archive_bundle(
     *,
     confirm_upload: bool,
     allow_quality_warnings: bool = False,
+    confirm_quarantine_upload: bool = False,
     verification_root: Path | None = None,
     gap_warning_seconds: float = 60.0,
     price_discontinuity_percent: float = 20.0,
@@ -572,14 +644,34 @@ def upload_archive_bundle(
     attempt_id = _new_attempt_id()
     attempt_prefix = _attempt_prefix(dataset_id, attempt_id)
     verification_dir = verification_root or (bundle_dir.parent / VERIFICATION_DIRNAME)
-    quality_status = cast(
-        dict[str, Any],
-        json.loads((bundle_dir / "quality_report.json").read_text(encoding="utf-8")),
-    ).get("status")
-    block_reason = _quality_blocks_upload(
-        bundle_dir,
-        allow_quality_warnings=allow_quality_warnings,
-    )
+    archive_metadata = _read_archive_metadata(bundle_dir)
+    block_reason: str | None
+    try:
+        quality_report = _read_quality_report(bundle_dir)
+    except WindowExportError as error:
+        block_reason = str(error)
+        quality_report = {}
+        quality_status, quarantined, admission_eligible = _upload_eligibility_from_quality(
+            quality_report,
+            archive_metadata,
+        )
+    else:
+        block_reason = _quality_blocks_upload(
+            quality_report,
+            allow_quality_warnings=allow_quality_warnings,
+            confirm_quarantine_upload=confirm_quarantine_upload,
+        )
+        if (
+            block_reason is None
+            and quality_report.get("status") == "rejected"
+            and confirm_quarantine_upload
+            and not _quarantine_metadata_matches_rejected(archive_metadata)
+        ):
+            block_reason = "quarantine metadata inconsistent with rejected quality"
+        quality_status, quarantined, admission_eligible = _upload_eligibility_from_quality(
+            quality_report,
+            archive_metadata,
+        )
     logical_digests = _read_logical_checksums(bundle_dir)
     logical_checksums_sha256 = sha256_file(bundle_dir / "logical_checksums.sha256")
     summary: dict[str, Any] = {
@@ -588,7 +680,10 @@ def upload_archive_bundle(
         "attempt_prefix": attempt_prefix,
         "destination": store.destination_label,
         "confirm_upload": confirm_upload,
+        "confirm_quarantine_upload": confirm_quarantine_upload,
         "quality_status": quality_status,
+        "quarantined": quarantined,
+        "admission_eligible": admission_eligible,
         "logical_checksums_sha256": logical_checksums_sha256,
         "artifacts": list(UPLOAD_ARTIFACTS),
         "uploaded_keys": [],
@@ -599,7 +694,12 @@ def upload_archive_bundle(
         summary["error"] = block_reason
         return summary
     if not confirm_upload:
-        summary["message"] = "local bundle ready; pass --confirm-upload to publish"
+        if quarantined and confirm_quarantine_upload:
+            summary["message"] = (
+                "local quarantined bundle ready; pass --confirm-upload to publish"
+            )
+        else:
+            summary["message"] = "local bundle ready; pass --confirm-upload to publish"
         return summary
 
     completed_key = _completed_key(dataset_id)
@@ -715,7 +815,27 @@ def upload_archive_bundle(
         "logical_checksums_sha256": logical_checksums_sha256,
         "logical_artifacts": logical_digests,
         "completed_at_utc": datetime.now(UTC).isoformat(),
+        "quarantined": quarantined,
+        "admission_eligible": admission_eligible,
+        "research_quality_status": quality_status,
     }
+    if quarantined:
+        try:
+            _append_quarantine_registry(
+                store,
+                dataset_id=dataset_id,
+                attempt_id=attempt_id,
+                metadata=archive_metadata,
+                logical_checksums_sha256=logical_checksums_sha256,
+            )
+        except Exception as error:
+            summary["status"] = "failed"
+            summary["error"] = f"quarantine registry append failed: {error}"
+            _publish_incomplete_marker(store, dataset_id, attempt_id, summary)
+            summary["verification_report"] = str(
+                _write_verification_report(verification_dir, dataset_id, summary)
+            )
+            return summary
     store.publish_bytes(
         completed_key,
         (json.dumps(completed_payload, indent=2, sort_keys=True) + "\n").encode("utf-8"),

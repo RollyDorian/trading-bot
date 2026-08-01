@@ -24,8 +24,11 @@ from trading_bot.archive.batch import (
     RUN_STATUS_PARTIAL,
     RUN_STATUS_PASS,
     WINDOW_STATE_COMPLETED,
-    WINDOW_STATE_FAILED,
+    WINDOW_STATE_COMPLETED_ADMISSIBLE,
+    WINDOW_STATE_COMPLETED_QUARANTINED,
+    WINDOW_STATE_FAILED_STORAGE,
     WINDOW_STATE_PENDING,
+    WINDOW_STATE_SKIPPED_QUARANTINED,
     WINDOW_STATE_SKIPPED_VERIFIED,
     BatchArchiveError,
     BatchPlanLimits,
@@ -43,9 +46,12 @@ from trading_bot.archive.store import LocalArchiveStore
 from trading_bot.archive.window import (
     INCOMPLETE_MARKER_NAME,
     OPERATIONAL_DISK_FLOOR_BYTES,
+    QUARANTINE_REGISTRY_KEY,
     WindowExportLimits,
     _completed_key,
     _incomplete_key,
+    _write_logical_checksums,
+    _write_physical_checksums,
     build_archive_bundle,
     upload_archive_bundle,
 )
@@ -164,6 +170,7 @@ def _seed_completed_store(
     *,
     verification_root: Path,
     attempt_id: str = "fixed-attempt",
+    confirm_quarantine_upload: bool = False,
 ) -> str:
     dataset_id = bundle_dir.name
     monkeypatch_attempt = attempt_id
@@ -177,12 +184,33 @@ def _seed_completed_store(
             bundle_dir,
             store,
             confirm_upload=True,
+            confirm_quarantine_upload=confirm_quarantine_upload,
             verification_root=verification_root,
         )
     finally:
         window_mod._new_attempt_id = original
     assert upload["status"] == "verified"
     return dataset_id
+
+
+def _set_rejected_quality(bundle: Path) -> None:
+    quality_path = bundle / "quality_report.json"
+    quality = json.loads(quality_path.read_text(encoding="utf-8"))
+    quality["status"] = "rejected"
+    quality_path.write_text(json.dumps(quality), encoding="utf-8")
+    metadata_path = bundle / "archive_metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["quarantined"] = True
+    metadata["research_quality_status"] = "rejected"
+    metadata["admission_eligible"] = False
+    metadata["quarantine_reasons"] = list(quality.get("findings", []))
+    metadata_path.write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    _write_logical_checksums(bundle)
+    _write_physical_checksums(bundle)
 
 
 @pytest.mark.asyncio
@@ -329,9 +357,9 @@ async def test_resumed_run_processes_only_pending(
     )
     assert result["status"] in {RUN_STATUS_PARTIAL, RUN_STATUS_PASS}
     updated = json.loads(progress_file.read_text(encoding="utf-8"))
-    assert updated["windows"]["0"]["status"] == WINDOW_STATE_COMPLETED
+    assert updated["windows"]["0"]["status"] == WINDOW_STATE_COMPLETED_ADMISSIBLE
     assert updated["windows"]["1"]["status"] in {
-        WINDOW_STATE_COMPLETED,
+        WINDOW_STATE_COMPLETED_ADMISSIBLE,
         WINDOW_STATE_SKIPPED_VERIFIED,
     }
 
@@ -427,7 +455,7 @@ async def test_mismatched_completed_event_count_fails(
     )
     assert result["status"] == RUN_STATUS_FAILED
     progress = json.loads(progress_path(batch_root, plan["plan_id"]).read_text(encoding="utf-8"))
-    assert progress["windows"]["0"]["status"] == WINDOW_STATE_FAILED
+    assert progress["windows"]["0"]["status"] == WINDOW_STATE_FAILED_STORAGE
 
 
 @pytest.mark.asyncio
@@ -531,7 +559,7 @@ async def test_failure_on_middle_window_stops_later_windows(
     )
     assert result["status"] == RUN_STATUS_FAILED
     progress = json.loads(progress_path(batch_root, plan["plan_id"]).read_text(encoding="utf-8"))
-    assert progress["windows"]["1"]["status"] == WINDOW_STATE_FAILED
+    assert progress["windows"]["1"]["status"] == WINDOW_STATE_FAILED_STORAGE
     assert progress["windows"]["2"]["status"] == WINDOW_STATE_PENDING
 
 
@@ -579,6 +607,148 @@ async def test_reconciliation_pass_writes_batch_verification(
     assert payload["status"] == RUN_STATUS_PASS
     assert payload["retention_authorized"] is False
     assert payload["event_total_reconciled"] is True
+    assert payload["admissible_coverage_continuous"] is True
+
+
+@pytest.mark.asyncio
+async def test_batch_rejected_upload_blocked_without_quarantine_flag(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = await _build_plan(count_provider=_zero_count_provider)
+    plan["windows"] = [plan["windows"][0]]
+    plan["range_expected_event_count"] = 2
+    plan["range_expected_trade_count"] = 2
+    plan["windows"][0]["expected_event_count"] = 2
+    plan["windows"][0]["expected_trade_count"] = 2
+    plan_dir = tmp_path / "plans"
+    write_batch_plan(plan, plan_dir)
+    plan_path = plan_dir / PLAN_FILENAME
+    batch_root = tmp_path / "batch"
+    store = LocalArchiveStore(batch_root / "remote")
+
+    original_build = build_archive_bundle
+
+    def build_with_rejected(*args: object, **kwargs: object) -> Path:
+        bundle = original_build(*args, **kwargs)
+        _set_rejected_quality(bundle)
+        return bundle
+
+    monkeypatch.setattr("trading_bot.archive.batch.build_archive_bundle", build_with_rejected)
+    monkeypatch.setattr("trading_bot.archive.batch.load_window_events", _fake_load_for_start)
+    monkeypatch.setattr("trading_bot.archive.window._new_attempt_id", lambda: "attempt")
+
+    result = await run_batch_plan(
+        plan_path,
+        batch_root=batch_root,
+        store=store,
+        session_factory=AsyncMock(),
+        confirm_upload=True,
+        run_limits=BatchRunLimits(max_windows=1, confirm_quarantine_upload=False),
+    )
+    assert result["status"] == RUN_STATUS_FAILED
+    progress = json.loads(progress_path(batch_root, plan["plan_id"]).read_text(encoding="utf-8"))
+    assert progress["windows"]["0"]["status"] == WINDOW_STATE_FAILED_STORAGE
+
+
+@pytest.mark.asyncio
+async def test_existing_quarantined_completed_is_skipped_quarantined(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = await _build_plan()
+    plan["windows"] = [plan["windows"][0]]
+    plan["range_expected_event_count"] = plan["windows"][0]["expected_event_count"]
+    plan["range_expected_trade_count"] = plan["windows"][0]["expected_trade_count"]
+    plan_dir = tmp_path / "plans"
+    write_batch_plan(plan, plan_dir)
+    plan_path = plan_dir / PLAN_FILENAME
+
+    batch_root = tmp_path / "batch"
+    store = LocalArchiveStore(batch_root / "remote")
+    bundle = build_archive_bundle(
+        symbol="ETH/USDT-P",
+        start=datetime.fromisoformat(plan["windows"][0]["start_utc"]),
+        end=datetime.fromisoformat(plan["windows"][0]["end_utc"]),
+        output_dir=tmp_path / "bundles",
+        events=_events_for_window(0),
+        limits=WindowExportLimits(max_duration_seconds=WINDOW_SECONDS),
+    )
+    _set_rejected_quality(bundle)
+
+    monkeypatch.setattr("trading_bot.archive.window._new_attempt_id", lambda: "fixed-attempt")
+    upload = upload_archive_bundle(
+        bundle,
+        store,
+        confirm_upload=True,
+        confirm_quarantine_upload=True,
+        verification_root=batch_root / "_batch" / plan["plan_id"] / "_verification",
+    )
+    assert upload["status"] == "verified"
+
+    session_factory = AsyncMock()
+    result = await run_batch_plan(
+        plan_path,
+        batch_root=batch_root,
+        store=store,
+        session_factory=session_factory,
+        confirm_upload=True,
+        run_limits=BatchRunLimits(max_windows=1),
+    )
+    assert result["status"] == RUN_STATUS_PASS
+    progress = json.loads(progress_path(batch_root, plan["plan_id"]).read_text(encoding="utf-8"))
+    assert progress["windows"]["0"]["status"] == WINDOW_STATE_SKIPPED_QUARANTINED
+    reconciliation = result["reconciliation"]
+    assert reconciliation["quarantined_event_total"] == plan["windows"][0]["expected_event_count"]
+    assert reconciliation["admissible_event_total"] == 0
+    assert reconciliation["admissible_coverage_continuous"] is False
+    assert reconciliation["retention_authorized"] is False
+    assert reconciliation["all_storage_complete"] is True
+
+
+@pytest.mark.asyncio
+async def test_batch_quarantined_upload_via_run(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = await _build_plan(count_provider=_zero_count_provider)
+    plan["windows"] = [plan["windows"][0]]
+    plan["range_expected_event_count"] = 2
+    plan["range_expected_trade_count"] = 2
+    plan["windows"][0]["expected_event_count"] = 2
+    plan["windows"][0]["expected_trade_count"] = 2
+    plan_dir = tmp_path / "plans"
+    write_batch_plan(plan, plan_dir)
+    plan_path = plan_dir / PLAN_FILENAME
+    batch_root = tmp_path / "batch"
+    store = LocalArchiveStore(batch_root / "remote")
+
+    original_build = build_archive_bundle
+
+    def build_with_rejected(*args: object, **kwargs: object) -> Path:
+        bundle = original_build(*args, **kwargs)
+        _set_rejected_quality(bundle)
+        return bundle
+
+    monkeypatch.setattr("trading_bot.archive.batch.build_archive_bundle", build_with_rejected)
+    monkeypatch.setattr("trading_bot.archive.batch.load_window_events", _fake_load_for_start)
+    monkeypatch.setattr("trading_bot.archive.window._new_attempt_id", lambda: "attempt")
+
+    result = await run_batch_plan(
+        plan_path,
+        batch_root=batch_root,
+        store=store,
+        session_factory=AsyncMock(),
+        confirm_upload=True,
+        run_limits=BatchRunLimits(max_windows=1, confirm_quarantine_upload=True),
+    )
+    assert result["status"] == RUN_STATUS_PASS
+    progress = json.loads(progress_path(batch_root, plan["plan_id"]).read_text(encoding="utf-8"))
+    assert progress["windows"]["0"]["status"] == WINDOW_STATE_COMPLETED_QUARANTINED
+    reconciliation = result["reconciliation"]
+    assert reconciliation["quarantined_event_total"] == 2
+    assert reconciliation["admissible_coverage_continuous"] is False
+    assert store.exists(QUARANTINE_REGISTRY_KEY)
 
 
 @pytest.mark.asyncio

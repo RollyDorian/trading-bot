@@ -135,6 +135,7 @@ def _parser() -> argparse.ArgumentParser:
         type=int,
     )
     export_window.add_argument("--allow-quality-warnings", action="store_true")
+    export_window.add_argument("--confirm-quarantine-upload", action="store_true")
     export_window.add_argument("--gap-warning-seconds", default=60.0, type=float)
     export_window.add_argument("--price-discontinuity-percent", default=20.0, type=float)
     export_window.add_argument(
@@ -189,6 +190,7 @@ def _parser() -> argparse.ArgumentParser:
         type=int,
     )
     batch_run.add_argument("--allow-quality-warnings", action="store_true")
+    batch_run.add_argument("--confirm-quarantine-upload", action="store_true")
     batch_run.add_argument("--gap-warning-seconds", default=60.0, type=float)
     batch_run.add_argument("--price-discontinuity-percent", default=20.0, type=float)
     batch_run.add_argument(
@@ -238,6 +240,7 @@ def _batch_run_limits(args: argparse.Namespace) -> BatchRunLimits:
         max_upload_bytes=args.max_upload_bytes,
         min_free_disk_bytes=args.min_disk_bytes,
         allow_quality_warnings=args.allow_quality_warnings,
+        confirm_quarantine_upload=args.confirm_quarantine_upload,
         allow_new_attempt_after_incomplete=args.allow_new_attempt_after_incomplete,
         gap_warning_seconds=args.gap_warning_seconds,
         price_discontinuity_percent=args.price_discontinuity_percent,
@@ -348,6 +351,7 @@ async def _archive_export_window(args: argparse.Namespace) -> dict[str, object]:
             _b2_store(),
             confirm_upload=True,
             allow_quality_warnings=args.allow_quality_warnings,
+            confirm_quarantine_upload=args.confirm_quarantine_upload,
             verification_root=args.output_dir / "_verification",
             gap_warning_seconds=args.gap_warning_seconds,
             price_discontinuity_percent=args.price_discontinuity_percent,
@@ -360,6 +364,7 @@ async def _archive_export_window(args: argparse.Namespace) -> dict[str, object]:
             LocalArchiveStore(args.output_dir / ".dry-run-store"),
             confirm_upload=False,
             allow_quality_warnings=args.allow_quality_warnings,
+            confirm_quarantine_upload=args.confirm_quarantine_upload,
             verification_root=args.output_dir / "_verification",
         )
         summary["upload"] = dry_run

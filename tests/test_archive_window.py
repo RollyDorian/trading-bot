@@ -23,6 +23,7 @@ from trading_bot.archive.window import (
     LOGICAL_CHECKSUM_ARTIFACTS,
     OPERATIONAL_DISK_FLOOR_BYTES,
     PHYSICAL_CHECKSUM_ARTIFACTS,
+    QUARANTINE_REGISTRY_KEY,
     UPLOAD_ARTIFACTS,
     VERIFICATION_DIRNAME,
     WindowExportError,
@@ -129,6 +130,27 @@ def _assert_checksums_still_verify(bundle_dir: Path) -> None:
         assert sha256_file(bundle_dir / name) == expected
     for name, expected in logical.items():
         assert _logical_artifact_digest(name, bundle_dir / name) == expected
+
+
+def _set_rejected_quality(bundle: Path) -> None:
+    """Mutate bundle to rejected quality and sync archive_metadata + checksums."""
+    quality_path = bundle / "quality_report.json"
+    quality = json.loads(quality_path.read_text(encoding="utf-8"))
+    quality["status"] = "rejected"
+    quality_path.write_text(json.dumps(quality), encoding="utf-8")
+    metadata_path = bundle / "archive_metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["quarantined"] = True
+    metadata["research_quality_status"] = "rejected"
+    metadata["admission_eligible"] = False
+    metadata["quarantine_reasons"] = list(quality.get("findings", []))
+    metadata_path.write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    _write_logical_checksums(bundle)
+    _write_physical_checksums(bundle)
 
 
 class _FakeBotoClient:
@@ -310,14 +332,132 @@ def test_min_disk_floor_enforced_in_limits() -> None:
 
 def test_quality_rejected_blocks_upload(tmp_path: Path) -> None:
     bundle = _build_bundle(tmp_path)
-    quality_path = bundle / "quality_report.json"
-    quality = json.loads(quality_path.read_text(encoding="utf-8"))
-    quality["status"] = "rejected"
-    quality_path.write_text(json.dumps(quality), encoding="utf-8")
+    _set_rejected_quality(bundle)
     result = upload_archive_bundle(
         bundle,
         LocalArchiveStore(tmp_path / "store"),
         confirm_upload=True,
+    )
+    assert result["status"] == "failed"
+    assert "rejected" in str(result["error"])
+
+
+def test_quality_rejected_quarantine_upload_requires_both_flags(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "trading_bot.archive.window._new_attempt_id",
+        lambda: "fixed-attempt",
+    )
+    bundle = _build_bundle(tmp_path)
+    _set_rejected_quality(bundle)
+    store = LocalArchiveStore(tmp_path / "remote")
+    with_both_flags = upload_archive_bundle(
+        bundle,
+        store,
+        confirm_upload=True,
+        confirm_quarantine_upload=True,
+        verification_root=tmp_path / VERIFICATION_DIRNAME,
+    )
+    assert with_both_flags["status"] == "verified"
+    quality = json.loads((bundle / "quality_report.json").read_text(encoding="utf-8"))
+    assert quality["status"] == "rejected"
+    completed_key = f"archives/{bundle.name}/COMPLETED"
+    completed = json.loads(store.read_bytes(completed_key).decode("utf-8"))
+    assert completed["quarantined"] is True
+    assert completed["admission_eligible"] is False
+    assert completed["research_quality_status"] == "rejected"
+    registry = store.read_bytes(QUARANTINE_REGISTRY_KEY).decode("utf-8").strip().splitlines()
+    assert len(registry) == 1
+    record = json.loads(registry[0])
+    assert record["dataset_id"] == bundle.name
+    assert record["admission_eligible"] is False
+
+
+def test_rejected_quality_metadata_mismatch_blocks_quarantine_upload(
+    tmp_path: Path,
+) -> None:
+    bundle = _build_bundle(tmp_path)
+    quality_path = bundle / "quality_report.json"
+    quality = json.loads(quality_path.read_text(encoding="utf-8"))
+    quality["status"] = "rejected"
+    quality_path.write_text(json.dumps(quality), encoding="utf-8")
+    metadata = json.loads((bundle / "archive_metadata.json").read_text(encoding="utf-8"))
+    assert metadata["quarantined"] is False
+    assert metadata["admission_eligible"] is True
+    assert metadata["research_quality_status"] == "pass"
+    _write_logical_checksums(bundle)
+    _write_physical_checksums(bundle)
+    store = LocalArchiveStore(tmp_path / "remote")
+    result = upload_archive_bundle(
+        bundle,
+        store,
+        confirm_upload=True,
+        confirm_quarantine_upload=True,
+        verification_root=tmp_path / VERIFICATION_DIRNAME,
+    )
+    assert result["status"] == "failed"
+    assert "quarantine metadata inconsistent with rejected quality" in str(result["error"])
+    completed_key = f"archives/{bundle.name}/COMPLETED"
+    assert not store.exists(completed_key)
+
+
+def test_quality_rejected_dry_run_reports_quarantine_intent(tmp_path: Path) -> None:
+    bundle = _build_bundle(tmp_path)
+    _set_rejected_quality(bundle)
+    blocked = upload_archive_bundle(
+        bundle,
+        LocalArchiveStore(tmp_path / "store"),
+        confirm_upload=False,
+        confirm_quarantine_upload=False,
+    )
+    assert blocked["status"] == "failed"
+    ready = upload_archive_bundle(
+        bundle,
+        LocalArchiveStore(tmp_path / "store"),
+        confirm_upload=False,
+        confirm_quarantine_upload=True,
+    )
+    assert ready["status"] == "dry_run"
+    assert ready["quarantined"] is True
+    assert "quarantined" in str(ready.get("message", "")).lower()
+
+
+def test_quarantined_restore_validation_passes(tmp_path: Path) -> None:
+    bundle = _build_bundle(tmp_path)
+    _set_rejected_quality(bundle)
+    result = _restore_validate_bundle(
+        bundle,
+        gap_warning_seconds=60.0,
+        price_discontinuity_percent=20.0,
+        exchange_boundary_tolerance_seconds=5.0,
+    )
+    assert result["status"] == "verified"
+    quality_report = json.loads(
+        (bundle / "quality_report.json").read_text(encoding="utf-8")
+    )
+    assert quality_report["status"] == "rejected"
+
+
+def test_archive_metadata_includes_quarantine_fields_on_build(tmp_path: Path) -> None:
+    bundle = _build_bundle(tmp_path)
+    metadata = json.loads((bundle / "archive_metadata.json").read_text(encoding="utf-8"))
+    assert metadata["quarantined"] is False
+    assert metadata["research_quality_status"] == "pass"
+    assert metadata["admission_eligible"] is True
+    assert metadata["quarantine_reasons"] == []
+
+
+def test_allow_quality_warnings_does_not_unlock_rejected(tmp_path: Path) -> None:
+    bundle = _build_bundle(tmp_path)
+    _set_rejected_quality(bundle)
+    result = upload_archive_bundle(
+        bundle,
+        LocalArchiveStore(tmp_path / "store"),
+        confirm_upload=True,
+        allow_quality_warnings=True,
+        confirm_quarantine_upload=False,
     )
     assert result["status"] == "failed"
     assert "rejected" in str(result["error"])
@@ -444,6 +584,9 @@ def test_completed_marker_only_after_all_checks(
     assert completed["status"] == "COMPLETED"
     assert completed["attempt_id"] == "fixed-attempt"
     assert completed["logical_checksums_sha256"]
+    assert completed["admission_eligible"] is True
+    assert completed["quarantined"] is False
+    assert completed["research_quality_status"] == "pass"
 
 
 def test_verification_report_not_in_checksum_artifacts(tmp_path: Path) -> None:

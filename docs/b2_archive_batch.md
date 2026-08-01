@@ -16,10 +16,14 @@ checksum model, and remote layout.
 2. **Review** — inspect ``archive_batch_plan.json`` and ``plan.sha256``.
 3. **Run (bounded)** — ``archive-batch-run --confirm-upload`` processes up to
    ``--max-windows`` pending windows per invocation.
-4. **Resume** — re-run the same command; completed and ``skipped_verified``
-   windows are not reprocessed.
-5. **Reconcile** — when every window is ``completed`` or ``skipped_verified``,
-   ``batch_verification.json`` is written under the batch progress directory.
+4. **Resume** — re-run the same command; storage-complete and verified windows
+   are not reprocessed.
+5. **Reconcile** — when every window is storage-complete, ``batch_verification.json``
+   is written under the batch progress directory.
+
+Storage integrity and research admission eligibility are separate: a batch can
+``pass`` storage reconciliation while ``admissible_coverage_continuous`` remains
+``false`` when any window is quarantined.
 
 ## Operator approval
 
@@ -28,7 +32,13 @@ checksum model, and remote layout.
 | Plan (DB counts only) | default (no remote I/O) |
 | Remote upload run | ``--confirm-upload`` + ``B2_S3_*`` credentials |
 | Upload with quality warnings | ``--allow-quality-warnings`` |
+| Quarantine upload (rejected quality) | ``--confirm-quarantine-upload`` **and** ``--confirm-upload`` |
 | New attempt after incomplete remote marker | ``--allow-new-attempt-after-incomplete`` |
+
+``--allow-quality-warnings`` does **not** unlock ``rejected`` quality.
+Quarantine registry append (``archives/quarantine/registry.jsonl``) is
+**single-writer** read-modify-write; do not run concurrent quarantine uploads
+against the same archive prefix.
 
 Without ``--confirm-upload``, ``archive-batch-run`` refuses the remote upload path
 (fail closed), matching single-window export behavior.
@@ -72,12 +82,17 @@ Progress updates are atomic (write temp + ``os.replace``) after each state chang
 | --- | --- |
 | ``pending`` | Not yet processed (includes crash-recovered ``running``) |
 | ``running`` | Currently executing |
-| ``completed`` | Exported and uploaded successfully this batch |
-| ``skipped_verified`` | Remote ``COMPLETED`` exists and passed identity verification |
-| ``failed`` | Terminal error; blocks automatic retry |
+| ``completed_admissible`` | Storage ``COMPLETED`` and admission-eligible (quality ``pass``) |
+| ``completed_quarantined`` | Storage ``COMPLETED`` but quarantined / not admission-eligible |
+| ``skipped_verified`` | Remote ``COMPLETED`` exists and passed admissible verification |
+| ``skipped_quarantined`` | Remote quarantined ``COMPLETED`` verified without re-upload |
+| ``failed_storage`` | Upload, verify, or storage failure; blocks automatic retry |
+
+Legacy progress files may contain ``completed`` or ``failed``; these map to
+``completed_admissible`` and ``failed_storage`` on load.
 
 Failed windows are never auto-retried. A subsequent run stops fail closed if any
-``failed`` window remains.
+``failed_storage`` window remains.
 
 ## Incomplete attempt policy
 
@@ -93,10 +108,24 @@ When remote ``INCOMPLETE`` markers exist under
 
 If ``archives/{dataset_id}/COMPLETED`` exists, the run downloads and verifies the
 canonical attempt (checksums, schema-5 quality, ``archive_metadata.json`` event
-counts vs plan). On match → ``skipped_verified`` (no re-upload). On mismatch →
-``failed``.
+counts vs plan). On match → ``skipped_verified`` or ``skipped_quarantined`` (no
+re-upload). Rejected quality does **not** fail reuse when the archive is
+quarantined and structurally verified. On mismatch → ``failed_storage``.
 
 **COMPLETED reuse does not authorize retention or DELETE.**
+
+## Reconciliation fields
+
+``batch_verification.json`` reports storage and admissible coverage separately:
+
+| Field | Meaning |
+| --- | --- |
+| ``storage_event_total_reconciled`` | All storage-complete windows match plan event totals |
+| ``admissible_event_total`` | Events in admission-eligible windows only |
+| ``quarantined_event_total`` | Events in quarantined windows |
+| ``admissible_coverage_continuous`` | ``false`` when any window is quarantined or admissible totals diverge |
+| ``failed_storage`` | Any window in ``failed_storage`` state |
+| ``retention_authorized`` | Always ``false`` |
 
 ## Bounds
 
@@ -133,8 +162,18 @@ hibachi-archive archive-batch-run `
   --output-dir D:\archive-work
 ```
 
+Quarantined batch run (rejected quality windows):
+
+```powershell
+hibachi-archive archive-batch-run `
+  --plan D:\archive-work\plans\archive_batch_plan.json `
+  --confirm-upload `
+  --confirm-quarantine-upload `
+  --provider b2
+```
+
 Re-run the same command until ``batch_verification.json`` reports ``pass`` or a
-window is ``failed``.
+window is ``failed_storage``.
 
 ## Exit codes
 
