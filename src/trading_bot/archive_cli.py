@@ -28,6 +28,7 @@ from trading_bot.archive.batch import (
     BatchPlanLimits,
     BatchRunLimits,
     build_batch_plan,
+    reconcile_remote_quarantine_windows,
     redacted_plan_summary,
     run_batch_plan,
     write_batch_plan,
@@ -198,6 +199,19 @@ def _parser() -> argparse.ArgumentParser:
         default=5.0,
         type=float,
     )
+    batch_reconcile = subparsers.add_parser("archive-batch-reconcile")
+    batch_reconcile.add_argument("--plan", required=True, type=Path)
+    batch_reconcile.add_argument("--provider", choices=("b2",), default="b2")
+    batch_reconcile.add_argument("--output-dir", type=Path)
+    batch_reconcile.add_argument("--dataset-id")
+    batch_reconcile.add_argument("--allow-quality-warnings", action="store_true")
+    batch_reconcile.add_argument("--gap-warning-seconds", default=60.0, type=float)
+    batch_reconcile.add_argument("--price-discontinuity-percent", default=20.0, type=float)
+    batch_reconcile.add_argument(
+        "--exchange-boundary-tolerance-seconds",
+        default=5.0,
+        type=float,
+    )
     return parser
 
 
@@ -269,6 +283,15 @@ async def _archive_batch_plan(args: argparse.Namespace) -> dict[str, object]:
     return summary
 
 
+def _batch_reconcile_limits(args: argparse.Namespace) -> BatchRunLimits:
+    return BatchRunLimits(
+        allow_quality_warnings=args.allow_quality_warnings,
+        gap_warning_seconds=args.gap_warning_seconds,
+        price_discontinuity_percent=args.price_discontinuity_percent,
+        exchange_boundary_tolerance_seconds=args.exchange_boundary_tolerance_seconds,
+    )
+
+
 async def _archive_batch_run(args: argparse.Namespace) -> dict[str, object]:
     if args.provider != "b2":
         raise ValueError("batch run requires provider b2")
@@ -288,6 +311,18 @@ async def _archive_batch_run(args: argparse.Namespace) -> dict[str, object]:
         )
     finally:
         await engine.dispose()
+
+
+def _archive_batch_reconcile(args: argparse.Namespace) -> dict[str, object]:
+    if args.provider != "b2":
+        raise ValueError("batch reconcile requires provider b2")
+    return reconcile_remote_quarantine_windows(
+        args.plan,
+        batch_root=args.output_dir,
+        store=_b2_store(),
+        run_limits=_batch_reconcile_limits(args),
+        dataset_id=args.dataset_id,
+    )
 
 
 def _window_limits(args: argparse.Namespace) -> WindowExportLimits:
@@ -536,6 +571,16 @@ def main() -> None:
             summary = asyncio.run(_archive_batch_run(args))
         except (BatchArchiveError, ValueError) as error:
             print(f"archive-batch-run: {error}", file=sys.stderr)
+            raise SystemExit(2) from error
+        print(json.dumps(summary, separators=(",", ":"), sort_keys=True))
+        if summary.get("status") == "failed":
+            raise SystemExit(1)
+        return
+    if args.command == "archive-batch-reconcile":
+        try:
+            summary = _archive_batch_reconcile(args)
+        except (BatchArchiveError, ValueError) as error:
+            print(f"archive-batch-reconcile: {error}", file=sys.stderr)
             raise SystemExit(2) from error
         print(json.dumps(summary, separators=(",", ":"), sort_keys=True))
         if summary.get("status") == "failed":

@@ -39,6 +39,7 @@ from trading_bot.archive.batch import (
     load_batch_plan,
     progress_path,
     reconcile_batch,
+    reconcile_remote_quarantine_windows,
     run_batch_plan,
     write_batch_plan,
 )
@@ -211,6 +212,383 @@ def _set_rejected_quality(bundle: Path) -> None:
     )
     _write_logical_checksums(bundle)
     _write_physical_checksums(bundle)
+
+
+def _seed_quarantined_bundle(
+    tmp_path: Path,
+    window: dict[str, Any],
+    *,
+    store: LocalArchiveStore,
+    verification_root: Path,
+    attempt_id: str = "fixed-attempt",
+) -> Path:
+    bundle = build_archive_bundle(
+        symbol="ETH/USDT-P",
+        start=datetime.fromisoformat(window["start_utc"]),
+        end=datetime.fromisoformat(window["end_utc"]),
+        output_dir=tmp_path / "bundles",
+        events=_events_for_window(int(window["index"])),
+        limits=WindowExportLimits(max_duration_seconds=WINDOW_SECONDS),
+    )
+    _set_rejected_quality(bundle)
+    import trading_bot.archive.window as window_mod
+
+    original = window_mod._new_attempt_id
+    window_mod._new_attempt_id = lambda: attempt_id
+    try:
+        upload = upload_archive_bundle(
+            bundle,
+            store,
+            confirm_upload=True,
+            confirm_quarantine_upload=True,
+            verification_root=verification_root,
+        )
+    finally:
+        window_mod._new_attempt_id = original
+    assert upload["status"] == "verified"
+    return bundle
+
+
+def _write_failed_storage_progress(
+    batch_root: Path,
+    plan: dict[str, Any],
+    *,
+    failed_index: int,
+    completed_indices: list[int] | None = None,
+) -> None:
+    completed_indices = completed_indices or []
+    windows: dict[str, dict[str, Any]] = {}
+    for window in plan["windows"]:
+        index = int(window["index"])
+        if index == failed_index:
+            windows[str(index)] = {
+                "status": WINDOW_STATE_FAILED_STORAGE,
+                "dataset_id": window["dataset_id"],
+                "error": "prior upload failure",
+            }
+        elif index in completed_indices:
+            windows[str(index)] = {
+                "status": WINDOW_STATE_COMPLETED_ADMISSIBLE,
+                "dataset_id": window["dataset_id"],
+            }
+        else:
+            windows[str(index)] = {
+                "status": WINDOW_STATE_PENDING,
+                "dataset_id": window["dataset_id"],
+            }
+    progress = {
+        "plan_id": plan["plan_id"],
+        "schema_version": 1,
+        "windows": windows,
+        "upload_bytes_this_run": 0,
+        "status": RUN_STATUS_FAILED,
+    }
+    path = progress_path(batch_root, str(plan["plan_id"]))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(progress), encoding="utf-8")
+
+
+class _PublishBlockingStore(LocalArchiveStore):
+    def publish_bytes(self, key: str, value: bytes) -> None:
+        raise AssertionError(f"publish_bytes must not be called during reconcile: {key}")
+
+    def publish_file(self, key: str, source: Path) -> None:
+        raise AssertionError(f"publish_file must not be called during reconcile: {key}")
+
+    def append_bytes(self, key: str, value: bytes) -> None:
+        raise AssertionError(f"append_bytes must not be called during reconcile: {key}")
+
+
+@pytest.mark.asyncio
+async def test_reconcile_failed_storage_adopts_remote_quarantine(tmp_path: Path) -> None:
+    plan = await _build_plan()
+    plan_dir = tmp_path / "plans"
+    write_batch_plan(plan, plan_dir)
+    plan_path = plan_dir / PLAN_FILENAME
+    batch_root = tmp_path / "batch"
+    store = LocalArchiveStore(batch_root / "remote")
+    failed_window = plan["windows"][2]
+    verification_root = batch_root / "_batch" / plan["plan_id"] / "_verification"
+
+    _write_failed_storage_progress(
+        batch_root,
+        plan,
+        failed_index=2,
+        completed_indices=[0, 1],
+    )
+    for index in (0, 1):
+        _seed_quarantined_bundle(
+            tmp_path,
+            plan["windows"][index],
+            store=store,
+            verification_root=verification_root,
+            attempt_id=f"attempt-{index}",
+        )
+
+    _seed_quarantined_bundle(
+        tmp_path,
+        failed_window,
+        store=store,
+        verification_root=verification_root,
+        attempt_id="attempt-failed-window",
+    )
+
+    result = reconcile_remote_quarantine_windows(
+        plan_path,
+        batch_root=batch_root,
+        store=store,
+        dataset_id=str(failed_window["dataset_id"]),
+    )
+    assert result["status"] == RUN_STATUS_PASS
+    assert result["windows"][0]["status"] == "reconciled"
+    progress = json.loads(progress_path(batch_root, plan["plan_id"]).read_text(encoding="utf-8"))
+    entry = progress["windows"]["2"]
+    assert entry["status"] == WINDOW_STATE_COMPLETED_QUARANTINED
+    assert entry["reconciled_from"] == "remote_quarantine_completed"
+    assert entry["attempt_id"] == "attempt-failed-window"
+    assert entry.get("error") is None
+    assert entry.get("prior_error") == "prior upload failure"
+    reconciliation = result["reconciliation"]
+    assert reconciliation["all_storage_complete"] is True
+    assert reconciliation["storage_coverage_continuous"] is True
+    assert reconciliation["admissible_coverage_continuous"] is False
+    assert reconciliation["quarantined_event_total"] == failed_window["expected_event_count"]
+    assert reconciliation["retention_authorized"] is False
+    assert result["batch_verification"] is not None
+
+
+@pytest.mark.asyncio
+async def test_reconcile_never_calls_publish(tmp_path: Path) -> None:
+    plan = await _build_plan()
+    plan["windows"] = [plan["windows"][0]]
+    plan["range_expected_event_count"] = plan["windows"][0]["expected_event_count"]
+    plan_dir = tmp_path / "plans"
+    write_batch_plan(plan, plan_dir)
+    plan_path = plan_dir / PLAN_FILENAME
+    batch_root = tmp_path / "batch"
+    remote_root = batch_root / "remote"
+    base_store = LocalArchiveStore(remote_root)
+    store = _PublishBlockingStore(remote_root)
+    verification_root = batch_root / "_batch" / plan["plan_id"] / "_verification"
+    _seed_quarantined_bundle(
+        tmp_path,
+        plan["windows"][0],
+        store=base_store,
+        verification_root=verification_root,
+    )
+    _write_failed_storage_progress(batch_root, plan, failed_index=0)
+
+    result = reconcile_remote_quarantine_windows(
+        plan_path,
+        batch_root=batch_root,
+        store=store,
+    )
+    assert result["status"] == RUN_STATUS_PASS
+    assert result["windows"][0]["status"] == "reconciled"
+
+
+@pytest.mark.asyncio
+async def test_reconcile_metadata_mismatch_blocks_progress(tmp_path: Path) -> None:
+    plan = await _build_plan()
+    plan["windows"] = [plan["windows"][0]]
+    plan_dir = tmp_path / "plans"
+    write_batch_plan(plan, plan_dir)
+    plan_path = plan_dir / PLAN_FILENAME
+    batch_root = tmp_path / "batch"
+    store = LocalArchiveStore(batch_root / "remote")
+    verification_root = batch_root / "_batch" / plan["plan_id"] / "_verification"
+    bundle = build_archive_bundle(
+        symbol="ETH/USDT-P",
+        start=datetime.fromisoformat(plan["windows"][0]["start_utc"]),
+        end=datetime.fromisoformat(plan["windows"][0]["end_utc"]),
+        output_dir=tmp_path / "bundles",
+        events=_events_for_window(0),
+        limits=WindowExportLimits(max_duration_seconds=WINDOW_SECONDS),
+    )
+    metadata_path = bundle / "archive_metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["quarantined"] = False
+    metadata["admission_eligible"] = True
+    metadata["research_quality_status"] = "pass"
+    metadata_path.write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    _write_logical_checksums(bundle)
+    _write_physical_checksums(bundle)
+    import trading_bot.archive.window as window_mod
+
+    original_new_attempt = window_mod._new_attempt_id
+    window_mod._new_attempt_id = lambda: "bad-meta"
+    try:
+        assert (
+            upload_archive_bundle(
+                bundle,
+                store,
+                confirm_upload=True,
+                verification_root=verification_root,
+            )["status"]
+            == "verified"
+        )
+    finally:
+        window_mod._new_attempt_id = original_new_attempt
+
+    _write_failed_storage_progress(batch_root, plan, failed_index=0)
+    before = json.loads(progress_path(batch_root, plan["plan_id"]).read_text(encoding="utf-8"))
+
+    result = reconcile_remote_quarantine_windows(
+        plan_path,
+        batch_root=batch_root,
+        store=store,
+    )
+    assert result["status"] == RUN_STATUS_FAILED
+    assert result["windows"][0]["status"] == "failed"
+    after = json.loads(progress_path(batch_root, plan["plan_id"]).read_text(encoding="utf-8"))
+    assert after == before
+
+
+@pytest.mark.asyncio
+async def test_reconcile_event_count_mismatch_blocks_progress(tmp_path: Path) -> None:
+    plan = await _build_plan(count_provider=_zero_count_provider)
+    plan["windows"] = [plan["windows"][0]]
+    plan["range_expected_event_count"] = 0
+    plan["range_expected_trade_count"] = 0
+    plan_dir = tmp_path / "plans"
+    write_batch_plan(plan, plan_dir)
+    plan_path = plan_dir / PLAN_FILENAME
+    batch_root = tmp_path / "batch"
+    store = LocalArchiveStore(batch_root / "remote")
+    verification_root = batch_root / "_batch" / plan["plan_id"] / "_verification"
+    bundle = build_archive_bundle(
+        symbol="ETH/USDT-P",
+        start=datetime.fromisoformat(plan["windows"][0]["start_utc"]),
+        end=datetime.fromisoformat(plan["windows"][0]["end_utc"]),
+        output_dir=tmp_path / "bundles",
+        events=_events_for_window(0),
+        limits=WindowExportLimits(max_duration_seconds=WINDOW_SECONDS),
+    )
+    _set_rejected_quality(bundle)
+    import trading_bot.archive.window as window_mod
+
+    original_new_attempt = window_mod._new_attempt_id
+    window_mod._new_attempt_id = lambda: "count-mismatch"
+    try:
+        assert (
+            upload_archive_bundle(
+                bundle,
+                store,
+                confirm_upload=True,
+                confirm_quarantine_upload=True,
+                verification_root=verification_root,
+            )["status"]
+            == "verified"
+        )
+    finally:
+        window_mod._new_attempt_id = original_new_attempt
+
+    _write_failed_storage_progress(batch_root, plan, failed_index=0)
+    before = json.loads(progress_path(batch_root, plan["plan_id"]).read_text(encoding="utf-8"))
+
+    result = reconcile_remote_quarantine_windows(
+        plan_path,
+        batch_root=batch_root,
+        store=store,
+    )
+    assert result["status"] == RUN_STATUS_FAILED
+    assert "event count" in str(result["windows"][0].get("error", ""))
+    after = json.loads(progress_path(batch_root, plan["plan_id"]).read_text(encoding="utf-8"))
+    assert after == before
+
+
+@pytest.mark.asyncio
+async def test_reconcile_duplicate_is_idempotent(tmp_path: Path) -> None:
+    plan = await _build_plan()
+    plan["windows"] = [plan["windows"][0]]
+    plan["range_expected_event_count"] = plan["windows"][0]["expected_event_count"]
+    plan_dir = tmp_path / "plans"
+    write_batch_plan(plan, plan_dir)
+    plan_path = plan_dir / PLAN_FILENAME
+    batch_root = tmp_path / "batch"
+    remote_root = batch_root / "remote"
+    base_store = LocalArchiveStore(remote_root)
+    store = _PublishBlockingStore(remote_root)
+    verification_root = batch_root / "_batch" / plan["plan_id"] / "_verification"
+    _seed_quarantined_bundle(
+        tmp_path,
+        plan["windows"][0],
+        store=base_store,
+        verification_root=verification_root,
+        attempt_id="attempt-1",
+    )
+    _write_failed_storage_progress(batch_root, plan, failed_index=0)
+
+    first = reconcile_remote_quarantine_windows(
+        plan_path,
+        batch_root=batch_root,
+        store=store,
+    )
+    assert first["windows"][0]["status"] == "reconciled"
+    progress_after_first = json.loads(
+        progress_path(batch_root, plan["plan_id"]).read_text(encoding="utf-8")
+    )
+    attempt_id = progress_after_first["windows"]["0"]["attempt_id"]
+
+    second = reconcile_remote_quarantine_windows(
+        plan_path,
+        batch_root=batch_root,
+        store=store,
+        dataset_id=str(plan["windows"][0]["dataset_id"]),
+    )
+    assert second["status"] == RUN_STATUS_PASS
+    assert second["windows"][0]["status"] == "already_reconciled"
+    progress_after_second = json.loads(
+        progress_path(batch_root, plan["plan_id"]).read_text(encoding="utf-8")
+    )
+    assert progress_after_second["windows"]["0"]["attempt_id"] == attempt_id
+    assert progress_after_second["windows"]["0"]["status"] == WINDOW_STATE_COMPLETED_QUARANTINED
+
+
+@pytest.mark.asyncio
+async def test_reconcile_save_progress_is_atomic(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = await _build_plan()
+    plan["windows"] = [plan["windows"][0]]
+    plan["range_expected_event_count"] = plan["windows"][0]["expected_event_count"]
+    plan_dir = tmp_path / "plans"
+    write_batch_plan(plan, plan_dir)
+    plan_path = plan_dir / PLAN_FILENAME
+    batch_root = tmp_path / "batch"
+    store = LocalArchiveStore(batch_root / "remote")
+    verification_root = batch_root / "_batch" / plan["plan_id"] / "_verification"
+    _seed_quarantined_bundle(
+        tmp_path,
+        plan["windows"][0],
+        store=store,
+        verification_root=verification_root,
+    )
+    _write_failed_storage_progress(batch_root, plan, failed_index=0)
+
+    calls: list[str] = []
+    import trading_bot.archive.batch as batch_mod
+
+    original = batch_mod._save_progress
+
+    def spy_save_progress(*args: object, **kwargs: object) -> None:
+        calls.append("save")
+        original(*args, **kwargs)
+
+    monkeypatch.setattr("trading_bot.archive.batch._save_progress", spy_save_progress)
+
+    result = reconcile_remote_quarantine_windows(
+        plan_path,
+        batch_root=batch_root,
+        store=store,
+    )
+    assert result["windows"][0]["status"] == "reconciled"
+    assert calls
 
 
 @pytest.mark.asyncio

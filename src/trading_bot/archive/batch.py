@@ -616,6 +616,296 @@ async def _export_and_upload_window(
     }
 
 
+RECONCILE_FROM_REMOTE_QUARANTINE = "remote_quarantine_completed"
+
+
+def _iso_timestamps_match(left: str, right: str) -> bool:
+    return _utc(datetime.fromisoformat(left)) == _utc(datetime.fromisoformat(right))
+
+
+def _reconcile_restore_parent(batch_root: Path, plan_id: str) -> Path:
+    return batch_root / "_batch" / plan_id / "reconcile_restore"
+
+
+def _allocate_reconcile_restore_work_dir(
+    batch_root: Path,
+    plan_id: str,
+    dataset_id: str,
+) -> Path:
+    parent = _reconcile_restore_parent(batch_root, plan_id)
+    parent.mkdir(parents=True, exist_ok=True)
+    unique_suffix = f"{os.getpid()}-{int(datetime.now(UTC).timestamp() * 1_000_000)}"
+    work_dir = parent / f"{dataset_id}-{unique_suffix}"
+    if work_dir.exists():
+        raise BatchArchiveError(f"reconcile restore work directory already exists: {work_dir}")
+    work_dir.mkdir(parents=True)
+    return work_dir
+
+
+def _verify_restore_summary(result: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": result.get("status"),
+        "quality_status": result.get("quality_status"),
+    }
+
+
+def _completed_payload_matches_quarantine_metadata(
+    payload: dict[str, Any],
+    metadata: dict[str, Any],
+) -> bool:
+    for field in ("quarantined", "admission_eligible", "research_quality_status"):
+        if field in payload and payload[field] != metadata.get(field):
+            return False
+    return True
+
+
+def _validate_remote_quarantine_archive(
+    *,
+    window: dict[str, Any],
+    metadata: dict[str, Any],
+    completed_payload: dict[str, Any],
+) -> str | None:
+    dataset_id = str(window["dataset_id"])
+    if str(metadata.get("dataset_id")) != dataset_id:
+        return "metadata dataset_id mismatch vs plan window"
+    if not _iso_timestamps_match(str(metadata.get("start_utc", "")), str(window["start_utc"])):
+        return "metadata start_utc mismatch vs plan window"
+    if not _iso_timestamps_match(str(metadata.get("end_utc", "")), str(window["end_utc"])):
+        return "metadata end_utc mismatch vs plan window"
+    if metadata.get("quarantined") is not True:
+        return "metadata quarantined must be true"
+    if metadata.get("admission_eligible") is not False:
+        return "metadata admission_eligible must be false"
+    if metadata.get("research_quality_status") != "rejected":
+        return "metadata research_quality_status must be rejected"
+    archived_events = int(metadata.get("row_counts", {}).get("events", -1))
+    expected_events = int(window["expected_event_count"])
+    if archived_events != expected_events:
+        return "archived event count mismatch vs plan"
+    topics = metadata.get("topics", {})
+    if isinstance(topics, dict) and "trades" in topics:
+        archived_trades = int(topics["trades"])
+        expected_trades = int(window["expected_trade_count"])
+        if archived_trades != expected_trades:
+            return "archived trade count mismatch vs plan"
+    if not _completed_payload_matches_quarantine_metadata(completed_payload, metadata):
+        return "COMPLETED payload inconsistent with archive metadata"
+    return None
+
+
+def _window_already_quarantine_reconciled(entry: dict[str, Any], window: dict[str, Any]) -> bool:
+    status = _normalize_window_status(str(entry.get("status", WINDOW_STATE_PENDING)))
+    if status not in {
+        WINDOW_STATE_COMPLETED_QUARANTINED,
+        WINDOW_STATE_SKIPPED_QUARANTINED,
+    }:
+        return False
+    entry_dataset_id = entry.get("dataset_id")
+    return not (
+        entry_dataset_id is not None
+        and str(entry_dataset_id) != str(window["dataset_id"])
+    )
+
+
+def _reconcile_single_remote_quarantine_window(
+    *,
+    window: dict[str, Any],
+    entry: dict[str, Any],
+    batch_root: Path,
+    plan_id: str,
+    store: ArchiveStore,
+    run_limits: BatchRunLimits,
+) -> dict[str, Any]:
+    index = int(window["index"])
+    dataset_id = str(window["dataset_id"])
+    if entry.get("dataset_id") is not None and str(entry["dataset_id"]) != dataset_id:
+        return {
+            "index": index,
+            "dataset_id": dataset_id,
+            "status": "failed",
+            "error": "progress dataset_id mismatch vs plan window",
+        }
+
+    if _window_already_quarantine_reconciled(entry, window):
+        return {
+            "index": index,
+            "dataset_id": dataset_id,
+            "status": "already_reconciled",
+        }
+
+    if not store.exists(_completed_key(dataset_id)):
+        return {
+            "index": index,
+            "dataset_id": dataset_id,
+            "status": "failed",
+            "error": "remote COMPLETED marker is missing",
+        }
+
+    work_dir = _allocate_reconcile_restore_work_dir(batch_root, plan_id, dataset_id)
+    restore_result = verify_restore_archive(
+        store,
+        dataset_id,
+        work_dir,
+        gap_warning_seconds=run_limits.gap_warning_seconds,
+        price_discontinuity_percent=run_limits.price_discontinuity_percent,
+        exchange_boundary_tolerance_seconds=run_limits.exchange_boundary_tolerance_seconds,
+    )
+    if restore_result.get("status") != "verified":
+        return {
+            "index": index,
+            "dataset_id": dataset_id,
+            "status": "failed",
+            "error": restore_result.get("error", "restore verification failed"),
+            "verify": _verify_restore_summary(restore_result),
+        }
+
+    quality_status = restore_result.get("quality_status")
+    if quality_status == "warning" and not run_limits.allow_quality_warnings:
+        return {
+            "index": index,
+            "dataset_id": dataset_id,
+            "status": "failed",
+            "error": "quality status warning requires allow_quality_warnings",
+            "verify": _verify_restore_summary(restore_result),
+        }
+
+    completed = cast(
+        dict[str, Any],
+        json.loads(store.read_bytes(_completed_key(dataset_id)).decode("utf-8")),
+    )
+    attempt_id = str(completed["attempt_id"])
+    metadata_key = f"{ARCHIVE_KEY_PREFIX}/{dataset_id}/attempts/{attempt_id}/archive_metadata.json"
+    metadata = cast(
+        dict[str, Any],
+        json.loads(store.read_bytes(metadata_key).decode("utf-8")),
+    )
+    validation_error = _validate_remote_quarantine_archive(
+        window=window,
+        metadata=metadata,
+        completed_payload=completed,
+    )
+    if validation_error is not None:
+        return {
+            "index": index,
+            "dataset_id": dataset_id,
+            "status": "failed",
+            "error": validation_error,
+            "verify": _verify_restore_summary(restore_result),
+        }
+
+    prior_error = entry.get("error")
+    entry.clear()
+    entry.update(
+        {
+            "status": WINDOW_STATE_COMPLETED_QUARANTINED,
+            "dataset_id": dataset_id,
+            "attempt_id": attempt_id,
+            "quarantined": True,
+            "admission_eligible": False,
+            "research_quality_status": "rejected",
+            "quarantine_reasons": list(metadata.get("quarantine_reasons", [])),
+            "archived_event_count": int(metadata.get("row_counts", {}).get("events", 0)),
+            "verify": _verify_restore_summary(restore_result),
+            "reconciled_from": RECONCILE_FROM_REMOTE_QUARANTINE,
+        }
+    )
+    if prior_error is not None:
+        entry["prior_error"] = prior_error
+    return {
+        "index": index,
+        "dataset_id": dataset_id,
+        "status": "reconciled",
+        "attempt_id": attempt_id,
+    }
+
+
+def reconcile_remote_quarantine_windows(
+    plan_path: Path,
+    *,
+    batch_root: Path | None = None,
+    store: ArchiveStore,
+    run_limits: BatchRunLimits | None = None,
+    dataset_id: str | None = None,
+) -> dict[str, Any]:
+    """Adopt remote quarantined COMPLETED archives for failed_storage windows.
+
+    Read-only against the archive store: never exports, builds, or uploads bundles.
+    """
+    run_limits = run_limits or BatchRunLimits()
+    plan, plan_sha256 = load_batch_plan(plan_path)
+    root = batch_root_for_plan(plan_path, batch_root)
+    plan_id = str(plan["plan_id"])
+    progress = load_or_create_progress(root, plan)
+
+    windows_plan = cast(list[dict[str, Any]], plan["windows"])
+    plan_dataset_ids = {str(window["dataset_id"]) for window in windows_plan}
+    if dataset_id is not None and dataset_id not in plan_dataset_ids:
+        raise BatchArchiveError(f"dataset_id is not in plan: {dataset_id}")
+
+    candidates: list[dict[str, Any]] = []
+    for window in windows_plan:
+        if dataset_id is not None and str(window["dataset_id"]) != dataset_id:
+            continue
+        entry = _window_entry(progress, int(window["index"]))
+        status = _normalize_window_status(str(entry.get("status", WINDOW_STATE_PENDING)))
+        if status == WINDOW_STATE_FAILED_STORAGE or (
+            dataset_id is not None and _window_already_quarantine_reconciled(entry, window)
+        ):
+            candidates.append(window)
+
+    window_results: list[dict[str, Any]] = []
+    reconcile_failed = False
+    for window in candidates:
+        entry = _window_entry(progress, int(window["index"]))
+        if _window_already_quarantine_reconciled(entry, window):
+            window_results.append(
+                {
+                    "index": window["index"],
+                    "dataset_id": window["dataset_id"],
+                    "status": "already_reconciled",
+                }
+            )
+            continue
+
+        outcome = _reconcile_single_remote_quarantine_window(
+            window=window,
+            entry=entry,
+            batch_root=root,
+            plan_id=plan_id,
+            store=store,
+            run_limits=run_limits,
+        )
+        window_results.append(outcome)
+        if outcome["status"] == "reconciled":
+            _save_progress(root, plan_id, progress)
+        elif outcome["status"] == "failed":
+            reconcile_failed = True
+
+    reconciliation = reconcile_batch(plan, progress, plan_sha256=plan_sha256)
+    all_terminal = all(
+        _window_is_storage_complete(
+            str(_window_entry(progress, int(window["index"]))["status"])
+        )
+        for window in windows_plan
+    )
+    verification_path: str | None = None
+    if all_terminal:
+        verification_file = batch_verification_path(root, plan_id)
+        _atomic_write_json(verification_file, reconciliation)
+        verification_path = str(verification_file)
+        progress["status"] = reconciliation["status"]
+        _save_progress(root, plan_id, progress)
+
+    overall_status = RUN_STATUS_FAILED if reconcile_failed else reconciliation["status"]
+    return {
+        "plan_id": plan_id,
+        "status": overall_status,
+        "windows": window_results,
+        "reconciliation": reconciliation,
+        "batch_verification": verification_path,
+    }
+
+
 def reconcile_batch(
     plan: dict[str, Any],
     progress: dict[str, Any],
@@ -703,6 +993,12 @@ def reconcile_batch(
         and not has_failed_storage
         and admissible_event_reconciled
     )
+    storage_coverage_continuous = (
+        all_storage_complete
+        and boundary_ok
+        and storage_event_reconciled
+        and not has_failed_storage
+    )
 
     passed = (
         all_storage_complete
@@ -727,6 +1023,7 @@ def reconcile_batch(
         "admissible_event_total": admissible_event_total,
         "quarantined_event_total": quarantined_event_total,
         "admissible_coverage_continuous": admissible_coverage_continuous,
+        "storage_coverage_continuous": storage_coverage_continuous,
         "checksums_valid": checksums_valid,
         "failed_storage": has_failed_storage,
         "status": RUN_STATUS_PASS if passed else RUN_STATUS_FAILED,

@@ -20,10 +20,15 @@ checksum model, and remote layout.
    are not reprocessed.
 5. **Reconcile** — when every window is storage-complete, ``batch_verification.json``
    is written under the batch progress directory.
+6. **Adopt quarantine** — ``archive-batch-reconcile`` can adopt an already-uploaded
+   remote quarantined ``COMPLETED`` archive for a ``failed_storage`` window without
+   re-export or re-upload.
 
 Storage integrity and research admission eligibility are separate: a batch can
 ``pass`` storage reconciliation while ``admissible_coverage_continuous`` remains
-``false`` when any window is quarantined.
+``false`` when any window is quarantined. ``storage_coverage_continuous`` can
+still be ``true`` when every window is storage-complete with contiguous boundaries
+and reconciled event totals, even when quarantined windows are present.
 
 ## Operator approval
 
@@ -31,6 +36,7 @@ Storage integrity and research admission eligibility are separate: a batch can
 | --- | --- |
 | Plan (DB counts only) | default (no remote I/O) |
 | Remote upload run | ``--confirm-upload`` + ``B2_S3_*`` credentials |
+| Remote quarantine reconcile (read/verify only) | ``archive-batch-reconcile`` + ``B2_S3_*`` credentials |
 | Upload with quality warnings | ``--allow-quality-warnings`` |
 | Quarantine upload (rejected quality) | ``--confirm-quarantine-upload`` **and** ``--confirm-upload`` |
 | New attempt after incomplete remote marker | ``--allow-new-attempt-after-incomplete`` |
@@ -91,8 +97,11 @@ Progress updates are atomic (write temp + ``os.replace``) after each state chang
 Legacy progress files may contain ``completed`` or ``failed``; these map to
 ``completed_admissible`` and ``failed_storage`` on load.
 
-Failed windows are never auto-retried. A subsequent run stops fail closed if any
-``failed_storage`` window remains.
+Failed windows are never auto-retried by ``archive-batch-run``. A subsequent run
+stops fail closed if any ``failed_storage`` window remains. Use
+``archive-batch-reconcile`` when a quarantined ``COMPLETED`` archive already exists
+remotely and progress still shows ``failed_storage`` (for example after a prior
+upload succeeded but batch progress was not updated).
 
 ## Incomplete attempt policy
 
@@ -124,6 +133,7 @@ quarantined and structurally verified. On mismatch → ``failed_storage``.
 | ``admissible_event_total`` | Events in admission-eligible windows only |
 | ``quarantined_event_total`` | Events in quarantined windows |
 | ``admissible_coverage_continuous`` | ``false`` when any window is quarantined or admissible totals diverge |
+| ``storage_coverage_continuous`` | ``true`` when all windows are storage-complete, boundaries are contiguous, event totals reconcile, and no ``failed_storage`` remains |
 | ``failed_storage`` | Any window in ``failed_storage`` state |
 | ``retention_authorized`` | Always ``false`` |
 
@@ -175,12 +185,31 @@ hibachi-archive archive-batch-run `
 Re-run the same command until ``batch_verification.json`` reports ``pass`` or a
 window is ``failed_storage``.
 
+### Reconcile failed window from remote quarantine (no upload)
+
+When a window is ``failed_storage`` but a matching quarantined ``COMPLETED``
+archive already exists remotely (same ``dataset_id``, window bounds, and event
+counts), adopt it into progress as ``completed_quarantined`` without creating a
+new attempt or calling upload APIs:
+
+```powershell
+hibachi-archive archive-batch-reconcile `
+  --plan D:\archive-work\plans\archive_batch_plan.json `
+  --provider b2 `
+  --output-dir D:\archive-work `
+  --dataset-id eth-usdt-p_20260801T140000000000Z_20260801T150000000000Z_v2
+```
+
+Omit ``--dataset-id`` to reconcile all ``failed_storage`` windows in the plan.
+The command is idempotent for windows already ``completed_quarantined`` or
+``skipped_quarantined``. It never calls export, bundle build, or upload APIs.
+
 ## Exit codes
 
 | Code | Meaning |
 | --- | --- |
-| 0 | Plan success; run ``pass`` or intentional ``partial`` progress without failures |
-| 1 | Run finished with ``failed`` status |
+| 0 | Plan success; run ``pass`` or intentional ``partial`` progress without failures; reconcile success |
+| 1 | Run or reconcile finished with ``failed`` status |
 | 2 | Contract / validation error (bad plan, missing confirm flag, checksum mismatch) |
 
 ## Tests
