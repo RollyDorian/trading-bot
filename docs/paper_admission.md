@@ -38,6 +38,12 @@ drawdown is computed from the chronological sequence of raw OOS trade net result
 never averaged from per-dataset drawdowns. If raw trades are unavailable or inconsistent,
 admission fails closed.
 
+Admission reports include additive `evidence_limitations` strings and per-dataset
+`sequence_availability` copied from quality reports. These record evidence gaps such as
+`sequence_availability: absent` streams where exchange sequence continuity is unproven
+and never invented. They are informational for human review only: they do not change
+thresholds, criteria, or the `admitted` decision.
+
 ## Human decision boundary
 
 No result automatically transitions the service to PAPER. Even when every criterion

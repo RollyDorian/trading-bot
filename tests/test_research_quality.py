@@ -7,7 +7,7 @@ import pyarrow.parquet as pq  # type: ignore[import-untyped]
 import pytest
 
 from trading_bot.research.dataset import sha256_file, write_dataset
-from trading_bot.research.quality import validate_dataset
+from trading_bot.research.quality import require_acceptable_quality, validate_dataset
 from trading_bot.research.replay import replay_dataset
 from trading_bot.storage.models import MarketEvent
 
@@ -49,12 +49,41 @@ def _replace_rows(dataset: Path, rows: list[dict[str, object]]) -> None:
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
 
+def test_forged_schema_4_quality_report_is_refused(tmp_path: Path) -> None:
+    dataset = _dataset(tmp_path, [100, 101, 102])
+    validate_dataset(dataset)
+    quality_path = dataset / "quality_report.json"
+    quality = json.loads(quality_path.read_text(encoding="utf-8"))
+    quality["quality_report_version"] = 4
+    quality_path.write_text(json.dumps(quality), encoding="utf-8")
+    with pytest.raises(ValueError, match="unsupported"):
+        require_acceptable_quality(dataset, allow_warnings=False)
+
+
 def test_clean_dataset_is_valid(tmp_path: Path) -> None:
     dataset = _dataset(tmp_path, [100, 101, 102])
     report = validate_dataset(dataset)
     assert report["status"] == "pass"
     assert report["row_count"] == 3
+    assert report["quality_report_version"] == 5
+    assert report["sequence_availability"]["fixture:trades"] == "present"
     assert replay_dataset(dataset)["dataset_quality_status"] == "pass"
+
+
+def test_validate_dataset_write_report_false_does_not_mutate_file(tmp_path: Path) -> None:
+    dataset = _dataset(tmp_path, [100, 101, 102])
+    validate_dataset(dataset)
+    quality_path = dataset / "quality_report.json"
+    before_bytes = quality_path.read_bytes()
+    fixed_now = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
+
+    report = validate_dataset(dataset, write_report=False, now=fixed_now)
+
+    assert quality_path.read_bytes() == before_bytes
+    assert isinstance(report, dict)
+    assert report["status"] == "pass"
+    assert report["quality_report_version"] == 5
+    assert report["validated_at_utc"] == fixed_now.isoformat()
 
 
 def test_duplicates_are_warning(tmp_path: Path) -> None:
@@ -81,11 +110,67 @@ def test_timestamp_disorder_is_rejected(tmp_path: Path) -> None:
 def test_timestamp_outside_manifest_range_is_rejected(tmp_path: Path) -> None:
     dataset = _dataset(tmp_path, [100, 101, 102])
     rows = pq.read_table(dataset / "events.parquet").to_pylist()
-    rows[0]["exchange_at"] = START - timedelta(seconds=1)
+    rows[0]["exchange_at"] = START - timedelta(seconds=10)
     _replace_rows(dataset, rows)
     report = validate_dataset(dataset)
     assert report["status"] == "rejected"
     assert report["timestamp_manifest_range_violations"] == 1
+
+
+def test_exchange_timestamp_boundary_excursion_within_tolerance_passes(
+    tmp_path: Path,
+) -> None:
+    dataset = _dataset(tmp_path, [100, 101, 102])
+    rows = pq.read_table(dataset / "events.parquet").to_pylist()
+    rows[0]["exchange_at"] = START - timedelta(seconds=1)
+    _replace_rows(dataset, rows)
+    report = validate_dataset(dataset)
+    assert report["status"] == "pass"
+    assert report["exchange_timestamp_boundary_excursions"] == 1
+    assert report["exchange_timestamp_manifest_range_violations"] == 0
+    assert report["exchange_boundary_tolerance_seconds"] == 5.0
+
+
+def test_exchange_timestamp_boundary_excursion_rejects_when_tolerance_zero(
+    tmp_path: Path,
+) -> None:
+    dataset = _dataset(tmp_path, [100, 101, 102])
+    rows = pq.read_table(dataset / "events.parquet").to_pylist()
+    rows[0]["exchange_at"] = START - timedelta(seconds=1)
+    _replace_rows(dataset, rows)
+    report = validate_dataset(dataset, exchange_boundary_tolerance_seconds=0)
+    assert report["status"] == "rejected"
+    assert report["exchange_timestamp_manifest_range_violations"] == 1
+    assert report["exchange_timestamp_boundary_excursions"] == 0
+
+
+def test_partial_sequence_metadata_is_warning(tmp_path: Path) -> None:
+    dataset = _dataset(tmp_path, [100, 101, 102])
+    rows = pq.read_table(dataset / "events.parquet").to_pylist()
+    rows[1]["sequence"] = None
+    _replace_rows(dataset, rows)
+    report = validate_dataset(dataset)
+    assert report["status"] == "warning"
+    assert report["sequence_availability"]["fixture:trades"] == "partial"
+    assert any("partial" in finding for finding in report["findings"])
+
+
+def test_sequence_availability_present_and_absent(tmp_path: Path) -> None:
+    dataset = _dataset(tmp_path, [100, 101, 102, 103])
+    rows = pq.read_table(dataset / "events.parquet").to_pylist()
+    for index, row in enumerate(rows):
+        if index % 2 == 0:
+            row["topic"] = "orderbook"
+            row["sequence"] = index // 2 + 1
+        else:
+            row["topic"] = "mark_price"
+            row["sequence"] = None
+            row["exchange_at"] = None
+    _replace_rows(dataset, rows)
+    report = validate_dataset(dataset)
+    assert report["status"] == "pass"
+    assert report["sequence_availability"]["fixture:orderbook"] == "present"
+    assert report["sequence_availability"]["fixture:mark_price"] == "absent"
 
 
 def test_exchange_ordering_is_checked_within_source_topic_streams(tmp_path: Path) -> None:
@@ -171,3 +256,70 @@ def test_missing_parquet_refuses_replay(tmp_path: Path) -> None:
     (dataset / "events.parquet").unlink()
     with pytest.raises(ValueError, match="Parquet inputs changed"):
         replay_dataset(dataset, allow_warnings=True)
+
+
+def test_nested_captured_trade_price_passes(tmp_path: Path) -> None:
+    events = [
+        MarketEvent(
+            id=1,
+            received_at=START,
+            exchange_at=START,
+            source="fixture",
+            event_type="trades",
+            symbol="ETH/USDT-P",
+            sequence=1,
+            latency_ms=0.0,
+            payload={
+                "topic": "trades",
+                "symbol": "ETH/USDT-P",
+                "data": {
+                    "trade": {
+                        "price": "2000.25",
+                        "quantity": "0.50",
+                        "takerSide": "Buy",
+                        "timestamp": 1785283201000,
+                    }
+                },
+            },
+        )
+    ]
+    dataset = write_dataset(
+        events=events,
+        symbol="ETH/USDT-P",
+        start=START,
+        end=START + timedelta(minutes=1),
+        output_root=tmp_path,
+    )
+    report = validate_dataset(dataset)
+    assert report["status"] == "pass"
+    assert report["invalid_or_missing_price_count"] == 0
+
+
+def test_nested_invalid_trade_price_is_warning(tmp_path: Path) -> None:
+    events = [
+        MarketEvent(
+            id=1,
+            received_at=START,
+            exchange_at=START,
+            source="fixture",
+            event_type="trades",
+            symbol="ETH/USDT-P",
+            sequence=1,
+            latency_ms=0.0,
+            payload={
+                "topic": "trades",
+                "symbol": "ETH/USDT-P",
+                "data": {"trade": {"price": "0", "quantity": "1"}},
+            },
+        )
+    ]
+    dataset = write_dataset(
+        events=events,
+        symbol="ETH/USDT-P",
+        start=START,
+        end=START + timedelta(minutes=1),
+        output_root=tmp_path,
+    )
+    report = validate_dataset(dataset)
+    assert report["status"] == "warning"
+    assert report["invalid_or_missing_price_count"] == 1

@@ -83,6 +83,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--allow-warnings", action="store_true")
     parser.add_argument("--gap-warning-seconds", type=float, default=60.0)
     parser.add_argument("--price-discontinuity-percent", type=float, default=20.0)
+    parser.add_argument(
+        "--exchange-boundary-tolerance-seconds",
+        type=float,
+        default=5.0,
+    )
     args = parser.parse_args()
     replay_options_used = (
         args.start is not None
@@ -110,6 +115,8 @@ def _parse_args() -> argparse.Namespace:
         parser.error("--dataset requires validate-dataset")
     if args.gap_warning_seconds <= 0 or args.price_discontinuity_percent <= 0:
         parser.error("quality thresholds must be positive")
+    if args.exchange_boundary_tolerance_seconds < 0:
+        parser.error("exchange-boundary-tolerance-seconds must be non-negative")
     return args
 
 
@@ -412,6 +419,9 @@ def main() -> None:
                     args.dataset,
                     gap_warning_seconds=args.gap_warning_seconds,
                     price_discontinuity_percent=args.price_discontinuity_percent,
+                    exchange_boundary_tolerance_seconds=(
+                        args.exchange_boundary_tolerance_seconds
+                    ),
                 ),
                 sort_keys=True,
             )

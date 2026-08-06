@@ -1,0 +1,12 @@
+{
+  "topic": "trades",
+  "symbol": "ETH/USDT-P",
+  "data": {
+    "trade": {
+      "price": "2000.25",
+      "quantity": "0.50",
+      "takerSide": "Buy",
+      "timestamp": 1785283201000
+    }
+  }
+}

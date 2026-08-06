@@ -1,7 +1,7 @@
 import json
 import math
 from collections import Counter
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
@@ -10,7 +10,7 @@ import pyarrow.parquet as pq  # type: ignore[import-untyped]
 from trading_bot.research.dataset import sha256_file, validate_manifest
 
 QUALITY_REPORT = "quality_report.json"
-QUALITY_REPORT_VERSION = 4
+QUALITY_REPORT_VERSION = 5
 PRICE_FIELDS = ("price", "tradePrice", "trade_price", "markPrice", "mark_price", "p")
 SNAPSHOT_MARKERS = {"snapshot", "initial", "full"}
 
@@ -40,13 +40,23 @@ def _is_snapshot(payload_json: Any) -> bool:
     return False
 
 
+def _trade_payload_containers(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Known captured trade envelope layers: root, data, and data.trade."""
+    containers = [payload]
+    data = payload.get("data")
+    if isinstance(data, dict):
+        containers.append(data)
+        trade = data.get("trade")
+        if isinstance(trade, dict):
+            containers.append(trade)
+    return containers
+
+
 def _price(payload_json: Any) -> tuple[bool, float | None]:
     payload = _payload(payload_json)
     if payload is None:
         return False, None
-    containers = [payload]
-    if isinstance(payload, dict) and isinstance(payload.get("data"), dict):
-        containers.append(payload["data"])
+    containers = _trade_payload_containers(payload)
     for container in containers:
         if not isinstance(container, dict):
             continue
@@ -74,11 +84,20 @@ def validate_dataset(
     *,
     gap_warning_seconds: float = 60.0,
     price_discontinuity_percent: float = 20.0,
+    exchange_boundary_tolerance_seconds: float = 5.0,
     now: datetime | None = None,
+    write_report: bool = True,
 ) -> dict[str, Any]:
-    """Validate an immutable export; large price moves are review warnings only."""
+    """Validate an immutable export; large price moves are review warnings only.
+
+    When ``write_report`` is ``True`` (default), ``quality_report.json`` is written
+    into ``dataset_dir``. When ``False``, the report is computed and returned in
+    memory only; no files inside ``dataset_dir`` are created or modified.
+    """
     if gap_warning_seconds <= 0 or price_discontinuity_percent <= 0:
         raise ValueError("Quality thresholds must be positive.")
+    if exchange_boundary_tolerance_seconds < 0:
+        raise ValueError("exchange_boundary_tolerance_seconds must be non-negative.")
     manifest = validate_manifest(dataset_dir)
     manifest_path = dataset_dir / "manifest.json"
     parquet_paths = sorted(dataset_dir.glob("*.parquet"), key=lambda path: path.name)
@@ -108,10 +127,19 @@ def validate_dataset(
             exchange_times.append(exchange_at)
             stream = (row.get("source"), row.get("topic"))
             exchange_by_stream.setdefault(stream, []).append(exchange_at)
-    exchange_range_violations = sum(
-        timestamp < manifest_start or timestamp >= manifest_end
-        for timestamp in exchange_times
-    )
+    # Receipt-filtered exports can include rows whose exchange clock sits slightly
+    # outside the manifest window; tolerate small boundary excursions only.
+    tolerance_delta = timedelta(seconds=exchange_boundary_tolerance_seconds)
+    exchange_range_violations = 0
+    exchange_timestamp_boundary_excursions = 0
+    for timestamp in exchange_times:
+        if (
+            timestamp < manifest_start - tolerance_delta
+            or timestamp >= manifest_end + tolerance_delta
+        ):
+            exchange_range_violations += 1
+        elif timestamp < manifest_start or timestamp >= manifest_end:
+            exchange_timestamp_boundary_excursions += 1
     exchange_ordering_violations = sum(
         left > right
         for values in exchange_by_stream.values()
@@ -139,6 +167,27 @@ def validate_dataset(
         abs(right / left - 1) * 100 >= price_discontinuity_percent
         for left, right in zip(prices, prices[1:], strict=False)
     )
+
+    stream_sequence_counts: dict[tuple[Any, Any], list[int]] = {}
+    for row in rows:
+        stream = (row.get("source"), row.get("topic"))
+        counts = stream_sequence_counts.setdefault(stream, [0, 0])
+        if isinstance(row.get("sequence"), int):
+            counts[0] += 1
+        else:
+            counts[1] += 1
+    sequence_availability: dict[str, str] = {}
+    partial_sequence_streams: list[str] = []
+    for stream in sorted(stream_sequence_counts, key=lambda item: (str(item[0]), str(item[1]))):
+        with_sequence, without_sequence = stream_sequence_counts[stream]
+        stream_key = f"{stream[0]}:{stream[1]}"
+        if with_sequence > 0 and without_sequence > 0:
+            sequence_availability[stream_key] = "partial"
+            partial_sequence_streams.append(stream_key)
+        elif with_sequence > 0:
+            sequence_availability[stream_key] = "present"
+        else:
+            sequence_availability[stream_key] = "absent"
 
     last_sequences: dict[tuple[Any, Any], int] = {}
     sequence_anomalies: int | None = None
@@ -187,6 +236,13 @@ def validate_dataset(
             findings.append(finding)
             if status == "pass":
                 status = "warning"
+    if partial_sequence_streams:
+        findings.append(
+            "Sequence metadata is partial for stream(s): "
+            f"{', '.join(partial_sequence_streams)}."
+        )
+        if status == "pass":
+            status = "warning"
     if not findings:
         findings.append("No configured data-quality anomalies found.")
 
@@ -217,7 +273,10 @@ def validate_dataset(
         "timestamp_manifest_range_violations": range_violations,
         "receipt_timestamp_manifest_range_violations": receipt_range_violations,
         "exchange_timestamp_manifest_range_violations": exchange_range_violations,
+        "exchange_timestamp_boundary_excursions": exchange_timestamp_boundary_excursions,
+        "exchange_boundary_tolerance_seconds": exchange_boundary_tolerance_seconds,
         "sequence_anomalies": sequence_anomalies,
+        "sequence_availability": sequence_availability,
         "largest_timestamp_gap_seconds": largest_gap,
         "gap_warning_threshold_seconds": gap_warning_seconds,
         "price_discontinuity_count": discontinuities,
@@ -226,11 +285,12 @@ def validate_dataset(
         "status": status,
         "findings": findings,
     }
-    (dataset_dir / QUALITY_REPORT).write_text(
-        json.dumps(report, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-        newline="\n",
-    )
+    if write_report:
+        (dataset_dir / QUALITY_REPORT).write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
     return report
 
 
