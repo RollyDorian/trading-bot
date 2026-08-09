@@ -177,10 +177,11 @@ python -m venv .venv
   and any PAPER/LIVE behavior still require separate explicit approval.
 5. **In progress:** RAW storage lifecycle for the disk-constrained VPS. Bounded
   DELETE retention is implemented as the emergency/legacy path. Partitioned
-  RANGE(`id`) generations are designed and locally proven for physical reclaim via
-  operator-approved DROP after B2 verification; production migration of the current
-  empty monolithic `market_events` (~641.8 MiB allocated) requires human review and
-  must not run automatically. Sequence continuity must preserve next id `7471913`.
+  RANGE(`id`) generations are designed, locally proven, and the empty production
+  monolithic `market_events` was converted to partitioned storage while the
+  collector remained STOPPED (sequence next id preserved at `7471913`). Operator-
+  approved generation DROP after B2 verification remains the reclaim path; do not
+  enable automatic DROP or restart the collector without separate approval.
 6. PAPER remains disabled even when admission criteria pass. Human review and a
   separate explicitly approved implementation milestone are mandatory; keep all
   real trading commands absent.
