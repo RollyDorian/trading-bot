@@ -75,7 +75,7 @@ async def _reset_to_head(database_url: str) -> None:
     finally:
         await engine.dispose()
 
-    await asyncio.to_thread(command.upgrade, config, "head")
+    await asyncio.to_thread(command.upgrade, config, "20260809_0004")
     # Continuity probe: simulate production last_value without rewriting RAW.
     engine = create_engine(database_url)
     try:
@@ -116,7 +116,7 @@ def test_alembic_upgrade_downgrade_partition_revision() -> None:
         finally:
             await engine.dispose()
 
-        await asyncio.to_thread(command.upgrade, config, "head")
+        await asyncio.to_thread(command.upgrade, config, "20260809_0004")
         engine = create_engine(database_url)
         try:
             async with engine.connect() as conn:
@@ -146,10 +146,10 @@ def test_alembic_upgrade_downgrade_partition_revision() -> None:
             # Empty before downgrade (fail-closed otherwise).
             async with engine.begin() as conn:
                 await conn.execute(text("DELETE FROM market_events"))
-            await asyncio.to_thread(command.downgrade, config, "20260729_0003")
+            await asyncio.to_thread(command.downgrade, config, "20260729_0002")
             async with engine.connect() as conn:
                 assert not await is_market_events_partitioned(conn)
-            await asyncio.to_thread(command.upgrade, config, "head")
+            await asyncio.to_thread(command.upgrade, config, "20260809_0004")
             async with engine.connect() as conn:
                 assert await is_market_events_partitioned(conn)
         finally:

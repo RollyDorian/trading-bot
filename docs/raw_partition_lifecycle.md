@@ -155,6 +155,8 @@ RAW rows need rewrite. **Do not migrate automatically.**
 2. Take a protected logical backup / snapshot evidence.
 3. Record `pg_total_relation_size('market_events')`, sequence cursor, grants.
 4. Apply `20260809_0004` only while `COUNT(*)=0` (migration fail-closed otherwise).
+   Production may be on `20260729_0002`; partition revision revises RAW v2 directly.
+   Do **not** enable normalized live tail/backfill (`20260729_0003` remains optional).
 5. Verify: partitioned parent, sequence next=`7471913`, first ACTIVE generation
    covering that id, indexes present, research INSERT probe on disposable clone
    first when possible.
