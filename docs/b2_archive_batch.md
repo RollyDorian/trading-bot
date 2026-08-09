@@ -121,7 +121,9 @@ counts vs plan). On match → ``skipped_verified`` or ``skipped_quarantined`` (n
 re-upload). Rejected quality does **not** fail reuse when the archive is
 quarantined and structurally verified. On mismatch → ``failed_storage``.
 
-**COMPLETED reuse does not authorize retention or DELETE.**
+**COMPLETED reuse does not authorize retention or DELETE.** Use the separate
+`hibachi-archive retention-coverage-gate`, `retention-dry-run`, and
+`retention-execute` commands with explicit operator confirmation.
 
 ## Reconciliation fields
 

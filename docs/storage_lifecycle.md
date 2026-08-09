@@ -143,22 +143,44 @@ daily rates require a bounded archive canary before any retention approval.
 
 ## Retention
 
-No automatic deletion, timer, or production delete command is enabled.
-`hibachi-archive retention-plan` is dry-run only. A closed daily range is
-eligible only when its external manifest is verified, its destination is
-external (`s3` or `pc_filesystem`), RAW count and identity coverage match, adjacent selected UTC
-intervals have no gap, and the configured hot window remains.
+No automatic deletion, timer, or unattended production mutation is enabled.
+`hibachi-archive retention-plan` remains dry-run only for manifest-based daily
+eligibility. Production bounded RAW deletion is available only through explicit
+operator commands:
 
-The library contains a separately guarded bounded executor for synthetic
+- `hibachi-archive retention-coverage-gate` — verify B2 archive storage coverage
+  (COMPLETED markers, event counts, no INCOMPLETE) independent of research
+  admission or quality PASS;
+- `hibachi-archive retention-dry-run` — plan bounded batches with filesystem
+  audit/progress, requires operator-confirmed guards and measured free disk;
+- `hibachi-archive retention-execute` — same as dry-run unless
+  `--confirm-delete` and `--confirmation-token DELETE_VERIFIED_ARCHIVE` are both
+  supplied. Mutation requires `RETENTION_DATABASE_URL` for the `retention` role;
+  `DATABASE_URL` / `research` cannot delete RAW rows.
+
+Deletes are bounded to at most 1,000 locked rows per transaction with optional
+inter-batch pauses and health re-checks. A closed daily range in
+`retention-plan` is eligible only when its external manifest is verified, its
+destination is external (`s3` or `pc_filesystem`), RAW count and identity
+coverage match, adjacent selected UTC intervals have no gap, and the configured
+hot window remains.
+
+The library also contains a separately guarded bounded executor for synthetic
 integration proof. It requires an exact confirmation token, writes an external
 audit record before and after a transaction, deletes at most 1,000 locked rows,
 and is not exposed through the production CLI. Future production activation
 requires separate review and approval. Large DELETE transactions, cascade
-deletes, partition drops, VACUUM FULL, `pg_repack`, and automatic retention are
-prohibited. A future approved delete uses at most 1,000 rows per transaction
-with health pauses. Ordinary DELETE makes PostgreSQL pages reusable but
-normally does not return relation files to the operating system; filesystem
+deletes, unattended partition drops, VACUUM FULL, `pg_repack`, and automatic
+retention are prohibited. A future approved delete uses at most 1,000 rows per
+transaction with health pauses. Ordinary DELETE makes PostgreSQL pages reusable
+but normally does not return relation files to the operating system; filesystem
 recovery requires later natural reuse, not a rewrite on the constrained host.
+
+The designed reclaim path on this VPS is operator-approved DROP of a
+**verified closed RANGE(`id`) generation** after B2 storage-integrity gates
+pass. See `docs/raw_partition_lifecycle.md`. Bounded DELETE retention remains
+the emergency/legacy path and must not be removed. Automatic generation DROP is
+not enabled in the first rollout.
 
 ## Existing 2.5M RAW rows
 

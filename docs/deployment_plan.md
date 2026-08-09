@@ -20,15 +20,21 @@ approval, a protected GitHub Environment, required reviewers, and manual approva
 
 ## PostgreSQL isolation and least privilege
 
-Use a dedicated research database, never the integration-test database. Provision two
+Use a dedicated research database, never the integration-test database. Provision
 database roles outside the repository:
 
 - migration role: owns the research schema and is used only by the one-off migration;
-- runtime role: can connect, select and insert into `market_events` and `system_events`,
-  and use their sequences; it cannot create/alter/drop schema or update/delete events.
+- runtime role (`research`): can connect, select and insert into `market_events` and
+  `system_events`, and use their sequences; it cannot create/alter/drop schema or
+  update/delete/truncate events;
+- retention role (`retention`): login role used only for approved bounded RAW
+  deletion; `RETENTION_DATABASE_URL` is separate from `DATABASE_URL` and grants
+  `SELECT`, `UPDATE` (row-lock only), and `DELETE` on `market_events` only. See
+  `docs/retention_role.md`.
 
 `MIGRATION_DATABASE_URL` belongs only to the migration service. `DATABASE_URL` belongs to
-collector/dashboard/health checks. Both use `DATABASE_ROLE=research`; production Compose
+collector/dashboard/health checks and retention dry-run counts. `RETENTION_DATABASE_URL`
+belongs only to `hibachi-archive retention-execute --confirm-delete`. Production Compose
 contains no test role or test URL. PostgreSQL credentials must be stored only in the VPS
 secret environment mechanism or a root-readable local environment file outside the clone.
 

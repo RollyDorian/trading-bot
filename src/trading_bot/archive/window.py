@@ -864,6 +864,37 @@ def _load_completed_marker(store: ArchiveStore, dataset_id: str) -> dict[str, An
     return payload
 
 
+def load_completed_attempt_metadata(
+    store: ArchiveStore,
+    dataset_id: str,
+) -> dict[str, Any]:
+    """Load COMPLETED marker and parsed archive_metadata for a dataset.
+
+    Fail closed when the canonical marker or attempt metadata is missing or invalid.
+    """
+    completed = _load_completed_marker(store, dataset_id)
+    attempt_id = str(completed["attempt_id"])
+    metadata_key = _attempt_key(dataset_id, attempt_id, "archive_metadata.json")
+    if not store.exists(metadata_key):
+        raise WindowExportError("archive_metadata.json is missing from completed attempt")
+    archive_metadata = cast(
+        dict[str, Any],
+        json.loads(store.read_bytes(metadata_key).decode("utf-8")),
+    )
+    return {
+        "attempt_id": attempt_id,
+        "completed": completed,
+        "archive_metadata": archive_metadata,
+    }
+
+
+def dataset_has_incomplete_marker(store: ArchiveStore, dataset_id: str) -> bool:
+    """Return True when any INCOMPLETE marker exists under the dataset prefix."""
+    prefix = f"{_canonical_prefix(dataset_id)}/"
+    incomplete_suffix = f"/{INCOMPLETE_MARKER_NAME}"
+    return any(key.endswith(incomplete_suffix) for key in store.list_keys(prefix))
+
+
 def verify_restore_archive(
     store: ArchiveStore,
     dataset_id: str,

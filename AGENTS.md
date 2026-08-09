@@ -72,6 +72,13 @@ python -m venv .venv
 - The normal RAW hot window is at least three days. Two days is degraded
   emergency planning only and requires an explicit flag, warning, and separate
   retention approval; the planner must not shorten the window automatically.
+- Designed RAW reclaim path for the constrained VPS is RANGE(`id`) partition
+  generations with operator-approved DROP after B2 storage-integrity verification
+  (`docs/raw_partition_lifecycle.md`). Ordinary DELETE retention remains the
+  emergency/legacy path and does not reliably return relation files to the
+  filesystem. Do not run production partition migration, collector restart, or
+  automatic generation DROP without explicit approval. VACUUM FULL is not a
+  routine lifecycle tool.
 - The default database URL is development-only. Replace it locally through
   `.env`; never commit local credentials.
 - Collector, exporter, dashboard, and normal migrations use the explicit `research`
@@ -158,16 +165,22 @@ python -m venv .venv
    manifests, checksums, quality status `pass`, chronological splits, compatible
    cost-aware replay reports, and aggregate OOS criteria.
 4. **In progress:** Exercise the admission gate across multiple representative,
-   versioned datasets and independently review thresholds, cost assumptions, regime
-   coverage, and OOS stability. Schema 4 now separates global receipt order from per-topic
-   exchange order: two audited slices pass, two warn on data gaps, and one rejects a stale
-   fixture timestamp. Only 2 trade events exist and passing slices have zero replay trades.
-   The fixture path is now isolated from research storage, but fresh real COLLECT-only
-   intervals are still required. Do not lower thresholds or invent regimes to force admission.
-   The first manual private COLLECT-only stack is operational; provider-neutral
-   recoverability and local monitoring contracts are prepared. Deployment updates,
-   network changes, dashboard access,
-   and any PAPER/LIVE behavior still require separate explicit approval.
-5. PAPER remains disabled even when admission criteria pass. Human review and a
-   separate explicitly approved implementation milestone are mandatory; keep all
-   real trading commands absent.
+  versioned datasets and independently review thresholds, cost assumptions, regime
+  coverage, and OOS stability. Schema 4 now separates global receipt order from per-topic
+  exchange order: two audited slices pass, two warn on data gaps, and one rejects a stale
+  fixture timestamp. Only 2 trade events exist and passing slices have zero replay trades.
+  The fixture path is now isolated from research storage, but fresh real COLLECT-only
+  intervals are still required. Do not lower thresholds or invent regimes to force admission.
+  The first manual private COLLECT-only stack is operational; provider-neutral
+  recoverability and local monitoring contracts are prepared. Deployment updates,
+  network changes, dashboard access,
+  and any PAPER/LIVE behavior still require separate explicit approval.
+5. **In progress:** RAW storage lifecycle for the disk-constrained VPS. Bounded
+  DELETE retention is implemented as the emergency/legacy path. Partitioned
+  RANGE(`id`) generations are designed and locally proven for physical reclaim via
+  operator-approved DROP after B2 verification; production migration of the current
+  empty monolithic `market_events` (~641.8 MiB allocated) requires human review and
+  must not run automatically. Sequence continuity must preserve next id `7471913`.
+6. PAPER remains disabled even when admission criteria pass. Human review and a
+  separate explicitly approved implementation milestone are mandatory; keep all
+  real trading commands absent.
