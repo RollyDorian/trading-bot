@@ -161,8 +161,17 @@ class _FakeBotoClient:
         self.deletes: list[tuple[str, str]] = []
         self.fail_on_key: str | None = None
         self.upload_count = 0
+        self.head_forbidden = False
 
     def head_object(self, *, Bucket: str, Key: str) -> dict[str, object]:
+        if self.head_forbidden:
+            raise ClientError(
+                {
+                    "Error": {"Code": "403", "Message": "Forbidden"},
+                    "ResponseMetadata": {"HTTPStatusCode": 403},
+                },
+                "HeadObject",
+            )
         if Key not in self.objects:
             raise ClientError(
                 {"Error": {"Code": "404", "Message": "not found"}},
@@ -171,7 +180,10 @@ class _FakeBotoClient:
         payload = self.objects[Key]
         return {"ContentLength": len(payload)}
 
-    def get_object(self, *, Bucket: str, Key: str) -> dict[str, object]:
+    def get_object(
+        self, *, Bucket: str, Key: str, Range: str | None = None
+    ) -> dict[str, object]:
+        del Range
         if Key not in self.objects:
             raise ClientError(
                 {"Error": {"Code": "NoSuchKey", "Message": "missing"}},
@@ -191,7 +203,7 @@ class _FakeBotoClient:
         self.puts.append((Bucket, Key, Body))
         self.objects[Key] = Body
 
-    def upload_file(self, filename: str, bucket: str, key: str) -> None:
+    def upload_file(self, filename: str, bucket: str, key: str, **_kwargs: object) -> None:
         self.upload_count += 1
         if self.fail_on_key == key:
             raise ClientError(
@@ -201,7 +213,7 @@ class _FakeBotoClient:
         self.uploads.append((filename, bucket, key))
         self.objects[key] = Path(filename).read_bytes()
 
-    def download_file(self, bucket: str, key: str, filename: str) -> None:
+    def download_file(self, bucket: str, key: str, filename: str, **_kwargs: object) -> None:
         Path(filename).write_bytes(self.objects[key])
 
     def delete_object(self, *, Bucket: str, Key: str) -> None:
@@ -214,6 +226,15 @@ def _boto_store(fake: _FakeBotoClient) -> BotoS3ArchiveStore:
         config,
         client_factory=lambda *_a, **_k: fake,
     )
+
+
+def test_exists_uses_ranged_get_when_head_object_is_forbidden() -> None:
+    fake = _FakeBotoClient()
+    fake.head_forbidden = True
+    store = _boto_store(fake)
+    assert store.exists("archives/missing/COMPLETED") is False
+    fake.objects["archives/present/COMPLETED"] = b"ok"
+    assert store.exists("archives/present/COMPLETED") is True
 
 
 def test_real_git_provenance_in_provenance_json(tmp_path: Path) -> None:

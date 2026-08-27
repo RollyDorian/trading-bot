@@ -25,8 +25,48 @@ DEFAULT_GENERATION_ROW_SPAN = 400_000
 GENERATION_PHYSICAL_SOFT_LIMIT_BYTES = 300 * 1024 * 1024
 # Provision the next empty generation before the active range is exhausted.
 PRE_BOUNDARY_PROVISION_ROWS = 50_000
+# High-priority re-attempt window (~10 min at ~59k events/h) if successor still absent.
+LATE_PROVISION_ROWS = 10_000
+# Deliberate cover stop before id exhaustion (~1 min). Prefer this over INSERT
+# partition-miss failures once lead automation has already failed.
+COVER_EXHAUSTION_STOP_ROWS = 1_000
 # Fail closed if fewer than this many ids remain without a writable successor.
 MINIMUM_WRITABLE_HEADROOM_ROWS = 1
+
+
+class ProvisionUrgency(StrEnum):
+    """Writable-cover urgency independent of disk/archive capacity STOP."""
+
+    NORMAL = "NORMAL"
+    PROVISION_REQUIRED = "PROVISION_REQUIRED"
+    PROVISION_LATE = "PROVISION_LATE"
+    COVER_STOP_REQUIRED = "COVER_STOP_REQUIRED"
+
+
+def assess_provision_urgency(
+    *,
+    remaining_ids: int | None,
+    has_successor: bool,
+    provision_threshold: int = PRE_BOUNDARY_PROVISION_ROWS,
+    late_threshold: int = LATE_PROVISION_ROWS,
+    cover_stop_threshold: int = COVER_EXHAUSTION_STOP_ROWS,
+) -> ProvisionUrgency:
+    """Classify successor lead pressure from remaining ids.
+
+    Capacity/archive backlog STOP must never hide these states: a missing
+    successor near the ACTIVE upper bound is always operator-visible.
+    """
+
+    if has_successor or remaining_ids is None:
+        return ProvisionUrgency.NORMAL
+    # Past the boundary (negative remaining) is already uncovered.
+    if remaining_ids <= cover_stop_threshold:
+        return ProvisionUrgency.COVER_STOP_REQUIRED
+    if remaining_ids <= late_threshold:
+        return ProvisionUrgency.PROVISION_LATE
+    if remaining_ids <= provision_threshold:
+        return ProvisionUrgency.PROVISION_REQUIRED
+    return ProvisionUrgency.NORMAL
 
 MARKET_EVENTS_SEQUENCE = "market_events_id_seq"
 GENERATIONS_TABLE = "market_event_generations"
@@ -372,6 +412,23 @@ async def mark_generation_state(
     archive_evidence_sha256: str | None = None,
     physical_bytes_at_close: int | None = None,
 ) -> None:
+    from trading_bot.storage.generation_transitions import assert_transition_allowed
+
+    current_row = (
+        await connection.execute(
+            text(
+                f"""
+                SELECT state FROM {GENERATIONS_TABLE}
+                WHERE generation_key = :generation_key
+                """
+            ),
+            {"generation_key": generation_key},
+        )
+    ).one_or_none()
+    if current_row is None:
+        raise PartitionLifecycleError(f"generation {generation_key} not found")
+    assert_transition_allowed(GenerationState(str(current_row.state)), new_state)
+
     now = datetime.now(UTC)
     assignments = ["state = :state", "updated_at = :now"]
     params: dict[str, Any] = {
@@ -456,7 +513,37 @@ async def provision_generation(
     key = generation_key_for_range(id_start, id_end)
     existing = await find_generation_for_id(connection, id_start)
     if existing is not None:
-        raise PartitionLifecycleError(f"id {id_start} already covered by {existing.generation_key}")
+        # Idempotent re-provision of the exact same empty generation.
+        if (
+            existing.id_start == id_start
+            and existing.id_end == id_end
+            and existing.partition_name == name
+            and existing.state
+            in {GenerationState.PROVISIONED, GenerationState.ACTIVE}
+        ):
+            if activate and existing.state == GenerationState.PROVISIONED:
+                current = await get_active_generation(connection)
+                if current is not None and current.generation_key != existing.generation_key:
+                    raise PartitionLifecycleError(
+                        "cannot activate while another generation is ACTIVE"
+                    )
+                await mark_generation_state(
+                    connection,
+                    existing.generation_key,
+                    GenerationState.ACTIVE,
+                )
+                refreshed = await find_generation_for_id(connection, id_start)
+                if refreshed is None:
+                    raise PartitionLifecycleError("idempotent activate lost generation")
+                return refreshed
+            if activate and existing.state != GenerationState.ACTIVE:
+                raise PartitionLifecycleError(
+                    f"cannot activate existing generation in state {existing.state}"
+                )
+            return existing
+        raise PartitionLifecycleError(
+            f"id {id_start} already covered by {existing.generation_key}"
+        )
     # Partition bounds must be literals; asyncpg rejects bound parameters in DDL.
     await connection.execute(
         text(

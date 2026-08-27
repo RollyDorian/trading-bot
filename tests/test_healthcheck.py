@@ -7,7 +7,19 @@ import trading_bot.healthcheck as healthcheck
 from trading_bot.config import Settings
 
 
-def test_receipt_freshness_requires_current_utc_timestamp() -> None:
+def test_healthcheck_sql_is_active_partition_bounded() -> None:
+    sql = healthcheck.ACTIVE_RECEIPT_SQL
+    assert "g.state = 'ACTIVE'" in sql
+    assert "m.id >= g.id_start" in sql
+    assert "m.id < g.id_end" in sql
+    assert "FROM market_events AS m" in sql
+    # Must not scan historical children via an unbounded parent MAX().
+    assert "FROM market_event_generations" in sql
+    assert "JOIN LATERAL" in sql
+    assert "ORDER BY m.id DESC" in sql
+    assert "LIMIT 1" in sql
+    assert "MAX(" not in sql
+    assert "FROM market_events" in sql
     now = datetime(2026, 7, 19, 12, 0, tzinfo=UTC)
     assert healthcheck.receipt_is_fresh(
         now - timedelta(seconds=119),

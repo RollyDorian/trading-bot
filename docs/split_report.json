@@ -1,0 +1,27 @@
+{
+  "destination": "/work/segments",
+  "lines": 225734,
+  "max_bytes": 16777216,
+  "segment_count": 8,
+  "segment_ids": [
+    "binance_usdm_ETHUSDT_20260811T205417Z_000001",
+    "binance_usdm_ETHUSDT_20260811T205418Z_000002",
+    "binance_usdm_ETHUSDT_20260811T205419Z_000003",
+    "binance_usdm_ETHUSDT_20260811T205421Z_000004",
+    "binance_usdm_ETHUSDT_20260811T205422Z_000005",
+    "binance_usdm_ETHUSDT_20260811T205422Z_000006",
+    "binance_usdm_ETHUSDT_20260811T205424Z_000007",
+    "binance_usdm_ETHUSDT_20260811T205425Z_000008"
+  ],
+  "sizes_bytes": [
+    16777769,
+    16777300,
+    16777414,
+    16777330,
+    16777278,
+    16777235,
+    16777567,
+    16775802
+  ],
+  "source": "/data/canary.ndjson"
+}

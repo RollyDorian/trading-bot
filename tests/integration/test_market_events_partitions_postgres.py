@@ -324,6 +324,9 @@ def test_archive_gate_and_drop_reclaims_relation_bytes() -> None:
                     conn, active.generation_key, GenerationState.CLOSED_UNARCHIVED
                 )
                 await mark_generation_state(
+                    conn, active.generation_key, GenerationState.ARCHIVING
+                )
+                await mark_generation_state(
                     conn, active.generation_key, GenerationState.VERIFIED
                 )
                 closed = (await list_generations(conn))[0]

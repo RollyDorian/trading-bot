@@ -1,0 +1,692 @@
+{
+  "CORPUS": {
+    "bytes_merged_events": 42213686,
+    "datasets": [
+      "prior_continuous",
+      "generation_g_7471913"
+    ],
+    "distinct_utc_days": 4,
+    "hours_approx": 54.66027777777778,
+    "rows": 1664007
+  },
+  "ML_DECISION": "COLLECT_MORE_DATA_FIRST",
+  "NEXT_NOT_EXECUTED": true,
+  "STATUS": "FULL_CORPUS_RESEARCH_VALIDATED",
+  "cost_model": {
+    "bid_ask_spread_cost": {
+      "class": "OBSERVED_FROM_DATA",
+      "note": "Paid implicitly via ask entry / bid exit (and reverse) on observed book."
+    },
+    "execution_delay_1s": {
+      "class": "MODELED",
+      "note": "Causal delay on market_state_1s grid; 0s is theoretical upper bound."
+    },
+    "fill_at_ask_bid_never_mid": {
+      "class": "MODELED",
+      "note": "Conservative taker fill assumption using reconstructed/quote top-of-book."
+    },
+    "funding_1bp_per_8h": {
+      "class": "PLACEHOLDER",
+      "note": "Placeholder rate; contribution must be reported separately for 5\u201360s horizons."
+    },
+    "latency_1bp": {
+      "class": "MODELED",
+      "note": "Penalty proxy for adverse selection / queue delay."
+    },
+    "round_trip_friction_base_bps": {
+      "fees": 9.0,
+      "funding_15s_hold_approx": 10.416666666666666,
+      "latency": 2.0,
+      "note": "Fees+slippage+latency \u2248 15 bps round-trip before spread; spread cost is path-dependent via bid/ask fills.",
+      "slippage": 4.0
+    },
+    "slippage_2bps": {
+      "class": "MODELED",
+      "note": "Stress proxy beyond observed bid/ask; not measured from fills."
+    },
+    "taker_fee_4.5bps_per_side": {
+      "class": "PLACEHOLDER",
+      "note": "Provisional Hibachi-like taker assumption; not verified against live fee schedule in this milestone."
+    }
+  },
+  "created_at_utc": "2026-08-11T13:57:05.564211+00:00",
+  "feature_issues_prior": {
+    "basis_mark_bps": {
+      "non_finite": 0,
+      "null_rate": 0.0,
+      "p01": -1.6556615604252072,
+      "p99": 1.8051283632169042
+    },
+    "basis_spot_bps": {
+      "non_finite": 0,
+      "null_rate": 0.0,
+      "p01": -2.450112276226472,
+      "p99": 2.8583345256450325
+    },
+    "book_age_seconds": {
+      "non_finite": 0,
+      "null_rate": 0.0,
+      "p01": 0.00318933,
+      "p99": 0.30451024
+    },
+    "buy_volume": {
+      "non_finite": 0,
+      "null_rate": 0.0,
+      "p01": 0.0,
+      "p99": 0.0010080871599999993
+    },
+    "funding_rate": {
+      "non_finite": 0,
+      "null_rate": 1.3104098962155362e-05,
+      "p01": -2.3e-05,
+      "p99": 1.6e-05
+    },
+    "imbalance": {
+      "non_finite": 0,
+      "null_rate": 0.0,
+      "p01": -0.9992732958041869,
+      "p99": 0.9994634538602104
+    },
+    "mark_age_seconds": {
+      "non_finite": 0,
+      "null_rate": 0.0,
+      "p01": 0.003015,
+      "p99": 0.30097656
+    },
+    "microprice_dev_bps": {
+      "non_finite": 0,
+      "null_rate": 0.0,
+      "p01": -0.2436086225359846,
+      "p99": 0.30688708111552554
+    },
+    "ofi_15s": {
+      "non_finite": 0,
+      "null_rate": 3.931229688646609e-05,
+      "p01": -50.436270839360006,
+      "p99": 50.647307195399996
+    },
+    "ofi_1s": {
+      "non_finite": 0,
+      "null_rate": 3.931229688646609e-05,
+      "p01": -14.25584518736,
+      "p99": 14.550538989279994
+    },
+    "ofi_5s": {
+      "non_finite": 0,
+      "null_rate": 3.931229688646609e-05,
+      "p01": -29.36506571116,
+      "p99": 28.893079783519987
+    },
+    "quote_age_seconds": {
+      "non_finite": 0,
+      "null_rate": 0.0,
+      "p01": 0.0028863300000000003,
+      "p99": 0.30189234
+    },
+    "ret_15s_bps": {
+      "non_finite": 0,
+      "null_rate": 0.00019656148443233042,
+      "p01": -5.604410538169136,
+      "p99": 5.995360795052473
+    },
+    "ret_1s_bps": {
+      "non_finite": 0,
+      "null_rate": 1.3104098962155362e-05,
+      "p01": -1.3154246505211464,
+      "p99": 1.2900912326061489
+    },
+    "ret_5s_bps": {
+      "non_finite": 0,
+      "null_rate": 6.552049481077681e-05,
+      "p01": -3.347719339241495,
+      "p99": 3.2173979738046317
+    },
+    "ret_60s_bps": {
+      "non_finite": 0,
+      "null_rate": 0.0008124541356536324,
+      "p01": -10.67006807668671,
+      "p99": 12.459511231609568
+    },
+    "rv_15s_bps": {
+      "non_finite": 0,
+      "null_rate": 2.6208197924310724e-05,
+      "p01": 0.0,
+      "p99": 1.2355908243295615
+    },
+    "rv_5s_bps": {
+      "non_finite": 0,
+      "null_rate": 2.6208197924310724e-05,
+      "p01": 0.0,
+      "p99": 1.381288083019357
+    },
+    "rv_60s_bps": {
+      "non_finite": 0,
+      "null_rate": 2.6208197924310724e-05,
+      "p01": 0.0,
+      "p99": 1.0947019091554662
+    },
+    "sell_volume": {
+      "non_finite": 0,
+      "null_rate": 0.0,
+      "p01": 0.0,
+      "p99": 0.0010416977099999994
+    },
+    "signed_trade_flow_1s": {
+      "non_finite": 0,
+      "null_rate": 0.0,
+      "p01": -0.00103757478,
+      "p99": 0.0010017723399999999
+    },
+    "spread_bps": {
+      "non_finite": 0,
+      "null_rate": 0.0,
+      "p01": 0.05219138581177176,
+      "p99": 1.1999183433350988
+    },
+    "trade_count": {
+      "non_finite": 0,
+      "null_rate": 0.0,
+      "p01": 0.0,
+      "p99": 1.0
+    },
+    "valid_book": {
+      "non_finite": 0,
+      "null_rate": 0.0,
+      "p01": 1.0,
+      "p99": 1.0
+    }
+  },
+  "generation": {
+    "baseline_base_delay1": {
+      "imbalance": {
+        "avg_gross_bps_per_trade": -0.001872371719003363,
+        "avg_net_bps_per_trade": -15.002391302316513,
+        "fees": 1017.899870880347,
+        "funding": 0.05890625000000001,
+        "gross_pnl": -0.21176524141928035,
+        "latency_cost": 226.1999713067433,
+        "max_drawdown": 1696.7704562919994,
+        "net_pnl": -1696.7704562919973,
+        "slippage": 452.3999426134866,
+        "trades": 1131
+      },
+      "mean_reversion": {
+        "avg_gross_bps_per_trade": -1.8718866438001822,
+        "avg_net_bps_per_trade": -16.87161094955338,
+        "fees": 40.49784937553363,
+        "funding": 0.0023437500000000003,
+        "gross_pnl": -8.42348989710082,
+        "latency_cost": 8.999522083451918,
+        "max_drawdown": 75.92224927299019,
+        "net_pnl": -75.9222492729902,
+        "slippage": 17.999044166903836,
+        "trades": 45
+      },
+      "momentum": {
+        "avg_gross_bps_per_trade": -2.1432042182732745,
+        "avg_net_bps_per_trade": -17.14519638135847,
+        "fees": 40.50397259033003,
+        "funding": 0.0023437500000000003,
+        "gross_pnl": -9.644418982229736,
+        "latency_cost": 9.000882797851114,
+        "max_drawdown": 77.15338371611311,
+        "net_pnl": -77.15338371611311,
+        "slippage": 18.001765595702228,
+        "trades": 45
+      }
+    },
+    "coverage": {
+      "distinct_utc_days": 2,
+      "effective_usable_hours_approx": 6.715277777777778,
+      "rows_per_utc_day": {
+        "2026-08-09": 314,
+        "2026-08-10": 23861
+      },
+      "span_hours": 33.46222222222222
+    },
+    "ic_top": [
+      {
+        "feature": "imbalance",
+        "horizon_s": 15,
+        "rows": 24138,
+        "spearman_ic": 0.2929918473525118
+      },
+      {
+        "feature": "microprice_dev_bps",
+        "horizon_s": 5,
+        "rows": 24158,
+        "spearman_ic": 0.291392735590839
+      },
+      {
+        "feature": "microprice_dev_bps",
+        "horizon_s": 15,
+        "rows": 24138,
+        "spearman_ic": 0.29099202617748104
+      },
+      {
+        "feature": "imbalance",
+        "horizon_s": 5,
+        "rows": 24158,
+        "spearman_ic": 0.28585013451155694
+      },
+      {
+        "feature": "ret_5s_bps",
+        "horizon_s": 5,
+        "rows": 24144,
+        "spearman_ic": 0.2772182551595532
+      },
+      {
+        "feature": "ofi_5s",
+        "horizon_s": 5,
+        "rows": 24154,
+        "spearman_ic": 0.2738994298417271
+      },
+      {
+        "feature": "basis_mark_bps",
+        "horizon_s": 15,
+        "rows": 24138,
+        "spearman_ic": 0.254678798111091
+      },
+      {
+        "feature": "ofi_5s",
+        "horizon_s": 15,
+        "rows": 24134,
+        "spearman_ic": 0.2516600231950347
+      }
+    ],
+    "leakage": "PASS",
+    "market_state": {
+      "age_seconds": {
+        "book": {
+          "count": 24175,
+          "finite_count": 24175,
+          "non_finite_count": 0,
+          "null_count": 0,
+          "percentiles": {
+            "p01": 0.00286502,
+            "p05": 0.015448100000000003,
+            "p50": 0.152576,
+            "p95": 0.28995279999999996,
+            "p99": 0.31512434
+          }
+        },
+        "funding": {
+          "count": 24175,
+          "finite_count": 24174,
+          "non_finite_count": 0,
+          "null_count": 1,
+          "percentiles": {
+            "p01": 0.0031589800000000005,
+            "p05": 0.0156125,
+            "p50": 0.152735,
+            "p95": 0.28981345,
+            "p99": 0.31268929
+          }
+        },
+        "mark": {
+          "count": 24175,
+          "finite_count": 24174,
+          "non_finite_count": 0,
+          "null_count": 1,
+          "percentiles": {
+            "p01": 0.0031606800000000003,
+            "p05": 0.014848900000000002,
+            "p50": 0.1518895,
+            "p95": 0.289366,
+            "p99": 0.3078621
+          }
+        },
+        "quote": {
+          "count": 24175,
+          "finite_count": 24174,
+          "non_finite_count": 0,
+          "null_count": 1,
+          "percentiles": {
+            "p01": 0.0030299000000000003,
+            "p05": 0.01506725,
+            "p50": 0.1528095,
+            "p95": 0.28952174999999997,
+            "p99": 0.31103430000000004
+          }
+        },
+        "spot": {
+          "count": 24175,
+          "finite_count": 24174,
+          "non_finite_count": 0,
+          "null_count": 1,
+          "percentiles": {
+            "p01": 0.00275373,
+            "p05": 0.014271250000000003,
+            "p50": 0.15196300000000001,
+            "p95": 0.28934974999999996,
+            "p99": 0.30851216000000004
+          }
+        }
+      },
+      "coverage": {
+        "end": "2026-08-10 21:08:33+00:00",
+        "expected_1s_rows": 120465,
+        "observed_pct": 20.06806956377371,
+        "start": "2026-08-09 11:40:49+00:00"
+      },
+      "rows": 24175,
+      "valid_book_pct": 100.0
+    },
+    "normalization": {
+      "by_topic": {
+        "ask_bid_price": 79784,
+        "funding_rate_estimation": 79784,
+        "mark_price": 79785,
+        "orderbook": 79789,
+        "spot_price": 79785,
+        "trades": 1073
+      },
+      "error_rows": 0,
+      "input_rows": 400000,
+      "normalized_rows": 400000,
+      "quality_counts": {
+        "best_effort_legacy": 79789,
+        "validated": 320211
+      },
+      "trade_rows": 1073
+    },
+    "orderbook": {
+      "book_state_counts": {
+        "valid_best_effort_legacy": 24175
+      },
+      "crossed_book_occurrences": 0,
+      "disagreement_bps_sample_count": 0,
+      "distinct_connection_ids": 5,
+      "end": "2026-08-10 21:08:33+00:00",
+      "invalid_book_rows": 0,
+      "longest_invalid_gap_seconds": 0,
+      "rows": 24175,
+      "span_hours": 33.46222222222222,
+      "start": "2026-08-09 11:40:49+00:00",
+      "top_book_quote_note": "OFI uses ask_bid_price top-of-book size changes; reconstructed book supplies mid/spread when valid_book. Disagreement distribution deferred to sample join in report if both present.",
+      "valid_book_pct": 100.0,
+      "valid_book_rows": 24175
+    },
+    "performance": {
+      "artifact_bytes": {
+        "features_v1": 2571787,
+        "labels_v1": 492287,
+        "market_state_1s": 4087448
+      },
+      "elapsed_seconds": 1723.6559047999326,
+      "rss_mb_after": null
+    }
+  },
+  "payload_semantics_generation": {
+    "depths": {},
+    "distinct_connection_ids_seen_orderbook": 3,
+    "events_scanned": 100277,
+    "exchange_sequence_present_orderbook_rows": 0,
+    "local_sequence_present_orderbook_rows": 20000,
+    "non_zero_quantity_levels_seen": 0,
+    "orderbook_message_types": {},
+    "orderbook_rows_inspected": 20000,
+    "samples": [],
+    "schema_versions": {},
+    "snapshot_level_count_p50": null,
+    "update_level_count_p50": null,
+    "update_semantics_evidence": "insufficient mixed zero/non-zero evidence in sample",
+    "zero_quantity_levels_seen": 0
+  },
+  "prior": {
+    "baseline_base_delay1": {
+      "imbalance": {
+        "avg_gross_bps_per_trade": 0.22876376837090903,
+        "avg_net_bps_per_trade": -14.771752265517678,
+        "fees": 3227.398967351469,
+        "funding": 0.18677083333333336,
+        "gross_pnl": 82.03468733780798,
+        "latency_cost": 717.1997705225481,
+        "max_drawdown": 5297.15036241464,
+        "net_pnl": -5297.15036241464,
+        "slippage": 1434.3995410450962,
+        "trades": 3586
+      },
+      "mean_reversion": {
+        "avg_gross_bps_per_trade": -0.6722889592839644,
+        "avg_net_bps_per_trade": -15.67299491660467,
+        "fees": 98.10121071087741,
+        "funding": 0.0056770833333333335,
+        "gross_pnl": -7.327949656195211,
+        "latency_cost": 21.800269046861658,
+        "max_drawdown": 170.8356445909909,
+        "net_pnl": -170.8356445909909,
+        "slippage": 43.600538093723316,
+        "trades": 109
+      },
+      "momentum": {
+        "avg_gross_bps_per_trade": -0.030082535838947246,
+        "avg_net_bps_per_trade": -15.030677118261522,
+        "fees": 98.10048231904364,
+        "funding": 0.0056770833333333335,
+        "gross_pnl": -0.327899640644525,
+        "latency_cost": 21.800107182009693,
+        "max_drawdown": 163.83438058905062,
+        "net_pnl": -163.8343805890506,
+        "slippage": 43.600214364019386,
+        "trades": 109
+      }
+    },
+    "coverage": {
+      "distinct_utc_days": 2,
+      "effective_usable_hours_approx": 21.197777777777777,
+      "rows_per_utc_day": {
+        "2026-08-06": 41907,
+        "2026-08-07": 34405
+      },
+      "span_hours": 21.198055555555555
+    },
+    "ic_top": [
+      {
+        "feature": "microprice_dev_bps",
+        "horizon_s": 5,
+        "rows": 76305,
+        "spearman_ic": 0.3037829421430559
+      },
+      {
+        "feature": "imbalance",
+        "horizon_s": 5,
+        "rows": 76305,
+        "spearman_ic": 0.3015442446404103
+      },
+      {
+        "feature": "imbalance",
+        "horizon_s": 15,
+        "rows": 76295,
+        "spearman_ic": 0.29215523557577855
+      },
+      {
+        "feature": "basis_mark_bps",
+        "horizon_s": 15,
+        "rows": 76295,
+        "spearman_ic": 0.2834960103691155
+      },
+      {
+        "feature": "microprice_dev_bps",
+        "horizon_s": 15,
+        "rows": 76295,
+        "spearman_ic": 0.2781025689906855
+      },
+      {
+        "feature": "basis_mark_bps",
+        "horizon_s": 5,
+        "rows": 76305,
+        "spearman_ic": 0.27585293473296724
+      },
+      {
+        "feature": "ofi_5s",
+        "horizon_s": 5,
+        "rows": 76302,
+        "spearman_ic": 0.27341759133920757
+      },
+      {
+        "feature": "ret_5s_bps",
+        "horizon_s": 5,
+        "rows": 76300,
+        "spearman_ic": 0.27166051851744744
+      }
+    ],
+    "leakage": "PASS",
+    "market_state": {
+      "age_seconds": {
+        "book": {
+          "count": 76312,
+          "finite_count": 76312,
+          "non_finite_count": 0,
+          "null_count": 0,
+          "percentiles": {
+            "p01": 0.00318933,
+            "p05": 0.01554265,
+            "p50": 0.15185,
+            "p95": 0.28683345,
+            "p99": 0.30451024
+          }
+        },
+        "funding": {
+          "count": 76312,
+          "finite_count": 76311,
+          "non_finite_count": 0,
+          "null_count": 1,
+          "percentiles": {
+            "p01": 0.0033422,
+            "p05": 0.0156025,
+            "p50": 0.151927,
+            "p95": 0.28688400000000003,
+            "p99": 0.3031018
+          }
+        },
+        "mark": {
+          "count": 76312,
+          "finite_count": 76312,
+          "non_finite_count": 0,
+          "null_count": 0,
+          "percentiles": {
+            "p01": 0.003015,
+            "p05": 0.014931550000000002,
+            "p50": 0.15140350000000002,
+            "p95": 0.287676,
+            "p99": 0.30097656
+          }
+        },
+        "quote": {
+          "count": 76312,
+          "finite_count": 76312,
+          "non_finite_count": 0,
+          "null_count": 0,
+          "percentiles": {
+            "p01": 0.0028863300000000003,
+            "p05": 0.015270650000000002,
+            "p50": 0.15182449999999997,
+            "p95": 0.2869848,
+            "p99": 0.30189234
+          }
+        },
+        "spot": {
+          "count": 76312,
+          "finite_count": 76312,
+          "non_finite_count": 0,
+          "null_count": 0,
+          "percentiles": {
+            "p01": 0.00300911,
+            "p05": 0.015073550000000002,
+            "p50": 0.151631,
+            "p95": 0.28732459999999993,
+            "p99": 0.30134757
+          }
+        }
+      },
+      "coverage": {
+        "end": "2026-08-07 09:33:25+00:00",
+        "expected_1s_rows": 76314,
+        "observed_pct": 99.99737924889274,
+        "start": "2026-08-06 12:21:32+00:00"
+      },
+      "rows": 76312,
+      "valid_book_pct": 100.0
+    },
+    "normalization": {
+      "by_topic": {
+        "ask_bid_price": 252004,
+        "funding_rate_estimation": 252004,
+        "mark_price": 252004,
+        "orderbook": 252012,
+        "spot_price": 252004,
+        "trades": 3979
+      },
+      "error_rows": 0,
+      "input_rows": 1264007,
+      "normalized_rows": 1264007,
+      "quality_counts": {
+        "best_effort_legacy": 252012,
+        "validated": 1011995
+      },
+      "trade_rows": 3979
+    },
+    "orderbook": {
+      "book_state_counts": {
+        "valid_best_effort_legacy": 76312
+      },
+      "crossed_book_occurrences": 0,
+      "disagreement_bps_sample_count": 0,
+      "distinct_connection_ids": 8,
+      "end": "2026-08-07 09:33:25+00:00",
+      "invalid_book_rows": 0,
+      "longest_invalid_gap_seconds": 0,
+      "rows": 76312,
+      "span_hours": 21.198055555555555,
+      "start": "2026-08-06 12:21:32+00:00",
+      "top_book_quote_note": "OFI uses ask_bid_price top-of-book size changes; reconstructed book supplies mid/spread when valid_book. Disagreement distribution deferred to sample join in report if both present.",
+      "valid_book_pct": 100.0,
+      "valid_book_rows": 76312
+    },
+    "performance": {
+      "artifact_bytes": {
+        "features_v1": 8248922,
+        "labels_v1": 1754458,
+        "market_state_1s": 12984087
+      },
+      "elapsed_seconds": 4996.4969949000515,
+      "rss_mb_after": null
+    }
+  },
+  "production": {
+    "b2": "read-only materialize; not mutated",
+    "collector": "running (healthy) at validation time; not modified",
+    "postgres_hot_buffer": "not scanned for historical research"
+  },
+  "reproducibility": {
+    "generation_content_hash_match": true,
+    "generation_hashes": {
+      "features_v1": "5e0803b30f70f19fb773a4813ca59d8fe5c7d542eb930b53d0d5b9aaaea9981f",
+      "labels_v1": "41c8d75c5fe24fce2a66d5ac475dd4b543dae6bd0fc67dcaaddfdaae94daf11b",
+      "market_state_1s": "55af5806ed805b3ee69ca4e17a81616d62901eaf3c841268dbbd14468a969f42"
+    },
+    "generation_rerun_hashes": {
+      "features_v1": "5e0803b30f70f19fb773a4813ca59d8fe5c7d542eb930b53d0d5b9aaaea9981f",
+      "labels_v1": "41c8d75c5fe24fce2a66d5ac475dd4b543dae6bd0fc67dcaaddfdaae94daf11b",
+      "market_state_1s": "55af5806ed805b3ee69ca4e17a81616d62901eaf3c841268dbbd14468a969f42"
+    }
+  },
+  "splits": {
+    "exploratory_train": {
+      "dataset": "prior_continuous",
+      "ids": "6207906..7471912",
+      "role": "exploratory IC, feature audit, baseline tuning forbidden on OOS",
+      "span": "2026-08-06T12:21:31Z \u2192 2026-08-07T09:33:25Z"
+    },
+    "oos": {
+      "dataset": "generation_g_7471913",
+      "ids": "7471913..7871912",
+      "role": "final held-out OOS; reserved; not used for threshold search"
+    },
+    "validation": {
+      "dataset": "prior_continuous_tail_or_block",
+      "note": "With only ~1 contiguous day in prior, hold last ~20% of prior chronologically as validation if needed; do not optimize on OOS."
+    }
+  }
+}

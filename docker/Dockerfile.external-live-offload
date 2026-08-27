@@ -1,0 +1,7 @@
+FROM ghcr.io/rollydorian/trading-bot:sha-8f6ba2317102b215a1fe96d7c252da137a14d699
+
+# Live offload canary image: overlay current external+archive code and boto3.
+USER root
+COPY trading_bot/ /usr/local/lib/python3.13/site-packages/trading_bot/
+RUN pip install --no-cache-dir "boto3>=1.35,<2"
+USER 10001

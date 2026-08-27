@@ -1,0 +1,25 @@
+{
+  "checked_events": 28259,
+  "field_mismatches": 0,
+  "gzip": {
+    "elapsed_seconds": 0.3975572339259088,
+    "gzip_bytes": 786977,
+    "peak_rss_delta_bytes": 1048576,
+    "ratio": 0.04690593844747773,
+    "raw_bytes": 16777769,
+    "sha256_gzip": "1622e252f1deac8ebd4c6a0b67db30a47e7658e4c3c0914702be3b78aa6dc78a",
+    "sha256_raw": "b772d13378d7a52c05887ab1f633c6899e6a303bf93e1a35d401d42672950e4b"
+  },
+  "parquet": {
+    "elapsed_seconds": 1.0136872730217874,
+    "event_count": 28259,
+    "parquet_bytes": 708161,
+    "peak_rss_delta_bytes": 47382528,
+    "ratio": 0.04220829360566354,
+    "raw_bytes": 16777769,
+    "sha256_parquet": "0cb41b20dc07d7996ffd8fee364b8f30f9df09c5d72e8e96f8330232d63e3c1e",
+    "sha256_raw": "b772d13378d7a52c05887ab1f633c6899e6a303bf93e1a35d401d42672950e4b"
+  },
+  "roundtrip_equal": true,
+  "segment_id": "binance_usdm_ETHUSDT_20260811T205417Z_000001"
+}

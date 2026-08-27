@@ -1,0 +1,59 @@
+{
+  "registry_version": 1,
+  "source": "HIBACHI_PARTITION_RECOVERY_AND_PROVISIONING_ROOT_CAUSE",
+  "note": "Unrecoverable production holes. Do not synthesize RAW or bridge 1s market_state across these intervals. Do not reset market_events_id_seq to hide allocated-not-persisted ids. Timestamp membership is start inclusive, end exclusive.",
+  "gaps": [
+    {
+      "gap_id": "capacity_stop_collection_pause_20260818",
+      "kind": "COLLECTION_OUTAGE",
+      "classification": "CAPACITY_STOP_COLLECTION_PAUSE",
+      "start_utc": "2026-08-18T23:10:02.783379Z",
+      "end_utc": "2026-08-19T18:04:20.698871Z",
+      "id_start_inclusive": null,
+      "id_end_inclusive": null,
+      "last_persisted_id_before": 13682172,
+      "first_persisted_id_after": 13682173,
+      "last_persisted_received_at_before": "2026-08-18T23:10:02.783378Z",
+      "first_persisted_received_at_after": "2026-08-19T18:04:20.698871Z",
+      "duration_seconds": 68057.915493,
+      "id_sequence_contiguous": true,
+      "synthesize": false,
+      "bridge_normalization": false,
+      "notes": "Intentional Hibachi COLLECT capacity STOP (disk below 5 GiB) during EXTERNAL_CANARY_HEADROOM_PREP. Maintain 2026-08-18T23:10:01Z free=5367803904 persisted CAPACITY_STOP_REQUIRED and stopped the collector (docker FinishedAt 2026-08-18T23:10:03Z, exit 143, restart policy no:0, RestartCount 0). Sequence last_value remained 13682172 is_called=true. COLLECT resumed 2026-08-19T18:04:13Z (restart policy restored on-failure:5); first persisted id after resume is 13682173 at 2026-08-19T18:04:20.698871Z routed into ACTIVE market_events_g_13471913. Sequence is contiguous (13682172 then 13682173); the hole is time-only. Do not synthesize RAW, funding, or 1s market_state across this interval. Physical DROPs after the stop reclaimed disk; they do not fill this time hole."
+    },
+    {
+      "gap_id": "capacity_recovery_collection_pause_20260814",
+      "kind": "COLLECTION_OUTAGE",
+      "classification": "CAPACITY_RECOVERY_COLLECTION_PAUSE",
+      "start_utc": "2026-08-14T08:42:22.972217Z",
+      "end_utc": "2026-08-17T17:18:16.226260Z",
+      "id_start_inclusive": null,
+      "id_end_inclusive": null,
+      "last_persisted_id_before": 11902151,
+      "first_persisted_id_after": 11902152,
+      "last_persisted_received_at_before": "2026-08-14T08:42:22.972216Z",
+      "first_persisted_received_at_after": "2026-08-17T17:18:16.226260Z",
+      "duration_seconds": 290153.254044,
+      "synthesize": false,
+      "bridge_normalization": false,
+      "notes": "Intentional Hibachi COLLECT hold CAPACITY_RECOVERY_COLLECTION_PAUSE during HIBACHI_EMERGENCY_CAPACITY_RECOVERY. Sequence is contiguous (11902151 then 11902152); the hole is time-only. Do not synthesize RAW, funding, or 1s market_state across this interval. CLOSED generation DROP during the pause is unrelated to this collection hole."
+    },
+    {
+      "gap_id": "partition_miss_20260812_g_9071913_lead",
+      "kind": "ALLOCATED_NOT_PERSISTED_DURING_PARTITION_FAILURE",
+      "classification": "ALLOCATED_NOT_PERSISTED_DURING_PARTITION_FAILURE",
+      "start_utc": "2026-08-12T07:11:33.499641Z",
+      "end_utc": "2026-08-12T09:14:40.860289Z",
+      "id_start_inclusive": 9071913,
+      "id_end_inclusive": 9072163,
+      "allocated_id_count": 251,
+      "last_persisted_id_before": 9071912,
+      "first_persisted_id_after": 9072164,
+      "sequence_last_value_before_recovery": 9072163,
+      "error": "no partition of relation \"market_events\" found for row",
+      "synthesize": false,
+      "bridge_normalization": false,
+      "notes": "ACTIVE g_8671913_9071913 exhausted at 9071913 without a successor partition. Failed INSERTs consumed sequence values. Successor market_events_g_9071913 [9071913,9471913) was created at 2026-08-12T09:14:25Z. Future quality tools must not treat 9071913..9072163 as deleted market events."
+    }
+  ]
+}

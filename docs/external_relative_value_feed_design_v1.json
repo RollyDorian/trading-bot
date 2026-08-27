@@ -1,0 +1,158 @@
+{
+  "document": "external_relative_value_feed_design_v1",
+  "STATUS": "EXTERNAL_FEED_DESIGN_READY",
+  "created_at_utc": "2026-08-11T19:45:00+00:00",
+  "implementation_in_this_milestone": false,
+  "deployment_in_this_milestone": false,
+  "ML_STATUS": "BLOCKED",
+  "RECOMMENDED_FEED": {
+    "venue": "binance_usdm",
+    "instrument": "ETHUSDT",
+    "instrument_class": "linear_perpetual",
+    "streams": ["bookTicker", "aggTrade"],
+    "fallback_venue": "bybit_linear",
+    "fallback_instrument": "ETHUSDT",
+    "fallback_streams": ["orderbook.1", "publicTrade"],
+    "why": "Dominant public ETHUSDT price discovery; minimal BBO+trades; no auth for public market data."
+  },
+  "candidates": [
+    {
+      "venue": "binance_usdm",
+      "instrument": "ETHUSDT",
+      "instrument_class": "linear_perpetual",
+      "liquidity_relevance": "highest_screened",
+      "public_ws_no_auth": true,
+      "trade_stream": true,
+      "bbo_tob_stream": true,
+      "depth_stream_available": true,
+      "depth_in_first_pilot": false,
+      "exchange_timestamp_precision": "millisecond",
+      "sequence_update_ids": "bookTicker.u; trade/aggTrade ids",
+      "snapshot_reconnect_notes": "Resubscribe streams; depth snapshot N/A for BBO pilot",
+      "heartbeat": "Binance WS ping/pong; idle disconnect per docs",
+      "public_rate_limits": "connection/subscribe limits; single-symbol light vs depth",
+      "expected_msg_per_sec_avg": "20-40",
+      "expected_msg_per_sec_spike": "100-300+",
+      "expected_mib_per_hour_spool": "40-90",
+      "expected_gib_per_day_parquet_est": "0.25-0.6",
+      "implementation_complexity": "medium_due_to_2026_usdm_ws_path_split",
+      "price_discovery_value": "highest",
+      "operational_risks": [
+        "legacy_usdm_ws_retirement_2026-04-23",
+        "burst_disk_pressure_on_5giB_floor_host",
+        "geo_ip_variance"
+      ],
+      "pilot_rank": "PRIMARY"
+    },
+    {
+      "venue": "bybit_linear",
+      "instrument": "ETHUSDT",
+      "instrument_class": "linear_perpetual",
+      "liquidity_relevance": "high",
+      "public_ws_no_auth": true,
+      "trade_stream": true,
+      "bbo_tob_stream": true,
+      "depth_stream_available": true,
+      "depth_in_first_pilot": false,
+      "exchange_timestamp_precision": "millisecond",
+      "sequence_update_ids": "orderbook u/seq/cts; publicTrade seq/T",
+      "snapshot_reconnect_notes": "orderbook.1 snapshot/delta; u=1 restart semantics",
+      "heartbeat": "Bybit application ping op",
+      "public_rate_limits": "documented connection limits",
+      "expected_msg_per_sec_avg": "15-35",
+      "implementation_complexity": "low_medium",
+      "price_discovery_value": "high_secondary",
+      "operational_risks": ["regional_reach", "slightly_lower_discovery_weight"],
+      "pilot_rank": "FALLBACK"
+    },
+    {
+      "venue": "okx",
+      "instrument": "ETH-USDT-SWAP",
+      "instrument_class": "linear_perpetual_swap",
+      "liquidity_relevance": "high",
+      "public_ws_no_auth": true,
+      "trade_stream": true,
+      "bbo_tob_stream": true,
+      "depth_stream_available": true,
+      "depth_in_first_pilot": false,
+      "exchange_timestamp_precision": "millisecond",
+      "sequence_update_ids": "seqId/prevSeqId on books",
+      "snapshot_reconnect_notes": "bbo-tbt/books5 snapshots; VIP footguns on l2-tbt",
+      "heartbeat": "OKX ping/pong",
+      "implementation_complexity": "medium",
+      "price_discovery_value": "high",
+      "operational_risks": ["vip_gated_channels_if_misselected"],
+      "pilot_rank": "ALTERNATE"
+    },
+    {
+      "venue": "coinbase_public",
+      "instrument": "ETH-USD",
+      "instrument_class": "spot",
+      "liquidity_relevance": "high_spot_but_cross_product",
+      "public_ws_no_auth": true,
+      "trade_stream": true,
+      "bbo_tob_stream": true,
+      "depth_in_first_pilot": false,
+      "price_discovery_value": "mixed_fx_stable_basis_vs_hibachi_usdt_perp",
+      "operational_risks": ["spot_vs_perp_basis_confound"],
+      "pilot_rank": "REJECT_FIRST_PILOT"
+    }
+  ],
+  "timestamps": {
+    "exchange_at": "required_when_present",
+    "received_at": "required_causal_clock",
+    "local_sequence": "required_per_connection",
+    "exchange_sequence": "nullable",
+    "trading_causal_clock": "received_at_only",
+    "exchange_time_analysis": "diagnostic_only",
+    "min_trading_lag_bin_ms": 250,
+    "optimistic_timing_floor_ms": 100
+  },
+  "expected_rate": {
+    "events_per_sec_avg": "20-40",
+    "mib_per_hour_spool": "40-90",
+    "mib_per_day_parquet_est": "250-600"
+  },
+  "storage": {
+    "selected": "B_spool_parquet_b2",
+    "rejected": ["A_postgres_hot_table_first_pilot", "C_shared_market_events"],
+    "respect_emergency_floor_giB": 5,
+    "vps_free_observed_giB_approx": 5.9
+  },
+  "failure_isolation": {
+    "separate_compose_service": "external-ref-collector",
+    "default_enabled": false,
+    "may_kill_hibachi": false
+  },
+  "clock": {
+    "vps_timedatectl_synchronized": true,
+    "ntp_service_active": true,
+    "observed_at_utc": "2026-08-11T19:44:47Z"
+  },
+  "economic_gate": {
+    "min_events": 200,
+    "min_same_sign_rate": 0.55,
+    "mean_signed_hibachi_move_bps": 15.0,
+    "alt_p25_signed_bps": 11.05,
+    "chronological_halves": true,
+    "arrival_time_required": true,
+    "default_friction_style": "TAKER_TAKER"
+  },
+  "pilot": {
+    "technical_canary": "30-60min",
+    "quality_pilot": "6-24h",
+    "exploratory": "multi-day_only_after_explicit_approval"
+  },
+  "rollback": {
+    "flag_default": "OFF",
+    "stop_without_hibachi": true,
+    "no_alembic_for_spool_pilot": true
+  },
+  "PRODUCTION": {
+    "hibachi_unchanged": true,
+    "collector_observed": "Up ~10h (healthy)",
+    "postgres_observed": "Up (healthy)"
+  },
+  "NEXT_NOT_EXECUTED": true,
+  "NEXT": "request explicit human approval to implement the isolated external feed in OFF-by-default mode and run only a bounded technical canary"
+}

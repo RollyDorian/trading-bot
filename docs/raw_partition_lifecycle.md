@@ -1,8 +1,11 @@
 # RAW PostgreSQL partition / generation lifecycle
 
-STATUS note: this document is the design and local-proof contract. Production
-schema migration, collector restart, B2 deletion, VACUUM FULL, and automatic
-DROP are **out of scope until explicit human approval**.
+STATUS note (2026-08-11): first production generation
+`market_events_g_7471913` completed archive→verify→human DROP with ~194.1 MiB
+reclaim. ACTIVE is `market_events_g_7871913`. Continuous COLLECT may run under
+[raw_generation_operating_model.md](raw_generation_operating_model.md) with
+automatic provision/rotate/archive to `DROP_ELIGIBLE`; physical DROP, B2
+deletion, VACUUM FULL, and threshold lowering remain **operator-gated**.
 
 ## Architecture comparison
 
@@ -84,7 +87,11 @@ the 200–300 MiB active-generation band. Soft physical signal:
 PROVISIONED → ACTIVE → CLOSED_UNARCHIVED → ARCHIVING → VERIFIED → DROP_ELIGIBLE → DROPPED
                                       ↘ ARCHIVE_FAILED
                                       ↘ VERIFY_FAILED
+                                      ↘ CLOSED_UNARCHIVED (crash/operator abort)
 ```
+
+Exact permitted edges are enforced in `generation_transitions.py` (invalid
+transitions fail closed). See `docs/raw_generation_operating_model.md`.
 
 Rules:
 
@@ -177,21 +184,43 @@ The bounded DELETE retention subsystem (`hibachi-archive retention-*`,
 It is **not** the primary reclaim path after partition rollout. Partition DROP
 is the reclaim path. Do not silently remove DELETE retention code or audits.
 
-## Automation target (future)
+## Continuous operating model
 
-Monitor → provision next → close → B2 archive → verify → restore as required →
-`DROP_ELIGIBLE` → operator-approved DROP → capacity verify → continue.
+The durable loop is documented in
+[`docs/raw_generation_operating_model.md`](raw_generation_operating_model.md):
 
-First rollout: steps through `DROP_ELIGIBLE` may be automated; physical DROP
-stays manually approved until repeated canaries succeed.
+bounded generations → verified external archive → operator-approved physical
+DROP. Monolithic RAW + DELETE/reuse is no longer the main lifecycle.
+
+Post-canary production ACTIVE (do not rotate/DROP in tooling-only work):
+
+```text
+market_events_g_7471913  [7471913, 7871913)
+canary rows preserved: 7471913..7477009
+next expected id: 7477010
+successor must start at: 7871913
+```
+
+## Automation target (first rollout)
+
+Monitor → provision next → close metadata → B2 archive → verify →
+`DROP_ELIGIBLE` → **operator-approved** DROP → capacity verify → continue.
+
+Automated initially: capacity monitoring, successor provisioning, rotation
+metadata, archive launch/verify, `DROP_ELIGIBLE`. Not automated: physical DROP,
+threshold lowering, collector auto-restart after hard capacity stop.
 
 ## Implementation map
 
 | Area | Location |
 |---|---|
 | Lifecycle library | `src/trading_bot/storage/partitions.py` |
+| Transitions / capacity / rotation | `storage/generation_transitions.py`, `capacity.py`, `rotation.py` |
+| Closed-gen archive + operator status | `storage/generation_archive.py`, `operator_status.py` |
 | Archive DROP gate | `src/trading_bot/storage/partition_gate.py` |
+| Operating model doc | `docs/raw_generation_operating_model.md` |
+| Read-only status CLI | `scripts/generation_status.py` |
 | Alembic | `migrations/versions/20260809_0004_raw_market_events_partitions.py` |
 | Maintenance role SQL | `deploy/postgres/provision_partition_maintenance_role.sql` |
 | Local pilot | `scripts/partition_generation_pilot.py` |
-| Tests | `tests/test_partitions.py`, `tests/integration/test_market_events_partitions_postgres.py` |
+| Tests | `tests/test_partitions.py`, `tests/test_generation_operating_model.py`, integration partition/rotation suites |

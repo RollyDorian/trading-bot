@@ -205,6 +205,7 @@ class B2ArchiveConfig:
             signature_version="s3v4",
             # B2 expects path-style addressing for S3-compatible APIs.
             s3={"addressing_style": "path"},
+            max_pool_connections=4,
         )
 
 

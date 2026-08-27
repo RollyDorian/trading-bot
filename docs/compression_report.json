@@ -1,0 +1,32 @@
+{
+  "gzip": {
+    "elapsed_seconds": 1.91074167820625,
+    "gzip_bytes": 6463519,
+    "peak_rss_delta_bytes": 2490368,
+    "ratio": 0.04815698108956498,
+    "raw_bytes": 134217695,
+    "sha256_gzip": "40498e9afd82454b8bc7f47ce8ec42af143c714d1542ae1a6d3450e45ed493c4",
+    "sha256_raw": "e8ee989acd14211c5ae6b7253ca52804fd4e99a0983e07580385bf88c9f9ad67"
+  },
+  "parquet": {
+    "elapsed_seconds": 1.9793102550320327,
+    "event_count": 50000,
+    "parquet_bytes": 1221271,
+    "peak_rss_delta_bytes": 88604672,
+    "ratio": 0.041129583322809055,
+    "raw_bytes": 29693250,
+    "sha256_parquet": "029404701111ebbf8351a5bf91a4939322e94be40055501e57c9b26fc3d9c735",
+    "sha256_raw": "af33fb0553a854056d1b06ae4563a84273a4715bd256255e42ecb6447bdd4881"
+  },
+  "parquet_source": "/work/compress/sample_head.ndjson",
+  "roundtrip": {
+    "checked_events": 50000,
+    "elapsed_seconds": 2.112356613855809,
+    "event_count_match": true,
+    "field_mismatches": 0,
+    "note": "gzip NDJSON is durable SoT; Parquet proves required-field semantics",
+    "parquet_bytes": 1221271
+  },
+  "roundtrip_equal": true,
+  "source": "/data/canary.ndjson"
+}

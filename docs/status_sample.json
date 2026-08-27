@@ -1,0 +1,30 @@
+{
+  "ACTION": "EXTERNAL_STOP_REQUIRED",
+  "ACTIVE": null,
+  "B2": "local",
+  "BACKLOG_TREND": "stable",
+  "EXTERNAL": "STOPPED",
+  "FILESYSTEM": {
+    "floor_gib": 5.0,
+    "free_gib": 5.343,
+    "margin_gib": 0.343
+  },
+  "INGEST_RATE": {
+    "mib_per_hour": 358.0,
+    "msg_per_sec": 175.0
+  },
+  "LOCAL_RECLAIMABLE": {
+    "bytes": 4490,
+    "count": 2
+  },
+  "LOCAL_TOTAL_MIB": 0.004,
+  "OFFLOAD_RATE": {
+    "mib_per_hour": 0.0
+  },
+  "SEALED_UNVERIFIED": {
+    "bytes": 0,
+    "count": 0
+  },
+  "UPLOADING": null,
+  "VERIFIED_REMOTE": "binance_usdm_ETHUSDT_20260811T205418Z_000002"
+}

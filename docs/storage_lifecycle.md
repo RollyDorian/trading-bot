@@ -178,9 +178,12 @@ recovery requires later natural reuse, not a rewrite on the constrained host.
 
 The designed reclaim path on this VPS is operator-approved DROP of a
 **verified closed RANGE(`id`) generation** after B2 storage-integrity gates
-pass. See `docs/raw_partition_lifecycle.md`. Bounded DELETE retention remains
-the emergency/legacy path and must not be removed. Automatic generation DROP is
-not enabled in the first rollout.
+pass. See `docs/raw_partition_lifecycle.md` and
+`docs/raw_generation_operating_model.md`. The normal lifecycle is no longer
+monolithic RAW → DELETE/reuse; it is bounded generations → verified external
+archive → physical DROP. Bounded DELETE retention remains the emergency/legacy
+path and must not be removed. Automatic generation DROP is not enabled in the
+first rollout.
 
 ## Existing 2.5M RAW rows
 
