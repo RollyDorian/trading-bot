@@ -163,6 +163,18 @@ class PcArchiveStore(LocalArchiveStore):
         )
 
 
+def _streaming_transfer_config() -> Any:
+    """Single-threaded file→S3 transfer. Avoids extra multipart worker RAM."""
+
+    from boto3.s3.transfer import TransferConfig  # type: ignore[import-untyped]
+
+    return TransferConfig(
+        multipart_threshold=32 * 1024 * 1024,
+        max_concurrency=1,
+        use_threads=False,
+    )
+
+
 class BotoS3ArchiveStore:
     """Production S3/B2 transport via boto3; never deletes or overwrites objects."""
 
@@ -199,14 +211,42 @@ class BotoS3ArchiveStore:
         message = sanitize_error_message(error)
         return ArchiveStoreError(f"S3 {action} failed: {message}")
 
+    def _client_error_code(self, error: ClientError) -> tuple[str, int | None]:
+        payload = error.response.get("Error", {})
+        code = str(payload.get("Code") or "")
+        http = error.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+        http_code = int(http) if http is not None else None
+        return code, http_code
+
+    def _is_missing_error(self, error: ClientError) -> bool:
+        code, http = self._client_error_code(error)
+        return code in {"404", "NoSuchKey", "NotFound"} or http == 404
+
+    def _is_forbidden_error(self, error: ClientError) -> bool:
+        code, http = self._client_error_code(error)
+        return code in {"403", "Forbidden", "AccessDenied"} or http == 403
+
     def exists(self, key: str) -> bool:
         object_key = self._object_key(key)
         try:
             self._client.head_object(Bucket=self._config.bucket, Key=object_key)
         except ClientError as error:
-            code = error.response.get("Error", {}).get("Code")
-            if code in {"404", "NoSuchKey", "NotFound"}:
+            if self._is_missing_error(error):
                 return False
+            # B2 often 403s HeadObject. Fall back to a ranged GET so missing vs
+            # existing can still be distinguished when GetObject is allowed.
+            if self._is_forbidden_error(error):
+                try:
+                    self._client.get_object(
+                        Bucket=self._config.bucket,
+                        Key=object_key,
+                        Range="bytes=0-0",
+                    )
+                except ClientError as get_error:
+                    if self._is_missing_error(get_error):
+                        return False
+                    raise self._wrap_client_error("get_object", get_error) from get_error
+                return True
             raise self._wrap_client_error("head_object", error) from error
         return True
 
@@ -278,7 +318,18 @@ class BotoS3ArchiveStore:
                 str(source),
                 self._config.bucket,
                 object_key,
+                Config=_streaming_transfer_config(),
             )
+        except TypeError:
+            # Test doubles accept only (filename, bucket, key).
+            try:
+                self._client.upload_file(
+                    str(source),
+                    self._config.bucket,
+                    object_key,
+                )
+            except ClientError as error:
+                raise self._wrap_client_error("upload_file", error) from error
         except ClientError as error:
             raise self._wrap_client_error("upload_file", error) from error
 
@@ -290,7 +341,17 @@ class BotoS3ArchiveStore:
                 self._config.bucket,
                 object_key,
                 str(destination),
+                Config=_streaming_transfer_config(),
             )
+        except TypeError:
+            try:
+                self._client.download_file(
+                    self._config.bucket,
+                    object_key,
+                    str(destination),
+                )
+            except ClientError as error:
+                raise self._wrap_client_error("download_file", error) from error
         except ClientError as error:
             raise self._wrap_client_error("download_file", error) from error
 

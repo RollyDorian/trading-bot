@@ -48,8 +48,13 @@ from trading_bot.storage.models import MarketEvent
 
 DEFAULT_MAX_DURATION_SECONDS = 3_600
 HARD_MAX_DURATION_SECONDS = 6 * 3_600
-DEFAULT_MAX_ROWS = 50_000
+# Production hourly windows peaked near ~59.6k rows (~59k events/h). The old
+# 50k default falsely failed legitimate closed-generation archives; keep a hard
+# bound but allow one dense hour with headroom under HARD_MAX_ROWS.
+DEFAULT_MAX_ROWS = 100_000
 HARD_MAX_ROWS = 200_000
+# Alias for generation-oriented hourly export (same value; documents intent).
+GENERATION_ARCHIVE_DEFAULT_MAX_ROWS = DEFAULT_MAX_ROWS
 DEFAULT_MAX_BUNDLE_BYTES = 64 * 1024 * 1024
 HARD_MAX_BUNDLE_BYTES = 256 * 1024 * 1024
 OPERATIONAL_DISK_FLOOR_BYTES = 3 * 1024**3
@@ -129,7 +134,10 @@ def _disk_free_bytes(path: Path) -> int:
 
 def _ensure_disk_preflight(output_dir: Path, limits: WindowExportLimits) -> None:
     """Require floor + 2× worst-case bundle for write + verification download temp."""
-    output_dir.mkdir(parents=True, exist_ok=True)
+    # Fail closed on ownership/permission before any bundle write (UID 10001 contract).
+    from trading_bot.archive.workdir import ensure_archive_workdir
+
+    output_dir = ensure_archive_workdir(output_dir)
     free_bytes = _disk_free_bytes(output_dir)
     required = OPERATIONAL_DISK_FLOOR_BYTES + 2 * limits.max_bundle_bytes
     if free_bytes < limits.min_free_disk_bytes:
@@ -862,6 +870,37 @@ def _load_completed_marker(store: ArchiveStore, dataset_id: str) -> dict[str, An
     if not payload.get("attempt_id"):
         raise WindowExportError("COMPLETED marker missing attempt_id")
     return payload
+
+
+def load_completed_attempt_metadata(
+    store: ArchiveStore,
+    dataset_id: str,
+) -> dict[str, Any]:
+    """Load COMPLETED marker and parsed archive_metadata for a dataset.
+
+    Fail closed when the canonical marker or attempt metadata is missing or invalid.
+    """
+    completed = _load_completed_marker(store, dataset_id)
+    attempt_id = str(completed["attempt_id"])
+    metadata_key = _attempt_key(dataset_id, attempt_id, "archive_metadata.json")
+    if not store.exists(metadata_key):
+        raise WindowExportError("archive_metadata.json is missing from completed attempt")
+    archive_metadata = cast(
+        dict[str, Any],
+        json.loads(store.read_bytes(metadata_key).decode("utf-8")),
+    )
+    return {
+        "attempt_id": attempt_id,
+        "completed": completed,
+        "archive_metadata": archive_metadata,
+    }
+
+
+def dataset_has_incomplete_marker(store: ArchiveStore, dataset_id: str) -> bool:
+    """Return True when any INCOMPLETE marker exists under the dataset prefix."""
+    prefix = f"{_canonical_prefix(dataset_id)}/"
+    incomplete_suffix = f"/{INCOMPLETE_MARKER_NAME}"
+    return any(key.endswith(incomplete_suffix) for key in store.list_keys(prefix))
 
 
 def verify_restore_archive(

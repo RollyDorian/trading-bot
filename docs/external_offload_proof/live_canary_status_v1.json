@@ -1,0 +1,29 @@
+{
+  "STATUS": "EXTERNAL_LIVE_OFFLOAD_BLOCKED",
+  "HEADROOM": {
+    "before_gib": 5.18,
+    "after_housekeeping_gib": 5.867,
+    "safe": true
+  },
+  "LIVE_WIRING": {
+    "writer": "SegmentedExternalSpool ACTIVE 16MiB",
+    "offloader": "AsyncOffloadWorker in-process",
+    "recovery": "recover_root on start"
+  },
+  "CANARY": {
+    "executed": false,
+    "reason": "hibachi_collector_unhealthy_partition_missing"
+  },
+  "HIBACHI": {
+    "health": "unhealthy",
+    "postgres": "healthy",
+    "error": "no partition of relation market_events for id~907212x",
+    "restart_delta": "none_during_this_milestone"
+  },
+  "ML_STATUS": "BLOCKED",
+  "QUALITY_PILOT_DECISION": "QUALITY_PILOT_OFFLOAD_UNSTABLE",
+  "BLOCKERS": [
+    "Hibachi market_events partition exhausted/missing for current ids",
+    "Live offload canary not executed"
+  ]
+}

@@ -13,7 +13,8 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "20260729_0003"
-down_revision: str | None = "20260729_0002"
+# Normalized core stays optional after RAW partition adoption on constrained hosts.
+down_revision: str | None = "20260809_0004"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

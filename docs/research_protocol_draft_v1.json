@@ -1,0 +1,54 @@
+{
+  "cost_scenarios": {
+    "base_plausible_friction_bps": 11.053086428625559,
+    "fee": "Hibachi public Tier-1 taker 4.5 bps/side unless higher tier proven",
+    "funding": "placeholder; report contribution separately for short holds",
+    "slippage": "0 extra when notional fits top-of-book; else modeled stress",
+    "spread": "observed median/path spread from market_state"
+  },
+  "evaluation_metrics": [
+    "gross_bps_per_trade",
+    "net_bps_per_trade",
+    "break_even_friction_bps",
+    "trades_per_day",
+    "max_drawdown",
+    "regime_stability"
+  ],
+  "execution_assumptions": {
+    "delay_note": "0s is theoretical upper bound only on 1s grid",
+    "delay_seconds_base": 1,
+    "delay_sensitivity_seconds": [
+      0,
+      1,
+      2
+    ],
+    "fills": "best_ask_buy_best_bid_sell",
+    "style": "taker_cross_spread"
+  },
+  "feature_subset": [
+    "signed_trade_flow_1s",
+    "ofi_5s",
+    "ofi_15s",
+    "ofi_1s"
+  ],
+  "freeze_blocked_reason": "DATA_READY_FOR_ML is false; do not freeze or start supervised ML",
+  "frozen": false,
+  "splits": {
+    "exploratory_train": "prior_continuous and later exploratory segments",
+    "oos": "next newly verified generation after g_7471913_7871913; current generation is contaminated by prior inspection",
+    "purge_embargo_seconds": 60,
+    "validation": "chronological tail of exploratory only"
+  },
+  "status": "DRAFT",
+  "target_horizons_seconds": [
+    5,
+    15,
+    30,
+    60
+  ],
+  "trade_decision_semantics": {
+    "no_mid_fills": true,
+    "position": "flat-to-one; fixed holding horizon",
+    "signal": "signed feature threshold on exploratory-selected candidates"
+  }
+}

@@ -45,9 +45,11 @@ deployment threshold of 3 GiB free. Warning begins when the conservative forecas
 - **Manual archive/export followed by an approved retention action:** requires a verified
   backup, immutable export checksums, restore evidence, a reviewed cutoff, and explicit
   approval. Removal is irreversible without a validated backup and is disabled now.
-- **Partition-aware retention:** requires a future reviewed schema/migration, partition
-  integrity tests, backup evidence, and separate approval. The current schema is not
-  partitioned, so this option is unavailable and has no automatic rollback.
+- **Partition-aware retention:** designed and locally proven in
+  `docs/raw_partition_lifecycle.md` (RANGE(`id`) generations + archive identity
+  gate + operator-approved DROP). Production conversion of the empty monolithic
+  `market_events` relation still requires separate human review and must not run
+  automatically. Bounded DELETE retention remains the emergency/legacy path.
 - **Larger volume/capacity:** preserves append-only history but requires infrastructure,
   filesystem, backup, and rollback planning plus separate approval. Reverting a storage
   expansion may be impossible after growth, so it is not automated or enabled here.

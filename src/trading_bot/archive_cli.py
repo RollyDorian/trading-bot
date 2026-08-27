@@ -36,7 +36,17 @@ from trading_bot.archive.batch import (
 from trading_bot.archive.capacity import CapacityInputs, plan_capacity
 from trading_bot.archive.exporter import ArchiveExporter, ArchiveRequest
 from trading_bot.archive.manifest import ArchiveManifest, sha256_bytes
-from trading_bot.archive.retention import plan_retention
+from trading_bot.archive.retention import (
+    PROGRESS_STATUS_BLOCKED,
+    PROGRESS_STATUS_FAILED,
+    ArchivedRawRangeTarget,
+    BoundedRetentionRunner,
+    RetentionRuntimeGuards,
+    load_coverage_plan,
+    plan_retention,
+    verify_archive_coverage_for_retention,
+)
+from trading_bot.archive.retention_identity import require_retention_database_url
 from trading_bot.archive.ssh_source import SshArchiveBatchReader
 from trading_bot.archive.store import (
     BotoS3ArchiveStore,
@@ -212,6 +222,49 @@ def _parser() -> argparse.ArgumentParser:
         default=5.0,
         type=float,
     )
+    coverage_gate = subparsers.add_parser("retention-coverage-gate")
+    coverage_gate.add_argument("--coverage-plan", required=True, type=Path)
+    coverage_gate.add_argument("--provider", choices=("b2",), default="b2")
+    retention_dry_run = subparsers.add_parser("retention-dry-run")
+    retention_dry_run.add_argument("--coverage-plan", required=True, type=Path)
+    retention_dry_run.add_argument("--min-id", required=True, type=int)
+    retention_dry_run.add_argument("--max-id", required=True, type=int)
+    retention_dry_run.add_argument("--expected-rows", required=True, type=int)
+    retention_dry_run.add_argument("--audit-dir", required=True, type=Path)
+    retention_dry_run.add_argument("--batch-size", default=1000, type=int)
+    retention_dry_run.add_argument("--collector-stopped-confirmed", action="store_true")
+    retention_dry_run.add_argument("--write-quiescence-confirmed", action="store_true")
+    retention_dry_run.add_argument("--postgresql-healthy-confirmed", action="store_true")
+    retention_dry_run.add_argument(
+        "--min-free-disk-bytes",
+        default=OPERATIONAL_DISK_FLOOR_BYTES,
+        type=int,
+    )
+    retention_dry_run.add_argument("--free-disk-bytes", required=True, type=int)
+    retention_dry_run.add_argument("--operation-id")
+    retention_dry_run.add_argument("--git-sha")
+    retention_execute = subparsers.add_parser("retention-execute")
+    retention_execute.add_argument("--coverage-plan", required=True, type=Path)
+    retention_execute.add_argument("--min-id", required=True, type=int)
+    retention_execute.add_argument("--max-id", required=True, type=int)
+    retention_execute.add_argument("--expected-rows", required=True, type=int)
+    retention_execute.add_argument("--audit-dir", required=True, type=Path)
+    retention_execute.add_argument("--batch-size", default=1000, type=int)
+    retention_execute.add_argument("--collector-stopped-confirmed", action="store_true")
+    retention_execute.add_argument("--write-quiescence-confirmed", action="store_true")
+    retention_execute.add_argument("--postgresql-healthy-confirmed", action="store_true")
+    retention_execute.add_argument(
+        "--min-free-disk-bytes",
+        default=OPERATIONAL_DISK_FLOOR_BYTES,
+        type=int,
+    )
+    retention_execute.add_argument("--free-disk-bytes", required=True, type=int)
+    retention_execute.add_argument("--confirm-delete", action="store_true")
+    retention_execute.add_argument("--confirmation-token")
+    retention_execute.add_argument("--max-batches", type=int)
+    retention_execute.add_argument("--operation-id")
+    retention_execute.add_argument("--pause-seconds", default=0.05, type=float)
+    retention_execute.add_argument("--git-sha")
     return parser
 
 
@@ -556,6 +609,106 @@ def _archive_roundtrip_smoke(args: argparse.Namespace) -> None:
         raise SystemExit(1)
 
 
+def _retention_provider_store(provider: str) -> BotoS3ArchiveStore:
+    if provider != "b2":
+        raise ValueError("retention coverage gate requires provider b2")
+    return _b2_store()
+
+
+def _resolve_retention_target(
+    args: argparse.Namespace,
+) -> ArchivedRawRangeTarget:
+    target = load_coverage_plan(args.coverage_plan)
+    if args.min_id != target.min_raw_event_id:
+        raise ValueError("--min-id does not match coverage plan")
+    if args.max_id != target.max_raw_event_id:
+        raise ValueError("--max-id does not match coverage plan")
+    if args.expected_rows != target.expected_row_count:
+        raise ValueError("--expected-rows does not match coverage plan")
+    return target
+
+
+def _retention_guards(args: argparse.Namespace) -> RetentionRuntimeGuards:
+    if not args.collector_stopped_confirmed:
+        raise ValueError("--collector-stopped-confirmed is required")
+    if not args.write_quiescence_confirmed:
+        raise ValueError("--write-quiescence-confirmed is required")
+    if not args.postgresql_healthy_confirmed:
+        raise ValueError("--postgresql-healthy-confirmed is required")
+    if args.min_free_disk_bytes < OPERATIONAL_DISK_FLOOR_BYTES:
+        raise ValueError(
+            f"--min-free-disk-bytes cannot be below operational floor "
+            f"({OPERATIONAL_DISK_FLOOR_BYTES})"
+        )
+    return RetentionRuntimeGuards(
+        collector_stopped=True,
+        write_quiescent=True,
+        postgresql_healthy=True,
+        free_disk_bytes=args.free_disk_bytes,
+        min_free_disk_bytes=args.min_free_disk_bytes,
+    )
+
+
+def _retention_coverage_gate(args: argparse.Namespace) -> dict[str, object]:
+    target = load_coverage_plan(args.coverage_plan)
+    return verify_archive_coverage_for_retention(
+        _retention_provider_store(args.provider),
+        target,
+    )
+
+
+async def _retention_dry_run(args: argparse.Namespace) -> dict[str, object]:
+    target = _resolve_retention_target(args)
+    guards = _retention_guards(args)
+    settings = Settings()
+    engine = create_engine(settings.database_url)
+    try:
+        runner = BoundedRetentionRunner(
+            create_session_factory(engine),
+            args.audit_dir,
+        )
+        return await runner.dry_run(
+            target,
+            guards,
+            batch_size=args.batch_size,
+            operation_id=args.operation_id,
+            git_sha=args.git_sha,
+            coverage_store=_retention_provider_store("b2"),
+        )
+    finally:
+        await engine.dispose()
+
+
+async def _retention_execute(args: argparse.Namespace) -> dict[str, object]:
+    target = _resolve_retention_target(args)
+    guards = _retention_guards(args)
+    if args.confirm_delete:
+        database_url = require_retention_database_url()
+    else:
+        database_url = Settings().database_url
+    engine = create_engine(database_url)
+    try:
+        runner = BoundedRetentionRunner(
+            create_session_factory(engine),
+            args.audit_dir,
+            test_mode=not args.confirm_delete,
+        )
+        return await runner.execute(
+            target,
+            guards,
+            confirmation=args.confirmation_token or "",
+            confirm_delete=args.confirm_delete,
+            batch_size=args.batch_size,
+            max_batches=args.max_batches,
+            pause_seconds=args.pause_seconds,
+            operation_id=args.operation_id,
+            git_sha=args.git_sha,
+            coverage_store=_retention_provider_store("b2"),
+        )
+    finally:
+        await engine.dispose()
+
+
 def main() -> None:
     args = _parser().parse_args()
     if args.command == "archive-batch-plan":
@@ -615,6 +768,34 @@ def main() -> None:
         except Exception:
             print("B2 archive smoke failed", file=sys.stderr)
             raise SystemExit(2) from None
+        return
+    if args.command == "retention-coverage-gate":
+        try:
+            summary = _retention_coverage_gate(args)
+        except (ValueError, RuntimeError) as error:
+            print(f"retention-coverage-gate: {error}", file=sys.stderr)
+            raise SystemExit(2) from error
+        print(json.dumps(summary, separators=(",", ":"), sort_keys=True))
+        if summary.get("status") != "pass":
+            raise SystemExit(2)
+        return
+    if args.command == "retention-dry-run":
+        try:
+            summary = asyncio.run(_retention_dry_run(args))
+        except (ValueError, RuntimeError, PermissionError) as error:
+            print(f"retention-dry-run: {error}", file=sys.stderr)
+            raise SystemExit(2) from error
+        print(json.dumps(summary, separators=(",", ":"), sort_keys=True))
+        return
+    if args.command == "retention-execute":
+        try:
+            summary = asyncio.run(_retention_execute(args))
+        except (ValueError, RuntimeError, PermissionError) as error:
+            print(f"retention-execute: {error}", file=sys.stderr)
+            raise SystemExit(2) from error
+        print(json.dumps(summary, separators=(",", ":"), sort_keys=True))
+        if summary.get("status") in {PROGRESS_STATUS_FAILED, PROGRESS_STATUS_BLOCKED}:
+            raise SystemExit(1)
         return
     if args.command == "capacity":
         inputs = CapacityInputs(

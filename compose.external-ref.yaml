@@ -1,0 +1,57 @@
+# Optional Compose overlay for EXTERNAL live offload canary (default OFF).
+# Requires profile `external-ref` AND EXTERNAL_REF_ENABLED=true.
+# restart: "no" — capacity stop must not loop.
+
+services:
+  external-ref-collector:
+    image: ${EXTERNAL_REF_IMAGE:-hibachi-external-ref:live-offload1}
+    profiles: ["external-ref"]
+    command: ["python", "-m", "trading_bot.external_market_data.cli"]
+    mem_limit: 128m
+    # Hibachi has priority on the 1-vCPU VPS. Cap external below one full core
+    # so gzip/B2 cannot starve the collector healthcheck process.
+    cpu_shares: 256
+    cpus: 0.45
+    env_file:
+      - ${EXTERNAL_REF_B2_ENV_FILE:?set path to B2 env file for offload}
+    environment:
+      EXTERNAL_REF_ENABLED: ${EXTERNAL_REF_ENABLED:-false}
+      EXTERNAL_REF_SPOOL_DIR: /app/external-spool
+      EXTERNAL_REF_SEGMENT_MAX_BYTES: ${EXTERNAL_REF_SEGMENT_MAX_BYTES:-16777216}
+      EXTERNAL_REF_SEGMENT_MAX_SECONDS: ${EXTERNAL_REF_SEGMENT_MAX_SECONDS:-300}
+      EXTERNAL_REF_PRESSURE_BYTES: ${EXTERNAL_REF_PRESSURE_BYTES:-134217728}
+      EXTERNAL_REF_STOP_BYTES: ${EXTERNAL_REF_STOP_BYTES:-201326592}
+      EXTERNAL_REF_SPOOL_HARD_CAP_BYTES: ${EXTERNAL_REF_STOP_BYTES:-201326592}
+      EXTERNAL_REF_FS_FLOOR_BYTES: ${EXTERNAL_REF_FS_FLOOR_BYTES:-5368709120}
+      EXTERNAL_REF_FS_FLOOR_MARGIN_BYTES: ${EXTERNAL_REF_FS_FLOOR_MARGIN_BYTES:-536870912}
+      EXTERNAL_REF_CANARY_MAX_SECONDS: ${EXTERNAL_REF_CANARY_MAX_SECONDS:-900}
+      EXTERNAL_REF_STATUS_PATH: /app/external-spool/external_ref_status.json
+      EXTERNAL_REF_OFFLOAD_ENABLED: ${EXTERNAL_REF_OFFLOAD_ENABLED:-true}
+      EXTERNAL_REF_OFFLOAD_STORE: ${EXTERNAL_REF_OFFLOAD_STORE:-b2}
+      EXTERNAL_REF_OFFLOAD_LOCAL_ROOT: /app/external-spool/.local-store
+      HOME: /app/external-spool/.home
+    volumes:
+      - ${EXTERNAL_REF_SPOOL_PATH:?set an app-owned external spool directory}:/app/external-spool
+      # Bind-mount current package over the already-local 607 MiB image. Avoids
+      # a second pip/boto3 layer that previously dropped free below the canary gate.
+      - ${EXTERNAL_REF_CODE_OVERLAY:?set trading_bot overlay dir}:/usr/local/lib/python3.13/site-packages/trading_bot:ro
+    init: true
+    restart: "no"
+    stop_grace_period: 45s
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import pathlib,sys; p=pathlib.Path('/app/external-spool/external_ref_status.json'); sys.exit(0 if p.exists() else 1)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s

@@ -50,6 +50,15 @@ output is redacted JSON only.
 
 Use the same ``B2_S3_*`` variables documented in [b2_archive_smoke.md](b2_archive_smoke.md).
 
+## Row / size bounds
+
+* Default ``--max-rows`` is **100000** (covers production ~59.6k/hour windows).
+* Hard cap remains **200000**.
+* The previous 50000 default falsely failed dense production hours and must not
+  be restored for generation archives.
+* ``--output-dir`` must be writable by the runtime UID (production container
+  ``10001:10001``, mode ``0700``). World-writable workdirs are rejected.
+
 ## CLI
 
 ### ``archive-export-window``

@@ -1,0 +1,52 @@
+{
+  "STATUS": "EXTERNAL_CAPACITY_STOP",
+  "agg_trade_count": 7371,
+  "book_ticker_count": 218363,
+  "bytes_observed": 37010882,
+  "bytes_per_event": 594.5834256248505,
+  "bytes_per_sec": 28742.413395643773,
+  "contract_docs": {
+    "agg_trade": "https://developers.binance.com/legacy-docs/derivatives/usds-margined-futures/websocket-market-streams/Aggregate-Trade-Streams",
+    "book_ticker": "https://developers.binance.com/legacy-docs/derivatives/usds-margined-futures/websocket-market-streams/Individual-Symbol-Book-Ticker-Streams",
+    "connect": "https://developers.binance.com/legacy-docs/derivatives/usds-margined-futures/websocket-market-streams"
+  },
+  "contract_name": "binance_usdm_futures_websocket_market_streams",
+  "contract_verified_at_utc": "2026-08-11T20:00:00+00:00",
+  "disk_free_after_bytes": 6108422144,
+  "disk_free_before_bytes": 6254211072,
+  "disk_free_min_tracked_bytes": 6108422144,
+  "elapsed_seconds": 1287.6748201530427,
+  "ended_at_utc": "2026-08-11T20:31:04.707748+00:00",
+  "exchange_receive_delta_ms": {
+    "max": 1817.358,
+    "min": 113.091,
+    "n": 50000,
+    "p50": 164.8705,
+    "p90": 663.3513,
+    "p95": 948.9052499999992,
+    "p99": 1661.33858
+  },
+  "filesystem_floor_bytes": 5368709120,
+  "filesystem_free_bytes": 6108422144,
+  "first_agg_trade": true,
+  "first_book_ticker": true,
+  "hard_cap_bytes": 134217728,
+  "instrument": "ETHUSDT",
+  "latest_exchange_at": "2026-08-11T20:31:03.902000+00:00",
+  "latest_received_at": "2026-08-11T20:31:04.565009+00:00",
+  "malformed_count": 0,
+  "max_local_sequence_by_connection": {
+    "824a2662-a733-4657-b080-790acf2a8ed4": 7371,
+    "8d5bcf36-59ba-4616-9c4a-d0b3aeac98ad": 218363
+  },
+  "messages_per_sec": 175.30357545794914,
+  "messages_total": 225734,
+  "negative_delta_count": 0,
+  "peak_rss_bytes": 54161408,
+  "projected_gib_per_day": 8.38720861477238,
+  "projected_mib_per_hour": 357.8542342302882,
+  "reconnect_count": 0,
+  "spool_bytes": 134217695,
+  "stop_reason": "EXTERNAL_CAPACITY_STOP:spool hard cap 134217728 would be exceeded (projected=134218290)",
+  "venue": "binance_usdm"
+}

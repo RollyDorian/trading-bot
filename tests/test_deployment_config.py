@@ -122,6 +122,20 @@ def test_production_compose_is_collect_only_and_uses_immutable_image() -> None:
     assert "@${IMAGE_DIGEST:?" in compose
     assert '["hibachi-bot", "--stream"]' in compose
     assert "trading_bot.healthcheck" in compose
+    assert "cpu_shares: 2048" in compose
+
+
+def test_external_ref_compose_isolates_cpu_and_uses_code_overlay() -> None:
+    compose = (ROOT / "compose.external-ref.yaml").read_text(encoding="utf-8")
+    assert "mem_limit: 128m" in compose
+    assert "cpu_shares: 256" in compose
+    assert "cpus: 0.45" in compose
+    assert "EXTERNAL_REF_CODE_OVERLAY" in compose
+    assert "EXTERNAL_REF_PRESSURE_BYTES: ${EXTERNAL_REF_PRESSURE_BYTES:-134217728}" in compose
+    assert "EXTERNAL_REF_STOP_BYTES: ${EXTERNAL_REF_STOP_BYTES:-201326592}" in compose
+    assert "EXTERNAL_REF_FS_FLOOR_BYTES: ${EXTERNAL_REF_FS_FLOOR_BYTES:-5368709120}" in compose
+    assert "hibachi-bot" not in compose
+    assert "PAPER" not in compose
 
 
 def test_docker_context_excludes_secrets_and_generated_data() -> None:

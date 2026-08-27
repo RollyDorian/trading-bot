@@ -1,0 +1,78 @@
+{
+  "STATUS": "EXTERNAL_OFFLOAD_READY",
+  "CANARY_SOURCE": {
+    "events": 225734,
+    "raw_bytes": 134217695,
+    "path_preserved": "/tmp/ext_canary.ndjson"
+  },
+  "SEGMENTS": {
+    "boundary": "16 MiB RAW",
+    "count": 8,
+    "size_distribution_bytes": [
+      16777769, 16777300, 16777414, 16777330,
+      16777278, 16777235, 16777567, 16775802
+    ]
+  },
+  "COMPRESSION": {
+    "raw_bytes": 134217695,
+    "gzip_bytes": 6463519,
+    "gzip_ratio": 0.04816,
+    "parquet_segment_bytes": 708161,
+    "parquet_segment_raw_bytes": 16777769,
+    "parquet_ratio": 0.04221,
+    "gzip_elapsed_seconds": 1.91,
+    "parquet_segment_elapsed_seconds": 1.01,
+    "roundtrip_equal": true
+  },
+  "B2": {
+    "upload_mib_per_s": 7.12,
+    "download_mib_per_s": 7.29,
+    "retry_result": "success_first_attempt",
+    "namespace": "external/binance_usdm/ETHUSDT/"
+  },
+  "INTEGRITY": {
+    "hash": "pass",
+    "counts": "pass",
+    "readback": "pass",
+    "restore": "pass"
+  },
+  "LIFECYCLE": [
+    "ACTIVE",
+    "SEALED_UNVERIFIED",
+    "UPLOADING",
+    "VERIFIED_REMOTE",
+    "RECLAIMABLE",
+    "FAILED"
+  ],
+  "RECOVERY": "A-F covered in unit tests + recover_root",
+  "BACKLOG_POLICY": {
+    "pressure_bytes": 134217728,
+    "stop_bytes": 201326592,
+    "floor_bytes": 5368709120,
+    "floor_margin_bytes": 1073741824
+  },
+  "THROUGHPUT": {
+    "ingest_mib_per_hour_raw": 358,
+    "projected_gzip_mib_per_hour": 17.2,
+    "upload_mib_per_s": 7.12,
+    "backlog_trend_expected": "stable_or_shrinking"
+  },
+  "LIVE_OFFLOAD_PROOF": {
+    "executed": false,
+    "duration": null,
+    "result": "deferred_disk_margin_and_runtime_wiring"
+  },
+  "DISK": {
+    "external_local_max_mib": 192,
+    "free_min_gib_observed_during_proof": 5.34,
+    "free_after_cleanup_gib": 5.54,
+    "floor_gib": 5.0
+  },
+  "HIBACHI": "healthy_unchanged",
+  "ML_STATUS": "BLOCKED",
+  "QUALITY_PILOT_CAPACITY": "SAFE_WITH_OFFLOAD",
+  "BLOCKERS": [
+    "Live segment writer + async offloader not yet wired into external-ref runtime",
+    "VPS free space currently near 5 GiB floor + 1 GiB margin; reclaim/headroom before live/quality pilot"
+  ]
+}

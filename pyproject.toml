@@ -34,6 +34,8 @@ dev = [
 [project.scripts]
 hibachi-bot = "trading_bot.cli:main"
 hibachi-archive = "trading_bot.archive_cli:main"
+hibachi-external-ref = "trading_bot.external_market_data.cli:main"
+hibachi-external-offload = "trading_bot.external_market_data.offload.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/trading_bot"]
@@ -43,7 +45,7 @@ addopts = "-q"
 testpaths = ["tests"]
 
 [tool.ruff]
-exclude = [".agents"]
+exclude = [".agents", "*.yaml", "compose*.yaml"]
 line-length = 100
 target-version = "py313"
 

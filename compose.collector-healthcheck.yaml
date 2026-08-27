@@ -1,0 +1,7 @@
+# Bind the ACTIVE-bounded collector healthcheck over the GHCR image module.
+# Used until a rebuilt image digest can be pulled without breaching READY disk.
+# HIBACHI_HEALTHCHECK_OVERLAY is the host path to healthcheck.py (set by maintain/resume).
+services:
+  collector:
+    volumes:
+      - ${HIBACHI_HEALTHCHECK_OVERLAY}:/usr/local/lib/python3.13/site-packages/trading_bot/healthcheck.py:ro

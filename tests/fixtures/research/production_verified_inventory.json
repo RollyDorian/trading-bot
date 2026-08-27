@@ -1,0 +1,70 @@
+{
+  "inventory_version": 1,
+  "source": "verified_production_evidence_reconciled_2026-08-11",
+  "note": "Metadata-only inventory; full Parquet bodies not downloaded for inventory.",
+  "datasets": [
+    {
+      "dataset_id": "prior_continuous_6207906_7471912",
+      "kind": "pre_partition_continuous",
+      "start_utc": "2026-08-06T12:21:31.684982Z",
+      "end_utc": "2026-08-07T09:33:25.295636Z",
+      "id_start": 6207906,
+      "id_end_inclusive": 7471912,
+      "rows": 1264007,
+      "trade_rows": 3979,
+      "windows": 22,
+      "topics": [
+        "orderbook",
+        "ask_bid_price",
+        "mark_price",
+        "spot_price",
+        "funding_rate_estimation",
+        "trades"
+      ],
+      "schema_versions": {"1": "legacy_present_or_mixed", "2": "dominant_after_envelope_upgrade"},
+      "storage_verification": {
+        "remote_completed": true,
+        "windows_completed": "22/22",
+        "restore_verification": "PASS",
+        "source": "production_retention_archive_evidence"
+      },
+      "research_quality_status": "not_reassessed_in_this_inventory",
+      "connection_session_count": "not_summarized_without_parquet_scan",
+      "exchange_sequence_availability": "present_only_when_hibachi_supplied; never fabricated",
+      "note": "RAW deleted from PG hot buffer after verified B2 archive; durable SoT is B2"
+    },
+    {
+      "dataset_id": "g_7471913_7871913",
+      "kind": "partition_generation",
+      "partition_name": "market_events_g_7471913",
+      "id_start": 7471913,
+      "id_end_inclusive": 7871912,
+      "rows": 400000,
+      "trade_rows": 1073,
+      "windows": 9,
+      "topics": {
+        "ask_bid_price": 79784,
+        "funding_rate_estimation": 79784,
+        "mark_price": 79785,
+        "orderbook": 79789,
+        "spot_price": 79785,
+        "trades": 1073
+      },
+      "schema_versions": {"2": 400000},
+      "storage_verification": {
+        "remote_completed": true,
+        "checksums_pass": true,
+        "manifest_pass": true,
+        "download_verification_pass": true,
+        "storage_reconciliation_pass": true,
+        "id_coverage_contiguous": true
+      },
+      "research_quality_status": "PASS_on_windows_not_drop_gate",
+      "evidence_sha256": "98933552e3465939e47b97f7f73b9da10c8487c2ec6ad377d6a77a618ee555a3",
+      "connection_session_count": "not_summarized_without_full_scan",
+      "exchange_sequence_availability": "orderbook may carry exchange_sequence; other topics typically absent",
+      "physical_state": "DROPPED_local_after_verified_B2",
+      "note": "final hour window may include successor ids sharing received_at hour; closed-gen id coverage exact 400000"
+    }
+  ]
+}

@@ -72,6 +72,16 @@ python -m venv .venv
 - The normal RAW hot window is at least three days. Two days is degraded
   emergency planning only and requires an explicit flag, warning, and separate
   retention approval; the planner must not shorten the window automatically.
+- Designed RAW reclaim path for the constrained VPS is RANGE(`id`) partition
+  generations with operator-approved DROP after B2 storage-integrity verification
+  (`docs/raw_partition_lifecycle.md`, `docs/raw_generation_operating_model.md`).
+  Continuous loop: collect → provision successor → rotate → archive closed
+  generation → verify B2 → `DROP_ELIGIBLE` → operator-approved DROP → reclaim.
+  Ordinary DELETE retention remains the emergency/legacy path and does not
+  reliably return relation files to the filesystem. Do not run production
+  partition migration, collector restart, generation rotation, B2 mutation, or
+  automatic generation DROP without explicit approval. VACUUM FULL is not a
+  routine lifecycle tool.
 - The default database URL is development-only. Replace it locally through
   `.env`; never commit local credentials.
 - Collector, exporter, dashboard, and normal migrations use the explicit `research`
@@ -164,10 +174,128 @@ python -m venv .venv
    fixture timestamp. Only 2 trade events exist and passing slices have zero replay trades.
    The fixture path is now isolated from research storage, but fresh real COLLECT-only
    intervals are still required. Do not lower thresholds or invent regimes to force admission.
-   The first manual private COLLECT-only stack is operational; provider-neutral
-   recoverability and local monitoring contracts are prepared. Deployment updates,
-   network changes, dashboard access,
-   and any PAPER/LIVE behavior still require separate explicit approval.
-5. PAPER remains disabled even when admission criteria pass. Human review and a
-   separate explicitly approved implementation milestone are mandatory; keep all
-   real trading commands absent.
+   Offline research pipeline v1 ran the first **full-corpus** validation on verified B2 RAW
+   (`prior_continuous` + `g_7471913_7871913`, 1.664M events): STATUS
+   `FULL_CORPUS_RESEARCH_VALIDATED`. Follow-on
+   `DATA_ACCUMULATION_AND_EDGE_CHARACTERIZATION`: STATUS
+   `EDGE_CHARACTERIZATION_READY`, ML_DECISION
+   `EDGE_INSUFFICIENT_FOR_CURRENT_HORIZON` (`docs/edge_characterization_v1.md`).
+   Milestone `EXECUTION_AND_HORIZON_REASSESSMENT` then tested maker fill bounds
+   (optimistic/base/conservative), extended labels through 600s, event selection, and
+   execution-style required-move matrix without starting ML: STATUS
+   `EXECUTION_HORIZON_REASSESSMENT_READY`, DECISION `STRATEGY_RETHINK_REQUIRED`,
+   ML_STATUS `BLOCKED` (`docs/execution_horizon_reassessment_v1.md`). Maker fills show
+   adverse post-fill mid; longer-horizon extreme gross stays ~0.8–1.9 bps vs ~11 bps
+   taker friction; no event class clears break-even with adequate sample. Extreme
+   exploratory gross still peaks ~2.3 bps (15s).    Follow-on `STRATEGY_SPACE_RETHINK`
+   screened alternative economic mechanisms (basis, funding, liquidity events,
+   volatility/opportunity targets, external relative value) without ML: STATUS
+   `STRATEGY_SPACE_RETHINK_READY`, DECISION `DESIGN_EXTERNAL_FEED_PILOT`,
+   RECOMMENDED_HYPOTHESIS `EXTERNAL_RELATIVE_VALUE_LEAD_LAG`
+   (`docs/strategy_space_rethink_v1.md`).    Design review
+   `EXTERNAL_RELATIVE_VALUE_FEED_DESIGN_REVIEW` then selected a minimal
+   Binance USD-M `ETHUSDT` public `bookTicker`+`aggTrade` pilot (Bybit fallback),
+   spool→Parquet→B2 storage (not `market_events`), isolated Compose service
+   default OFF, arrival-time lead-lag protocol and predeclared economic gates:
+   STATUS `EXTERNAL_FEED_DESIGN_READY` (`docs/external_relative_value_feed_design_v1.md`).
+   Implementation + ≤60m technical canary authorized separately: isolated
+   `external-ref-collector` (dual WS `/public` bookTicker + `/market` aggTrade),
+   NDJSON spool hard-capped, Hibachi untouched; see
+   `docs/binance_usdm_external_ws_contract_v1.md` and canary report.
+   Technical canary STATUS `EXTERNAL_CAPACITY_STOP` (~21.4 min, exact 128 MiB
+   cap, ~358 MiB/h RAW, ~8.4 GiB/day projected). Follow-on milestone
+   `EXTERNAL_FEED_OFFLOAD_DESIGN_AND_PROOF`: STATUS `EXTERNAL_OFFLOAD_READY`,
+   durable SoT = gzip NDJSON (~4.8% of RAW), 16 MiB segments, B2 prefix
+   `external/binance_usdm/ETHUSDT/...`, integrity gate before reclaim;
+   VPS↔B2 ≈7 MiB/s ≫ ~17 MiB/h gzip ingress; QUALITY_PILOT_CAPACITY
+   `SAFE_WITH_OFFLOAD` (throughput) with live 15–30m offload canary deferred
+   until filesystem margin above the 5 GiB floor is healthy and segment writer
+   is wired into the live collector (`docs/external_feed_offload_design_v1.md`).
+   Milestone `EXTERNAL_FEED_LIVE_OFFLOAD_CANARY_AND_HEADROOM`: live wiring +
+   async offloader landed; headroom reclaimed to ~5.87 GiB free; original canary
+   independently archived to B2 then local copy removed. Live canary STATUS
+   `EXTERNAL_LIVE_OFFLOAD_BLOCKED` because Hibachi collector was unhealthy
+   (missing `market_events` partition for current ids) — P0 preflight; external
+   remains OFF (`docs/external_feed_live_offload_canary_v1.md`). Prior enum
+   `QUALITY_PILOT_OFFLOAD_UNSTABLE` is semantic only:
+   `LIVE_OFFLOAD_NOT_EVALUATED_DUE_TO_HIBACHI_P0` (no live offload run).
+   Follow-on `HIBACHI_PARTITION_RECOVERY_AND_PROVISIONING_ROOT_CAUSE`: STATUS
+   `HIBACHI_PARTITION_RECOVERY_PASS` — provisioned `market_events_g_9071913`
+   `[9071913,9471913)`, restored COLLECT, fixed maintain so capacity STOP no
+   longer skips 50k-lead provision (`docs/hibachi_partition_recovery_v1.md`).
+   ACTIVE is now `g_14271913_14671913` `[14271913,14671913)` with successor
+   `g_14671913_15071913` PROVISIONED. COLLECT resumed
+   2026-08-19T18:04:13Z at id **13682173** after the 23:10Z capacity STOP
+   (`docs/external_live_offload_canary_v1.md`). Emergency
+   capacity recovery
+   (`HIBACHI_EMERGENCY_CAPACITY_RECOVERY`) paused COLLECT at id **11902151**
+   (2026-08-14T08:42:22Z), then on 2026-08-17 resumed after B2 Class B
+   recovered: three more verified DROPs (`g_9471913`…`g_10271913`) restored
+   READY disk. STATUS `HIBACHI_EMERGENCY_CAPACITY_RECOVERY_PASS`. COLLECT
+   resumed 2026-08-17T17:18:16Z at id **11902152**. Storage-lifecycle soak
+   then completed one authorized DROP of `g_10671913` and two natural
+   50k-lead provision/rotations. STATUS
+   `HIBACHI_STORAGE_LIFECYCLE_SOAK_PASS`
+   (`docs/hibachi_storage_lifecycle_soak_v1.md`). Headroom prep then reached
+   `EXTERNAL_CANARY_HEADROOM_READY` (`docs/external_canary_headroom_prep_v1.md`).
+   Hibachi COLLECT is running. Isolated Binance USD-M live-offload canary ran
+   ~11 min (7 B2-verified segments) then fail-closed on a Hibachi 10s
+   healthcheck timeout: STATUS `EXTERNAL_CANARY_FAILED`, DECISION
+   `CANARY_BLOCKED_HIBACHI` (`docs/external_live_offload_canary_v1.md`).
+   Follow-on `EXTERNAL_OFFLOAD_DRAIN_AND_HEALTHCHECK_FIX` landed drain
+   idempotency, atomic `state.json`, Hibachi-priority CPU shares, and an
+   O(1) ACTIVE `ORDER BY id DESC LIMIT 1` healthcheck overlay (no GHCR pull).
+   15-minute retry STATUS `EXTERNAL_CANARY_RETRY_BLOCKED` (free
+   5,537,943,552 B < 5,974,908,928); DECISION `NEEDS_RESOURCE_TUNING`
+   (`docs/external_offload_drain_and_healthcheck_fix_v1.md`). External-ref
+   OFF. **No quality pilot / multi-day collection / ML / PAPER/LIVE.** Hibachi-only
+   short-horizon directional hypothesis remains durably rejected. `g_7471913`
+   remains contaminated; clean OOS placeholder reserved for the next verified closed
+   generation. Feature naming distinguishes `signed_trade_flow_*` from Cont-style
+   `ofi_*`. Stale market_state tops no longer bridge archive gaps. The first manual
+   private COLLECT-only stack is operational; provider-neutral recoverability and
+   local monitoring contracts are prepared. Deployment updates, network changes,
+   dashboard access, and any PAPER/LIVE behavior still require separate explicit
+   approval.
+5. **In progress:** RAW storage lifecycle for the disk-constrained VPS. Bounded
+  DELETE retention is the emergency/legacy path. First production generation
+  lifecycle completed: `market_events_g_7471913` `[7471913,7871913)` archived to
+  B2, verified, and physically DROPped (`DROP_VERIFIED_GENERATION`) with
+  ~194.1 MiB filesystem reclaim. Follow-on `HIBACHI_ARCHIVE_BACKLOG_RECOVERY`
+  then `HIBACHI_EMERGENCY_CAPACITY_RECOVERY`: seven verified generation DROPs
+  (`g_7871913`…`g_10271913`) plus prior `g_7471913`. STATUS
+  `HIBACHI_EMERGENCY_CAPACITY_RECOVERY_PASS` with free **≥ READY**
+  `5,706,473,472 B` (~5.315 GiB). COLLECT resumed; the time-only pause gap is
+  in `docs/quality/hibachi_collection_gaps_v1.json`. Auto-archive tick
+  (`*/15`, `--require-normal-floor`, no `--drop`) proved oldest-first
+  `g_10671913` → `DROP_ELIGIBLE` without physical DROP. Soak
+  `HIBACHI_STORAGE_LIFECYCLE_SOAK` added `DROP_BACKLOG_LIMIT` (cap 2), aborted
+  the 18:00 third archive of `g_11471913` before DROP_ELIGIBLE=3, then on
+  explicit approval physically DROPped **only** `g_10671913`
+  (`DROP_VERIFIED_GENERATION`, evidence
+  `dccd3292a6059b6eec400dfffbac833a73c5766b07358dfd96bced3ba1766050`, observed
+  reclaim 207,486,976 B). Queue cycled `2 → 1 → archive g_11471913 → 2`. Two
+  natural 50k provisions and rotations followed:
+  `g_11871913` → `g_12271913` → `g_12671913`. New CLOSED
+  generations stayed `CLOSED_UNARCHIVED` under the cap. STATUS
+  `HIBACHI_STORAGE_LIFECYCLE_SOAK_PASS`
+  (`docs/hibachi_storage_lifecycle_soak_v1.md`). Follow-on
+  `EXTERNAL_CANARY_HEADROOM_PREP` gated-DROPped verified generations
+  `g_11071913`…`g_13071913` (no auto-DROP) to
+  **6,050,516,992 B** (≥ canary target 5,974,908,928). STATUS
+   `EXTERNAL_CANARY_HEADROOM_READY`
+   (`docs/external_canary_headroom_prep_v1.md`). COLLECT resumed 2026-08-19;
+   the 23:10Z capacity-stop time hole is closed in
+   `docs/quality/hibachi_collection_gaps_v1.json`. Live offload canary
+   STATUS `EXTERNAL_CANARY_FAILED` / DECISION `CANARY_BLOCKED_HIBACHI`
+   (`docs/external_live_offload_canary_v1.md`). Retry
+   `EXTERNAL_CANARY_RETRY_BLOCKED` on free 5,537,943,552 B with two
+   `DROP_ELIGIBLE` children still mounted (`g_13471913`, `g_13871913`).
+   External-ref OFF. Physical DROP remains human-approved only. Operator
+   floor remains 5 GiB. Healthcheck uses ACTIVE-bounded `ORDER BY id DESC
+   LIMIT 1` via overlay bind-mount (GHCR digest unchanged; do not pull a
+   second 554 MiB image unless disk preflight allows). Collector live
+   `cpu_shares=2048`.
+6. PAPER remains disabled even when admission criteria pass. Human review and a
+  separate explicitly approved implementation milestone are mandatory; keep all
+  real trading commands absent.

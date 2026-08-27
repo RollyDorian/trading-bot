@@ -1,0 +1,11 @@
+{
+  "bytes": 786974,
+  "download_bytes": 786974,
+  "download_mib_per_s": 7.293623004628372,
+  "download_seconds": 0.10290042287670076,
+  "existed_before": false,
+  "key": "external/binance_usdm/_throughput/1786481835_seg.ndjson.gz",
+  "size_match": true,
+  "upload_mib_per_s": 7.115692686591031,
+  "upload_seconds": 0.1054734829813242
+}

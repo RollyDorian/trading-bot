@@ -1,0 +1,18 @@
+{
+  "results": [
+    {
+      "elapsed_seconds": 2.5340312810149044,
+      "error": null,
+      "remote_data_key": "external/binance_usdm/ETHUSDT/binance_usdm_ETHUSDT_20260811T205417Z_000001/events.ndjson.gz",
+      "segment_id": "binance_usdm_ETHUSDT_20260811T205417Z_000001",
+      "state": "RECLAIMABLE"
+    },
+    {
+      "elapsed_seconds": 1.4925264799967408,
+      "error": null,
+      "remote_data_key": "external/binance_usdm/ETHUSDT/binance_usdm_ETHUSDT_20260811T205418Z_000002/events.ndjson.gz",
+      "segment_id": "binance_usdm_ETHUSDT_20260811T205418Z_000002",
+      "state": "RECLAIMABLE"
+    }
+  ]
+}

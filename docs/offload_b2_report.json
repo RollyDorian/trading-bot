@@ -1,0 +1,11 @@
+{
+  "results": [
+    {
+      "elapsed_seconds": 3.4805923679377884,
+      "error": null,
+      "remote_data_key": "external/binance_usdm/ETHUSDT/binance_usdm_ETHUSDT_20260811T205419Z_000003/events.ndjson.gz",
+      "segment_id": "binance_usdm_ETHUSDT_20260811T205419Z_000003",
+      "state": "RECLAIMABLE"
+    }
+  ]
+}

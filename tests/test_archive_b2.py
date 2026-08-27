@@ -115,6 +115,7 @@ class _FakeS3Client:
         key: str,
         *,
         ExtraArgs: dict[str, object] | None = None,
+        **_kwargs: object,
     ) -> None:
         if self.upload_error is not None:
             raise self.upload_error
@@ -125,7 +126,7 @@ class _FakeS3Client:
         self.objects[key] = Path(filename).read_bytes()
         self.metadata[key] = metadata
 
-    def download_file(self, bucket: str, key: str, filename: str) -> None:
+    def download_file(self, bucket: str, key: str, filename: str, **_kwargs: object) -> None:
         if self.download_error is not None:
             raise self.download_error
         self.downloads.append((bucket, key, filename))

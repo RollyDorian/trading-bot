@@ -3,10 +3,15 @@
 ## Database roles
 
 Collector, exporter, dashboard, and normal Alembic commands use `DATABASE_URL` with
-`DATABASE_ROLE=research`. The runtime rejects PostgreSQL database names containing a
-standalone `test` segment. Integration tests never read `DATABASE_URL` as their write
-target; they require both `TEST_DATABASE_URL` and `TEST_DATABASE_ROLE=test`, require an
-explicit test database name, and reject the research target.
+`DATABASE_ROLE=research`. Bounded RAW retention dry-run and `COUNT(*)` planning also use
+`DATABASE_URL`. Production retention mutation uses `RETENTION_DATABASE_URL` with the
+dedicated `retention` login role only; it never falls back to `research`. See
+`docs/retention_role.md`.
+
+The runtime rejects PostgreSQL database names containing a standalone `test` segment.
+Integration tests never read `DATABASE_URL` as their write target; they require both
+`TEST_DATABASE_URL` and `TEST_DATABASE_ROLE=test`, require an explicit test database
+name, and reject the research target.
 
 The 2024 fixture timestamp entered the earlier audit because PostgreSQL integration tests
 and research processes all read the same `DATABASE_URL`. An earlier integration fixture
