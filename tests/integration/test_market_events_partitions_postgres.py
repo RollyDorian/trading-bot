@@ -53,6 +53,7 @@ def _role_url(base_url: str, username: str, password: str) -> str:
 
 
 async def _reset_to_head(database_url: str) -> None:
+    """Rebuild the shared test DB at Alembic head (0004 + optional 0003)."""
     config = _alembic_config()
     engine = create_engine(database_url)
     try:
@@ -75,7 +76,9 @@ async def _reset_to_head(database_url: str) -> None:
     finally:
         await engine.dispose()
 
-    await asyncio.to_thread(command.upgrade, config, "20260809_0004")
+    # Head is 0004 then optional 0003 (normalized/pipeline). Stopping at 0004
+    # strands later files that share this CI database.
+    await asyncio.to_thread(command.upgrade, config, "head")
     # Continuity probe: simulate production last_value without rewriting RAW.
     engine = create_engine(database_url)
     try:
@@ -154,6 +157,7 @@ def test_alembic_upgrade_downgrade_partition_revision() -> None:
                 assert await is_market_events_partitioned(conn)
         finally:
             await engine.dispose()
+            await _reset_to_head(database_url)
 
     asyncio.run(run())
 

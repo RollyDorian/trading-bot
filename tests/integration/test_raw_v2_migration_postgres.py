@@ -20,6 +20,10 @@ from trading_bot.storage.repository import EventRepository, MarketEventInput
 
 DEFAULT_COPY_ROWS = 100_000
 MAX_COPY_ROWS = 2_500_000
+# Concurrent-write probe targets RAW v2 only. `head` now continues through
+# 0004 partitions + 0003 normalized core, which is a different lock/runtime
+# contract than the v2 envelope ALTER this test measures.
+RAW_V2_REVISION = "20260729_0002"
 
 
 def _alembic_config() -> Config:
@@ -42,6 +46,7 @@ def test_raw_v2_upgrade_downgrade_allows_concurrent_legacy_writes() -> None:
         stop = asyncio.Event()
         writes = 0
         writer_latencies_ms: list[float] = []
+        writer_task: asyncio.Task[None] | None = None
 
         async def writer() -> None:
             nonlocal writes
@@ -66,6 +71,14 @@ def test_raw_v2_upgrade_downgrade_allows_concurrent_legacy_writes() -> None:
                 await asyncio.sleep(0.01)
 
         try:
+            async with engine.begin() as connection:
+                # 0004 refuses downgrade while any RAW rows remain. Earlier
+                # integration tests share this database and leave partitions populated.
+                exists = await connection.scalar(
+                    text("SELECT to_regclass('public.market_events')")
+                )
+                if exists is not None:
+                    await connection.execute(text("DELETE FROM market_events"))
             downgrade_started = time.perf_counter()
             await asyncio.to_thread(command.downgrade, config, "20260715_0001")
             downgrade_seconds = time.perf_counter() - downgrade_started
@@ -103,7 +116,7 @@ def test_raw_v2_upgrade_downgrade_allows_concurrent_legacy_writes() -> None:
             )
             migration_started = time.perf_counter()
             migration_task = asyncio.create_task(
-                asyncio.to_thread(command.upgrade, config, "head")
+                asyncio.to_thread(command.upgrade, config, RAW_V2_REVISION)
             )
             waiting_lock_seen = False
             deadline = time.monotonic() + 1.0
@@ -180,18 +193,17 @@ def test_raw_v2_upgrade_downgrade_allows_concurrent_legacy_writes() -> None:
             )
         finally:
             stop.set()
-            await asyncio.to_thread(command.upgrade, config, "head")
+            if writer_task is not None and not writer_task.done():
+                await writer_task
+            # 0004 conversion is fail-closed on a non-empty table. The v2 probe
+            # leaves rows at 0002; wipe them before restoring head (0004+0003).
             async with engine.begin() as connection:
-                await connection.execute(
-                    text(
-                        """
-                        DELETE FROM market_events
-                        WHERE source = 'migration_probe'
-                          AND payload->>'marker' = :marker
-                        """
-                    ),
-                    {"marker": marker},
+                exists = await connection.scalar(
+                    text("SELECT to_regclass('public.market_events')")
                 )
+                if exists is not None:
+                    await connection.execute(text("DELETE FROM market_events"))
+            await asyncio.to_thread(command.upgrade, config, "head")
             await engine.dispose()
 
     asyncio.run(run_check())

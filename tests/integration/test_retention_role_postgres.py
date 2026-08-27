@@ -35,6 +35,11 @@ def _role_database_url(base_url: str, username: str, password: str) -> str:
     )
 
 
+def _sql_string_literal(value: str) -> str:
+    # CREATE ROLE ... PASSWORD does not accept bind parameters (asyncpg $1).
+    return "'" + value.replace("'", "''") + "'"
+
+
 async def _provision_ephemeral_roles(
     owner_factory,
     *,
@@ -46,12 +51,15 @@ async def _provision_ephemeral_roles(
     decoy_table = f"retention_decoy_{suffix}"
     async with owner_factory.begin() as session:
         await session.execute(
-            text(f"CREATE ROLE {research_role} LOGIN PASSWORD :password"),
-            {"password": password},
+            text(
+                f"CREATE ROLE {research_role} LOGIN PASSWORD {_sql_string_literal(password)}"
+            )
         )
         await session.execute(
-            text(f"CREATE ROLE {retention_like_role} LOGIN PASSWORD :password"),
-            {"password": password},
+            text(
+                f"CREATE ROLE {retention_like_role} "
+                f"LOGIN PASSWORD {_sql_string_literal(password)}"
+            )
         )
         await session.execute(text(f"CREATE TABLE {decoy_table} (id bigint PRIMARY KEY)"))
         await session.execute(text(f"GRANT SELECT ON market_events TO {research_role}"))
@@ -71,8 +79,10 @@ async def _ensure_retention_role(owner_factory, password: str) -> bool:
         created = exists is None
         if created:
             await session.execute(
-                text("CREATE ROLE retention LOGIN PASSWORD :password"),
-                {"password": password},
+                text(
+                    "CREATE ROLE retention LOGIN PASSWORD "
+                    f"{_sql_string_literal(password)}"
+                )
             )
         await session.execute(
             text("GRANT SELECT, UPDATE, DELETE ON market_events TO retention")

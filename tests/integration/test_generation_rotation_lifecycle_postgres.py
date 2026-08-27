@@ -69,7 +69,9 @@ async def _reset_tiny(database_url: str, *, span: int = 100) -> None:
             )
     finally:
         await engine.dispose()
-    await asyncio.to_thread(command.upgrade, config, "20260809_0004")
+    # Apply partition revision plus optional 0003 so this shared test DB
+    # still has pipeline/normalized after the module finishes.
+    await asyncio.to_thread(command.upgrade, config, "head")
     engine = create_engine(database_url)
     try:
         async with engine.begin() as conn:
