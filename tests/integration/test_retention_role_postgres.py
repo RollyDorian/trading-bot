@@ -1,5 +1,7 @@
 import asyncio
 import copy
+import json
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -13,10 +15,66 @@ from trading_bot.archive.retention import (
     DELETE_CONFIRMATION_TOKEN,
     ArchivedRawRangeTarget,
     BoundedRetentionRunner,
+    CoverageWindow,
     RetentionRuntimeGuards,
 )
 from trading_bot.archive.retention_identity import require_retention_mutation_identity
+from trading_bot.archive.store import LocalArchiveStore
+from trading_bot.archive.window import (
+    COMPLETED_MARKER_NAME,
+    _attempt_key,
+    _completed_key,
+)
 from trading_bot.storage.database import create_engine, create_session_factory
+
+
+def _identity_coverage_store(
+    tmp_path: Path,
+    *,
+    dataset_id: str,
+    event_id: int,
+) -> tuple[LocalArchiveStore, ArchivedRawRangeTarget]:
+    # execute() outside test_mode refuses to run without a passing coverage gate.
+    store = LocalArchiveStore(tmp_path / "coverage", destination_label="b2_s3")
+    attempt_id = "identity"
+    store.publish_bytes(
+        _completed_key(dataset_id),
+        (
+            json.dumps(
+                {
+                    "status": COMPLETED_MARKER_NAME,
+                    "dataset_id": dataset_id,
+                    "attempt_id": attempt_id,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode("utf-8"),
+    )
+    store.publish_bytes(
+        _attempt_key(dataset_id, attempt_id, "archive_metadata.json"),
+        (
+            json.dumps({"row_counts": {"events": 1}}, indent=2, sort_keys=True) + "\n"
+        ).encode("utf-8"),
+    )
+    target = ArchivedRawRangeTarget(
+        min_raw_event_id=event_id,
+        max_raw_event_id=event_id,
+        expected_row_count=1,
+        coverage_plan_sha256="integration-identity",
+        windows=(
+            CoverageWindow(
+                dataset_id=dataset_id,
+                expected_event_count=1,
+                min_raw_event_id=event_id,
+                max_raw_event_id=event_id,
+                start_utc=None,
+                end_utc=None,
+            ),
+        ),
+    )
+    return store, target
 
 
 def _retention_guards() -> RetentionRuntimeGuards:
@@ -204,12 +262,10 @@ def test_bounded_retention_runner_requires_retention_identity(tmp_path) -> None:
                     text("SELECT id FROM market_events WHERE symbol = :symbol LIMIT 1"),
                     {"symbol": symbol},
                 )
-            target = ArchivedRawRangeTarget(
-                min_raw_event_id=int(event_id),
-                max_raw_event_id=int(event_id),
-                expected_row_count=1,
-                coverage_plan_sha256="integration-identity",
-                windows=(),
+            coverage_store, target = _identity_coverage_store(
+                tmp_path,
+                dataset_id=f"ret-id-{suffix}",
+                event_id=int(event_id),
             )
             audit_dir = tmp_path / "audit"
             async with retention_factory() as session:
@@ -229,6 +285,7 @@ def test_bounded_retention_runner_requires_retention_identity(tmp_path) -> None:
                     confirmation=DELETE_CONFIRMATION_TOKEN,
                     batch_size=1,
                     pause_seconds=0,
+                    coverage_store=coverage_store,
                 )
 
             runner = BoundedRetentionRunner(
@@ -243,6 +300,7 @@ def test_bounded_retention_runner_requires_retention_identity(tmp_path) -> None:
                 confirmation=DELETE_CONFIRMATION_TOKEN,
                 batch_size=1,
                 pause_seconds=0,
+                coverage_store=coverage_store,
             )
             assert result["status"] == "completed"
             assert result["remaining_rows"] == 0
