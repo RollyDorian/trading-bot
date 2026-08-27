@@ -40,6 +40,14 @@ def _sql_string_literal(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
+async def _drop_login_role(session, role: str) -> None:
+    # GRANT on partitioned market_events keeps a privilege dependency on the
+    # parent; DROP ROLE fails until those privileges are removed.
+    await session.execute(text(f"REASSIGN OWNED BY {role} TO CURRENT_USER"))
+    await session.execute(text(f"DROP OWNED BY {role}"))
+    await session.execute(text(f"DROP ROLE IF EXISTS {role}"))
+
+
 async def _provision_ephemeral_roles(
     owner_factory,
     *,
@@ -94,7 +102,7 @@ async def _cleanup_retention_role(owner_factory, *, retention_created: bool) -> 
     if not retention_created:
         return
     async with owner_factory.begin() as session:
-        await session.execute(text("DROP ROLE IF EXISTS retention"))
+        await _drop_login_role(session, "retention")
 
 
 async def _cleanup_ephemeral_roles(
@@ -106,8 +114,8 @@ async def _cleanup_ephemeral_roles(
 ) -> None:
     async with owner_factory.begin() as session:
         await session.execute(text(f"DROP TABLE IF EXISTS {decoy_table}"))
-        await session.execute(text(f"DROP ROLE IF EXISTS {retention_like_role}"))
-        await session.execute(text(f"DROP ROLE IF EXISTS {research_role}"))
+        await _drop_login_role(session, retention_like_role)
+        await _drop_login_role(session, research_role)
 
 
 def test_retention_role_privilege_matrix() -> None:
