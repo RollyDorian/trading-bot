@@ -115,6 +115,8 @@ def test_normalize_and_market_state_causal(tmp_path: Path) -> None:
     times = [r["decision_time"] for r in rows]
     assert times == sorted(times)
     assert any(r["valid_book"] for r in rows)
+    assert any(r["tob_source"] == "DIRECT_QUOTE_FRESH" for r in rows)
+    assert all(r["executable_tob"] for r in rows)
     assert {"signed_trade_flow_1s", "ofi_1s", "ofi_5s", "ofi_15s"}.issubset(rows[0])
     assert "signed_volume" not in rows[0]
 
@@ -295,4 +297,27 @@ def test_raw_row_roundtrip_provenance() -> None:
     }
     rebuilt = raw_row_to_market_event(row)
     assert rebuilt.id == 99
+    assert rebuilt.event_type == "ask_bid_price"
+    assert rebuilt.schema_version == 2
+
+
+def test_raw_row_uses_archive_raw_schema_version_and_topic() -> None:
+    """B2 events.parquet uses topic + raw_schema_version, not event_type."""
+
+    event = raw("ask_bid_price", raw_id=7, schema_version=2)
+    row = {
+        "raw_event_id": 7,
+        "received_at": event.received_at,
+        "exchange_at": event.exchange_at,
+        "source": event.source,
+        "topic": "ask_bid_price",
+        "symbol": event.symbol,
+        "connection_id": event.connection_id,
+        "local_sequence": 42,
+        "exchange_sequence": None,
+        "raw_schema_version": 2,
+        "payload_json": json.dumps(event.payload),
+    }
+    rebuilt = raw_row_to_market_event(row)
+    assert rebuilt.schema_version == 2
     assert rebuilt.event_type == "ask_bid_price"

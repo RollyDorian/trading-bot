@@ -22,6 +22,11 @@ from trading_bot.research.pipeline import (
     MAX_STALE_SPOT_SECONDS,
     RESEARCH_PIPELINE_VERSION,
 )
+from trading_bot.research.pipeline.executable_tob import (
+    TOB_SOURCE_DIRECT_QUOTE_FRESH,
+    TOB_SOURCE_RECONSTRUCTED_BOOK_FRESH,
+    is_executable_tob_source,
+)
 
 
 def _dt(value: Any) -> datetime:
@@ -192,19 +197,46 @@ def build_market_state_1s(
         bid_size = ask_size = None
         quote_age = None
         quote_fresh = False
+        quote_connection: str | None = None
         if last_quote is not None:
             bid_size = _dec(last_quote.payload.get("bid_size"))
             ask_size = _dec(last_quote.payload.get("ask_size"))
             quote_age = (cursor - last_quote.available_at).total_seconds()
-            quote_fresh = quote_age <= MAX_STALE_QUOTE_SECONDS
+            raw_quote_conn = last_quote.payload.get("connection_id")
+            quote_connection = str(raw_quote_conn) if raw_quote_conn is not None else None
+            # A quote from a prior WebSocket session is not a fresh BBO.
+            quote_conn_ok = (
+                last_connection is None
+                or quote_connection is None
+                or quote_connection == last_connection
+            )
+            quote_fresh = quote_age <= MAX_STALE_QUOTE_SECONDS and quote_conn_ok
 
-        # Emit only from a fresh valid book or a fresh quote. Stale reconstructed
-        # tops must not bridge multi-hour archive gaps with invented 1s rows.
-        emit_bid = best_bid if valid_book else None
-        emit_ask = best_ask if valid_book else None
-        if not valid_book and quote_fresh and last_quote is not None:
+        # Native BBO is the executable TOB when fresh. Reconstructed book is
+        # used only when that quote is absent/stale. Stale carry is not emitted.
+        emit_bid = None
+        emit_ask = None
+        tob_source = None
+        tob_source_event_id: int | None = None
+        tob_source_available_at: datetime | None = None
+        tob_age: float | None = None
+        tob_connection = last_connection
+        if quote_fresh and last_quote is not None:
             emit_bid = _dec(last_quote.payload["bid_price"])
             emit_ask = _dec(last_quote.payload["ask_price"])
+            tob_source = TOB_SOURCE_DIRECT_QUOTE_FRESH
+            tob_source_event_id = last_quote.raw_event_id
+            tob_source_available_at = last_quote.available_at
+            tob_age = quote_age
+            tob_connection = quote_connection or last_connection
+        elif valid_book:
+            emit_bid = best_bid
+            emit_ask = best_ask
+            tob_source = TOB_SOURCE_RECONSTRUCTED_BOOK_FRESH
+            tob_source_event_id = last_book_id
+            tob_source_available_at = last_book_at
+            tob_age = book_age
+            tob_connection = last_connection
 
         current_top: tuple[Decimal, Decimal, Decimal, Decimal] | None = None
         if quote_fresh and last_quote is not None and bid_size is not None and ask_size is not None:
@@ -373,12 +405,21 @@ def build_market_state_1s(
             {
                 "decision_time": cursor,
                 "symbol": symbol,
-                "latest_raw_event_id": last_book_id
+                "latest_raw_event_id": tob_source_event_id
+                or last_book_id
                 or (last_quote.raw_event_id if last_quote else None),
-                "connection_id": last_connection
+                "connection_id": tob_connection
+                or last_connection
                 or (last_quote.payload.get("connection_id") if last_quote else None),
+                "tob_source": tob_source,
+                "tob_source_event_id": tob_source_event_id,
+                "tob_source_available_at": tob_source_available_at,
+                "tob_age_seconds": tob_age,
+                "executable_tob": is_executable_tob_source(tob_source),
                 "best_bid": float(emit_bid),
                 "best_ask": float(emit_ask),
+                "reconstructed_best_bid": float(best_bid) if best_bid is not None else None,
+                "reconstructed_best_ask": float(best_ask) if best_ask is not None else None,
                 "mid": mid,
                 "spread": spread,
                 "spread_bps": spread_bps,
@@ -438,4 +479,9 @@ def build_market_state_1s(
         "end": end.isoformat(),
         "path": str(output_path),
         "valid_book_rows": sum(1 for r in rows_out if r["valid_book"]),
+        "executable_tob_rows": sum(1 for r in rows_out if r["executable_tob"]),
+        "tob_source_counts": {
+            source: sum(1 for r in rows_out if r["tob_source"] == source)
+            for source in sorted({r["tob_source"] for r in rows_out if r.get("tob_source")})
+        },
     }

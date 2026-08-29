@@ -194,12 +194,22 @@ def _validated_payload(event: MarketEvent) -> tuple[dict[str, Any], dict[str, An
     return payload, data
 
 
+# Captured Hibachi ask_bid_price data. Schema v2 adds timestampMs; both
+# sets are exact contracts. Unknown extra fields still fail closed.
+_QUOTE_DATA_KEYS = frozenset({"bidPrice", "bidSize", "askPrice", "askSize"})
+_QUOTE_DATA_KEYS_WITH_EXCHANGE_TS = _QUOTE_DATA_KEYS | frozenset({"timestampMs"})
+
+
 def _parse_best_quote(event: MarketEvent, data: dict[str, Any]) -> BestQuoteRecord:
-    _exact_keys(
-        data,
-        frozenset({"bidPrice", "bidSize", "askPrice", "askSize"}),
-        path="payload.data",
-    )
+    keys = frozenset(data)
+    if keys == _QUOTE_DATA_KEYS_WITH_EXCHANGE_TS:
+        # Exchange print time is forensic only; available_at stays received_at.
+        _timestamp_milliseconds(data["timestampMs"], field="timestampMs")
+    elif keys != _QUOTE_DATA_KEYS:
+        raise NormalizationFailure(
+            "payload_contract",
+            "payload.data fields do not match contract",
+        )
     bid_price = _decimal(data["bidPrice"], field="bidPrice")
     ask_price = _decimal(data["askPrice"], field="askPrice")
     if bid_price >= ask_price:

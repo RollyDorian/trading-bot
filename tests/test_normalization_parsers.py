@@ -135,3 +135,23 @@ def test_orderbook_quality_never_claims_exact() -> None:
     assert isinstance(legacy, OrderBookRecord)
     assert current.provenance.data_quality == "sequence_unverified"
     assert legacy.provenance.data_quality == "best_effort_legacy"
+
+
+def test_ask_bid_price_accepts_timestamp_ms_v2_data() -> None:
+    """Captured Hibachi v2 quotes include timestampMs; dropping them was the bug."""
+
+    event = raw("ask_bid_price")
+    event.payload = copy.deepcopy(event.payload)
+    event.payload["data"]["timestampMs"] = 1_787_169_600_102
+    record = parse_market_event(event)
+    assert isinstance(record, BestQuoteRecord)
+    assert record.bid_price > 0
+
+
+def test_ask_bid_price_still_rejects_undocumented_data_fields() -> None:
+    event = raw("ask_bid_price")
+    event.payload = copy.deepcopy(event.payload)
+    event.payload["data"]["undocumented"] = "nope"
+    with pytest.raises(NormalizationFailure) as caught:
+        parse_market_event(event)
+    assert caught.value.code == "payload_contract"

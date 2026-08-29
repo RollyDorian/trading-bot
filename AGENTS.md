@@ -192,7 +192,45 @@ python -m venv .venv
    volatility/opportunity targets, external relative value) without ML: STATUS
    `STRATEGY_SPACE_RETHINK_READY`, DECISION `DESIGN_EXTERNAL_FEED_PILOT`,
    RECOMMENDED_HYPOTHESIS `EXTERNAL_RELATIVE_VALUE_LEAD_LAG`
-   (`docs/strategy_space_rethink_v1.md`).    Design review
+   (`docs/strategy_space_rethink_v1.md`). Milestone
+   `ETH_FIRST_PASSAGE_OPPORTUNITY_REASSESSMENT_V1` remeasured opportunity as
+   **intrawindow maximum excursion and threshold first passage** (the prior
+   screen used endpoint `mid[t+h]/mid[t]` only): STATUS
+   `ETH_FIRST_PASSAGE_OPPORTUNITY_REASSESSMENT_READY`, DECISION
+   `STOP_FOR_LEAD_REVIEW`, ML_STATUS `NOT_STARTED`
+   (`docs/eth_first_passage_opportunity_v1.md`). Live B2 COMPLETED listing was
+   unavailable in that session; OOS reserved the last 3 local UTC dates and
+   discovery was thin. Follow-on `ETH_FIRST_PASSAGE_FULL_CORPUS_EXPANSION_V1`
+   repeated the frozen grids on live verified B2 COMPLETED ETH RAW (216 windows,
+   17 UTC dates, 56 quarantined) without retuning H/TP: v1 OOS dates
+   2026-08-07/09/10 stay untouched; no two later UTC days meet the predeclared
+   23h full-day bar so no new holdout was applied (thin alternative 08-19/20
+   recorded, not used). Expanded discovery is 107.86 usable hours across 14
+   dates (388 312 rows). Aug 6 sits near the cross-day median, not as an
+   outlier; v1's 11.64h Aug-6-only hit rates understate the expanded mix
+   because quieter Aug 6 plus missing high-vol days (notably 07-29 and
+   08-19/20). STATUS `ETH_FIRST_PASSAGE_FULL_CORPUS_EXPANSION_READY`, DECISION
+   `STOP_FOR_LEAD_REVIEW`, ML_STATUS `NOT_STARTED`
+   (`docs/eth_first_passage_full_corpus_v1.md`). Follow-on
+   `ETH_TP_SL_FIRST_TOUCH_FEASIBILITY_V1` froze H 120/180/300 (control 60/600),
+   TP 20/25/30 and SL 5/10/15/20 on the same discovery corpus (OOS untouched).
+   Unconditional executable TP-before-SL net EV is about −11 bps after
+   fee+latency (spread already in ask→bid gross). TP-first rates sit far
+   below break-even precision. Forensic gate FAIL: up to 8.7% of primary
+   TP/SL resolves land on stale/quote-fallback books (threshold 5%).
+   STATUS `ETH_TP_SL_FIRST_TOUCH_FEASIBILITY_BLOCKED_BAD_DATA`, DECISION
+   `STOP_FOR_LEAD_REVIEW`, ML_STATUS `NOT_STARTED`
+   (`docs/eth_tp_sl_first_touch_feasibility_v1.md`). Follow-on
+   `ETH_EXECUTABLE_PATH_QUALITY_REMEDIATION_V1` traced that contamination to
+   a quote parser drop of v2 `timestampMs` (not unknown RAW types), rebuilt
+   `market_state_1s` with explicit `tob_source`, and reran frozen first-passage
+   + TP/SL grids. Stale/fallback barrier resolutions are 0 by construction.
+   Remaining forensic FAIL is native Hibachi wide/flickering BBO (far ask,
+   trades/mark on the bid), not silent forward-fill. STATUS
+   `ETH_EXECUTABLE_PATH_QUALITY_REMEDIATION_READY`, DECISION
+   `STOP_FOR_LEAD_REVIEW`, ML_STATUS `NOT_STARTED`
+   (`docs/eth_executable_path_quality_remediation_v1.md`). Do not start ML, signal
+   selection, PAPER, or treat the TP×SL surface as a strategy. Design review
    `EXTERNAL_RELATIVE_VALUE_FEED_DESIGN_REVIEW` then selected a minimal
    Binance USD-M `ETHUSDT` public `bookTicker`+`aggTrade` pilot (Bybit fallback),
    spool→Parquet→B2 storage (not `market_events`), isolated Compose service

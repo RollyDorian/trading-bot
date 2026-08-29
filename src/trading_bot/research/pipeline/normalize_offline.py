@@ -65,6 +65,92 @@ def _provenance_dict(record: Any) -> dict[str, Any]:
     }
 
 
+_TS_UTC = pa.timestamp("us", tz="UTC")
+
+
+def _provenance_schema_fields() -> list[pa.Field]:
+    """Nullable UTC timestamps so all-null ``exchange_at`` still writes Parquet."""
+
+    return [
+        pa.field("raw_event_id", pa.int64()),
+        pa.field("received_at", _TS_UTC),
+        pa.field("available_at", _TS_UTC),
+        pa.field("exchange_at", _TS_UTC),
+        pa.field("symbol", pa.string()),
+        pa.field("source", pa.string()),
+        pa.field("connection_id", pa.string()),
+        pa.field("local_sequence", pa.int64()),
+        pa.field("exchange_sequence", pa.int64()),
+        pa.field("raw_schema_version", pa.int64()),
+        pa.field("pipeline_version", pa.int64()),
+        pa.field("research_pipeline_version", pa.int64()),
+        pa.field("data_quality", pa.string()),
+        pa.field("topic", pa.string()),
+    ]
+
+
+_TOPIC_SCHEMAS: dict[str, pa.Schema] = {
+    "ask_bid_price": pa.schema(
+        _provenance_schema_fields()
+        + [
+            pa.field("bid_price", pa.string()),
+            pa.field("bid_size", pa.string()),
+            pa.field("ask_price", pa.string()),
+            pa.field("ask_size", pa.string()),
+        ]
+    ),
+    "mark_price": pa.schema(
+        _provenance_schema_fields()
+        + [
+            pa.field("price_kind", pa.string()),
+            pa.field("price", pa.string()),
+        ]
+    ),
+    "spot_price": pa.schema(
+        _provenance_schema_fields()
+        + [
+            pa.field("price_kind", pa.string()),
+            pa.field("price", pa.string()),
+        ]
+    ),
+    "funding_rate_estimation": pa.schema(
+        _provenance_schema_fields()
+        + [
+            pa.field("estimated_rate", pa.string()),
+            pa.field("next_funding_at", _TS_UTC),
+        ]
+    ),
+    "orderbook": pa.schema(
+        _provenance_schema_fields()
+        + [
+            pa.field("message_type", pa.string()),
+            pa.field("depth", pa.int64()),
+            pa.field("granularity", pa.string()),
+            pa.field("bids_json", pa.string()),
+            pa.field("asks_json", pa.string()),
+        ]
+    ),
+    "trades": pa.schema(
+        _provenance_schema_fields()
+        + [
+            pa.field("price", pa.string()),
+            pa.field("quantity", pa.string()),
+            pa.field("taker_side", pa.string()),
+            pa.field("exchange_trade_at", _TS_UTC),
+        ]
+    ),
+}
+
+_ERROR_SCHEMA = pa.schema(
+    [
+        pa.field("raw_event_id", pa.int64()),
+        pa.field("topic", pa.string()),
+        pa.field("error", pa.string()),
+        pa.field("received_at", pa.string()),
+    ]
+)
+
+
 def _record_to_row(topic: str, record: Any) -> dict[str, Any]:
     base = _provenance_dict(record)
     base["topic"] = topic
@@ -144,12 +230,13 @@ def normalize_events_parquet(
             return
         if not force and len(items) < flush_every:
             return
-        table = pa.Table.from_pylist(items)
+        schema = _TOPIC_SCHEMAS[topic]
+        table = pa.Table.from_pylist(items, schema=schema)
         writer = writers.get(topic)
         if writer is None:
             writers[topic] = pq.ParquetWriter(
                 output_dir / f"{topic}.parquet",
-                table.schema,
+                schema,
                 compression="zstd",
             )
             writer = writers[topic]
@@ -164,42 +251,58 @@ def normalize_events_parquet(
     )
     input_rows = table.num_rows
 
-    for batch in table.to_batches(max_chunksize=batch_size):
-        for row in batch.to_pylist():
-            topic = str(row.get("topic") or row.get("event_type") or "")
-            try:
-                event = raw_row_to_market_event(row)
-                if topic == "trades":
-                    record: Any = parse_trade_event(event)
-                else:
-                    record = parse_market_event(event)
-                if topic not in buffers:
-                    raise NormalizationFailure("unsupported_event_type", topic)
-                buffers[topic].append(_record_to_row(topic, record))
-                by_topic[topic] = by_topic.get(topic, 0) + 1
-                quality = record.provenance.data_quality
-                quality_counts[quality] = quality_counts.get(quality, 0) + 1
-                _flush(topic)
-            except (NormalizationFailure, ValueError, KeyError, TypeError) as exc:
-                errors.append(
-                    {
-                        "raw_event_id": row.get("raw_event_id", row.get("id")),
-                        "topic": topic,
-                        "error": str(exc)[:200],
-                        "received_at": row.get("received_at"),
-                    }
-                )
-
-    for topic in topic_names:
-        _flush(topic, force=True)
-    for writer in writers.values():
-        writer.close()
+    try:
+        for batch in table.to_batches(max_chunksize=batch_size):
+            for row in batch.to_pylist():
+                topic = str(row.get("topic") or row.get("event_type") or "")
+                try:
+                    event = raw_row_to_market_event(row)
+                    if topic == "trades":
+                        record: Any = parse_trade_event(event)
+                    else:
+                        record = parse_market_event(event)
+                    if topic not in buffers:
+                        raise NormalizationFailure("unsupported_event_type", topic)
+                    buffers[topic].append(_record_to_row(topic, record))
+                    by_topic[topic] = by_topic.get(topic, 0) + 1
+                    quality = record.provenance.data_quality
+                    quality_counts[quality] = quality_counts.get(quality, 0) + 1
+                    _flush(topic)
+                except (NormalizationFailure, ValueError, KeyError, TypeError) as exc:
+                    errors.append(
+                        {
+                            "raw_event_id": row.get("raw_event_id", row.get("id")),
+                            "topic": topic,
+                            "error": str(exc)[:200],
+                            "received_at": str(row.get("received_at") or ""),
+                        }
+                    )
+        for topic in topic_names:
+            _flush(topic, force=True)
+    finally:
+        for writer in writers.values():
+            writer.close()
     if errors:
-        pq.write_table(
-            pa.Table.from_pylist(errors),
-            output_dir / "normalization_errors.parquet",
-            compression="zstd",
-        )
+        try:
+            pq.write_table(
+                pa.Table.from_pylist(errors, schema=_ERROR_SCHEMA),
+                output_dir / "normalization_errors.parquet",
+                compression="zstd",
+            )
+        except (TypeError, ValueError, pa.ArrowInvalid) as exc:
+            # Topic files already closed; do not abort a successful normalize
+            # because the error sidecar could not be written.
+            print(
+                json.dumps(
+                    {
+                        "phase": "normalization_errors_write_failed",
+                        "error_type": type(exc).__name__,
+                        "n_errors": len(errors),
+                    },
+                    sort_keys=True,
+                ),
+                flush=True,
+            )
 
     return NormalizeStats(
         input_rows=input_rows,

@@ -2,6 +2,10 @@
 
 Overlapping 1s rows are reported for reference but are dependent; prefer
 non-overlapping stride statistics for decision framing.
+
+This module measures endpoint ``|mid[t+h] / mid[t] - 1|`` only. It does not
+scan the path inside the window. Intrawindow maximum excursion and threshold
+first passage live in ``first_passage_opportunity.py``.
 """
 
 from __future__ import annotations

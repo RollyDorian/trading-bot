@@ -31,6 +31,9 @@ events.parquet (verified RAW bundle)
 
 Hard invariant: `available_at = received_at`. Features use only
 `available_at <= decision_time`. Labels may look ahead; they never enter features.
+Labels and `opportunity_base_rate.py` use **endpoint** `mid[t+h]/mid[t]`.
+Intrawindow maximum excursion and first passage live in
+`first_passage_opportunity.py` (`docs/eth_first_passage_opportunity_v1.md`).
 
 ## Cost model (v1)
 
