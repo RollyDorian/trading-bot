@@ -60,6 +60,18 @@ def parse_trade_event(event: MarketEvent) -> TradeRecord:
     )
 
 
+def _schema_version_from_raw_row(row: dict[str, Any]) -> int:
+    """Prefer archive ``raw_schema_version`` over fixture ``schema_version``."""
+
+    raw_sv = row.get("raw_schema_version")
+    if raw_sv is not None:
+        return int(raw_sv)
+    legacy_sv = row.get("schema_version")
+    if legacy_sv is not None:
+        return int(legacy_sv)
+    return 1
+
+
 def raw_row_to_market_event(row: dict[str, Any]) -> MarketEvent:
     """Build a MarketEvent from research ``events.parquet`` row dict."""
 
@@ -101,7 +113,9 @@ def raw_row_to_market_event(row: dict[str, Any]) -> MarketEvent:
         connection_id=row.get("connection_id"),
         local_sequence=row.get("local_sequence"),
         exchange_sequence=row.get("exchange_sequence"),
-        schema_version=int(row.get("schema_version") or 1),
+        # B2/archive events.parquet uses raw_schema_version; older fixtures
+        # use schema_version. Default 1 only when both columns are absent.
+        schema_version=_schema_version_from_raw_row(row),
     )
     event.id = int(raw_id)
     return event
