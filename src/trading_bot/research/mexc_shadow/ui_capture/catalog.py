@@ -55,7 +55,11 @@ SELECTOR_CATALOG: dict[str, Any] = {
             "kind": "price",
             "required_for_valid": False,
             "data_attr_value": "last",
+            # Do not treat the order-book "Last Price" dropdown as last.
+            # Live header last uses a unique lastPrice class token.
             "labels": ["Last Price"],
+            "class_contains": ["lastPrice"],
+            "class_exclude": ["lastPriceWrapper", "scrollTo-last"],
         },
         "mark": {
             "kind": "price",
@@ -91,6 +95,18 @@ SELECTOR_CATALOG: dict[str, Any] = {
         "price_attr": "data-price",
         "size_attr": "data-size",
         "max_levels": 20,
+    },
+    # Live MEXC has no data-mexc-capture attrs. Unique "Order Book" panel only;
+    # split sides by Last Price, never Fair/Index, never ticket numbers.
+    "live_orderbook": {
+        "heading_labels": ["Order Book"],
+        "split_field": "last",
+        "price_band_frac": 0.10,
+        "min_side_levels": 1,
+        "asks_class_contains": "asksWrapper",
+        "bids_class_contains": "bidsWrapper",
+        "ask_price_class_contains": "sell",
+        "bid_price_class_contains": "buy",
     },
 }
 

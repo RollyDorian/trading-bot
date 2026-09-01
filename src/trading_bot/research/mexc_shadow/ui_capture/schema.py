@@ -21,6 +21,8 @@ class FieldRecord:
     match_count: int
     age_ms: int | None = None
     unit: str | None = None
+    # Monotonic (or fixture clock) time of the last value change for this field.
+    changed_at_monotonic_ms: float | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -32,6 +34,7 @@ class FieldRecord:
             "match_count": self.match_count,
             "age_ms": self.age_ms,
             "unit": self.unit,
+            "changed_at_monotonic_ms": self.changed_at_monotonic_ms,
         }
 
 
@@ -108,3 +111,14 @@ class CaptureQualityReport:
     coexistence_bid_ask_mark_index: int = 0
     replay_determinism_sha256: str | None = None
     notes: tuple[str, ...] = ()
+    capture_id: str | None = None
+    duration_ms: float | None = None
+    trigger_counts: dict[str, int] = field(default_factory=dict)
+    field_change_counts: dict[str, int] = field(default_factory=dict)
+    field_change_rate: dict[str, float] = field(default_factory=dict)
+    field_age_ms: dict[str, dict[str, float | int | None]] = field(default_factory=dict)
+    n_bid_ge_ask: int = 0
+    n_simultaneous_bid_ask_mark_index: int = 0
+    sequence_diagnostics: list[dict[str, Any]] = field(default_factory=list)
+    session: dict[str, Any] | None = None
+    timing_adequacy: str = "UNKNOWN"

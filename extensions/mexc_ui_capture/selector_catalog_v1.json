@@ -39,7 +39,9 @@
       "kind": "price",
       "required_for_valid": false,
       "data_attr_value": "last",
-      "labels": ["Last Price"]
+      "labels": ["Last Price"],
+      "class_contains": ["lastPrice"],
+      "class_exclude": ["lastPriceWrapper", "scrollTo-last"]
     },
     "mark": {
       "kind": "price",
@@ -74,5 +76,15 @@
     "price_attr": "data-price",
     "size_attr": "data-size",
     "max_levels": 20
+  },
+  "live_orderbook": {
+    "heading_labels": ["Order Book"],
+    "split_field": "last",
+    "price_band_frac": 0.10,
+    "min_side_levels": 1,
+    "asks_class_contains": "asksWrapper",
+    "bids_class_contains": "bidsWrapper",
+    "ask_price_class_contains": "sell",
+    "bid_price_class_contains": "buy"
   }
 }
