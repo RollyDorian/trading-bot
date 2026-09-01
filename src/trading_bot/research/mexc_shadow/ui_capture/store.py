@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from trading_bot.research.mexc_shadow.safety import assert_no_credential_keys
+from trading_bot.research.mexc_shadow.ui_capture.durable import is_session_record
 from trading_bot.research.mexc_shadow.ui_capture.schema import UiRawSnapshot
 
 
@@ -26,6 +27,21 @@ def append_snapshot(path: Path, snapshot: UiRawSnapshot | Mapping[str, Any]) -> 
 
 
 def iter_raw_mappings(path: Path) -> Iterator[dict[str, Any]]:
+    for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        payload = json.loads(line)
+        if not isinstance(payload, dict):
+            raise ValueError(f"{path}:{line_no} capture line must be an object")
+        assert_no_credential_keys(payload)
+        if is_session_record(payload):
+            continue
+        yield payload
+
+
+def iter_all_mappings(path: Path) -> Iterator[dict[str, Any]]:
+    """Yield session metadata and snapshots in file order."""
+
     for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         if not line.strip():
             continue

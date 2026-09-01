@@ -1,0 +1,85 @@
+{
+  "STATUS": "MEXC_UI_CAPTURE_HYDRATION_GATE_READY",
+  "DECISION": "STOP_FOR_LEAD_REVIEW",
+  "ML_STATUS": "NOT_STARTED",
+  "PAPER": false,
+  "LIVE": false,
+  "STRATEGY_TUNING": false,
+  "profiles_frozen": ["author_observed_v0", "conservative_v0"],
+  "prior_milestone": "MEXC_UI_MARKET_OBSERVATION_CAPTURE_V1",
+  "age_semantics": "now_monotonic - last_change_monotonic",
+  "age_no_interval_sum": true,
+  "durable_store": {
+    "extension": "IndexedDB mexc_ui_capture_v1 chunks",
+    "python": "DurableCaptureStore",
+    "silent_20k_truncation": false,
+    "b2": false,
+    "fail_closed_on_storage_error": true
+  },
+  "live_page_hydration": "AVAILABLE",
+  "symbol": "TAOUSDT",
+  "page": "https://www.mexc.com/futures/TAO_USDT",
+  "sample": {
+    "session_id": "hydration-gate-v1-tao-2026-09-01",
+    "path": "data/mexc_ui_capture/hydration_gate/tao_hydrated_150s.ndjson",
+    "source": "in_page_readonly_cdp_same_wrapper_label_contract",
+    "extension_indexeddb_used_this_sample": false,
+    "n_raw": 249,
+    "n_valid_for_replay": 249,
+    "n_invalid": 0,
+    "duration_ms": 150580,
+    "trigger_counts": {
+      "manual": 1,
+      "interval": 149,
+      "mutation": 99
+    },
+    "mutation_observer_fires": 115,
+    "interarrival_ms": {
+      "p50_ms": 957.0,
+      "p95_ms": 1006.0,
+      "p99_ms": 1022.0,
+      "min_ms": 30.0,
+      "max_ms": 1980.0
+    },
+    "n_bid_ge_ask": 0,
+    "n_simultaneous_bid_ask_mark_index": 249,
+    "sequence_diagnostics": [],
+    "timing_adequacy": "MARGINAL_FOR_FEW_BPS",
+    "funding_in_sample": "missing_sibling_only_cdp_loop",
+    "funding_extension_uncle_probe": 0.005,
+    "replay_determinism_sha256": "7d26316a3c78384badead3e4095eb9fce37a237dd957a86b40699eda0b030eb6",
+    "replay_smoke": {
+      "profile_id": "author_observed_v0",
+      "observations": 249,
+      "n_candidates": 0,
+      "n_trades": 0,
+      "pipeline_smoke_only": true
+    }
+  },
+  "screenshot_comparison": [
+    {
+      "file": "data/mexc_ui_capture/hydration_gate/screenshots/mexc_tao_hydration_compare_1.png",
+      "nearby_raw": "2026-09-01T17:34:08.226Z",
+      "ui": {"symbol": "TAOUSDT", "bid": 224.42, "ask": 224.43, "mark": 224.52, "index": 224.65, "last_visible_approx": 224.43},
+      "raw": {"symbol": "TAOUSDT", "bid": 224.42, "ask": 224.43, "mark": 224.52, "index": 224.65, "last": 224.73},
+      "notes": "BBO/mark/index match. Last moved between screenshot and first raw (~2 min). Bid/ask sides correct. Mark/index not swapped."
+    },
+    {
+      "file": "data/mexc_ui_capture/hydration_gate/screenshots/mexc_tao_hydration_compare_end.png",
+      "nearby_raw": "2026-09-01T17:36:38.806Z",
+      "ui": {"symbol": "TAOUSDT", "bid": 224.42, "ask": 224.43, "mark": 224.52, "index": 224.65},
+      "raw": {"symbol": "TAOUSDT", "bid": 224.42, "ask": 224.43, "mark": 224.52, "index": 224.65, "last": 224.73},
+      "notes": "BBO/mark/index still match after 150s. Ticket prices unused."
+    }
+  ],
+  "required_match": {
+    "correct_symbol": true,
+    "bid_ask_sides": true,
+    "values_agree_within_update_timing": true,
+    "mark_index_not_swapped": true,
+    "ticket_not_used_as_market": true,
+    "selector_ambiguity_invalid": true
+  },
+  "profitability_reported": false,
+  "next_operator_step": "optional long desktop session with unpacked extension IndexedDB export"
+}

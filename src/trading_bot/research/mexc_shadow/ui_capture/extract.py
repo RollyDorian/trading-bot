@@ -5,10 +5,10 @@ Live pages are observed by the extension. Python never drives a browser.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from html.parser import HTMLParser
 from typing import Any
 
+from trading_bot.research.mexc_shadow.ui_capture.age import apply_field_ages, clock_ms
 from trading_bot.research.mexc_shadow.ui_capture.catalog import (
     CATALOG_VERSION,
     DATA_CAPTURE_ATTR,
@@ -131,7 +131,7 @@ def _label_matches(root: _Node, labels: list[str]) -> list[_Node]:
     for node in _walk(root):
         if _ignored(node):
             continue
-        text = collapse_ws(_combined_text(node))
+        text = _own_text(node)
         if not text:
             continue
         for label in ordered:
@@ -141,21 +141,47 @@ def _label_matches(root: _Node, labels: list[str]) -> list[_Node]:
     return hits
 
 
-def _following_numeric_text(label_node: _Node) -> str | None:
+def _class_hits(root: _Node, token: str, exclude: list[str] | None = None) -> list[_Node]:
+    banned = list(exclude or [])
+    hits = []
+    for node in _walk(root):
+        if _ignored(node):
+            continue
+        classes = node.attrs.get("class", "")
+        if token not in classes:
+            continue
+        if any(item in classes for item in banned):
+            continue
+        hits.append(node)
+    return hits
+
+
+def _following_numeric_text(label_node: _Node, *, allow_uncle: bool = False) -> str | None:
     parent = label_node.parent
     if parent is None:
         return None
     start = parent.children.index(label_node)
     for sibling in parent.children[start + 1 :]:
         text = _combined_text(sibling)
-        if text:
+        if parse_number(text)[0] is not None:
             return text
-    # Fallback: numeric text inside the same parent after the label.
     parent_text = _combined_text(parent)
     label = collapse_ws(_combined_text(label_node))
     if parent_text.lower().startswith(label.lower()):
         remainder = parent_text[len(label) :].strip()
-        return remainder or None
+        if parse_number(remainder)[0] is not None:
+            return remainder
+    # Uncle walk is for Funding Rate only. Last Price is a dropdown on live MEXC;
+    # using an uncle number would steal nearby prices.
+    if not allow_uncle:
+        return None
+    grand = parent.parent
+    if grand is not None:
+        gstart = grand.children.index(parent)
+        for uncle in grand.children[gstart + 1 :]:
+            text = _combined_text(uncle)
+            if parse_number(text)[0] is not None:
+                return text
     return None
 
 
@@ -223,29 +249,46 @@ def _extract_field(root: _Node, name: str, spec: dict[str, Any]) -> FieldRecord:
         raws = [_combined_text(node) or node.attrs.get("data-value", "") for node in attr_nodes]
         return _decode_field(name, spec, attr_nodes, f"data_attr:{name}", raws)
     label_nodes = _label_matches(root, list(spec.get("labels") or []))
-    if not label_nodes:
+    if label_nodes:
+        raws = []
+        for node in label_nodes:
+            raw = _following_numeric_text(node, allow_uncle=name == "funding")
+            raws.append(raw or "")
+        if not all(is_missing_text(raw) for raw in raws):
+            return _decode_field(name, spec, label_nodes, f"label:{name}", raws)
+    tokens = list(spec.get("class_contains") or [])
+    exclude = list(spec.get("class_exclude") or [])
+    class_nodes: list[_Node] = []
+    for token in tokens:
+        class_nodes.extend(_class_hits(root, token, exclude))
+    unique_nodes: list[_Node] = []
+    seen: set[int] = set()
+    for node in class_nodes:
+        ident = id(node)
+        if ident in seen:
+            continue
+        seen.add(ident)
+        unique_nodes.append(node)
+    if unique_nodes:
+        raws = [_own_text(node) or _combined_text(node) for node in unique_nodes]
+        return _decode_field(name, spec, unique_nodes, f"class:{tokens[0]}", raws)
+    if label_nodes:
         return FieldRecord(
             name=name,
-            raw_text=None,
-            value=None,
-            selector_id=None,
-            parse_status="missing",
-            match_count=0,
-        )
-    raws = []
-    for node in label_nodes:
-        raw = _following_numeric_text(node)
-        raws.append(raw or "")
-    if all(is_missing_text(raw) for raw in raws):
-        return FieldRecord(
-            name=name,
-            raw_text=raws[0] if raws else None,
+            raw_text=raws[0] if label_nodes else None,
             value=None,
             selector_id=f"label:{name}",
             parse_status="missing",
             match_count=len(label_nodes),
         )
-    return _decode_field(name, spec, label_nodes, f"label:{name}", raws)
+    return FieldRecord(
+        name=name,
+        raw_text=None,
+        value=None,
+        selector_id=None,
+        parse_status="missing",
+        match_count=0,
+    )
 
 
 def _parse_levels(
@@ -291,15 +334,156 @@ def _orderbook(root: _Node) -> tuple[
     return bids, asks, "data_attr:orderbook", []
 
 
-def _elapsed_ms(previous_iso: str, current_iso: str) -> int:
-    previous = datetime.fromisoformat(previous_iso.replace("Z", "+00:00"))
-    current = datetime.fromisoformat(current_iso.replace("Z", "+00:00"))
-    if previous.tzinfo is None:
-        previous = previous.replace(tzinfo=UTC)
-    if current.tzinfo is None:
-        current = current.replace(tzinfo=UTC)
-    delta = (current - previous).total_seconds() * 1000.0
-    return max(0, int(delta))
+def _node_contains(ancestor: _Node, node: _Node) -> bool:
+    current: _Node | None = node
+    while current is not None:
+        if current is ancestor:
+            return True
+        current = current.parent
+    return False
+
+
+def _coalesce_book_roots(
+    roots: list[_Node], problem_code: str = "ambiguous_orderbook_heading"
+) -> tuple[_Node | None, list[str]]:
+    """One unique panel, or invalid. Nested headings of the same panel are ok."""
+
+    unique: list[_Node] = []
+    for node in roots:
+        absorbed = False
+        for index, existing in enumerate(unique):
+            if existing is node or _node_contains(existing, node):
+                absorbed = True
+                break
+            if _node_contains(node, existing):
+                unique[index] = node
+                absorbed = True
+                break
+        if not absorbed:
+            unique.append(node)
+    if not unique:
+        return None, []
+    if len(unique) > 1:
+        return None, [problem_code]
+    return unique[0], []
+
+
+def _wrapper_side_prices(
+    root: _Node, wrap_token: str, price_token: str, problem_code: str
+) -> tuple[list[float], list[str]]:
+    hits = _class_hits(root, wrap_token)
+    if not hits:
+        return [], []
+    book, problems = _coalesce_book_roots(hits, problem_code)
+    if problems or book is None:
+        return [], problems
+    prices: list[float] = []
+    for node in _walk(book):
+        if _ignored(node):
+            continue
+        if price_token not in node.attrs.get("class", ""):
+            continue
+        price = parse_price(_own_text(node) or _combined_text(node))
+        if price is not None:
+            prices.append(price)
+    return prices, []
+
+
+def _wrapper_bbo(root: _Node) -> tuple[float | None, float | None, list[str]]:
+    """BBO from unique asksWrapper/bidsWrapper. Ambiguous wrappers are invalid."""
+
+    spec = SELECTOR_CATALOG["live_orderbook"]
+    ask_wrap = spec.get("asks_class_contains")
+    bid_wrap = spec.get("bids_class_contains")
+    if not ask_wrap or not bid_wrap:
+        return None, None, []
+    asks, ask_problems = _wrapper_side_prices(
+        root, str(ask_wrap), str(spec["ask_price_class_contains"]), "ambiguous_asks_wrapper"
+    )
+    bids, bid_problems = _wrapper_side_prices(
+        root, str(bid_wrap), str(spec["bid_price_class_contains"]), "ambiguous_bids_wrapper"
+    )
+    problems = ask_problems + bid_problems
+    if problems:
+        return None, None, problems
+    if not asks or not bids:
+        return None, None, []
+    best_ask = min(asks)
+    best_bid = max(bids)
+    if best_bid >= best_ask:
+        return None, None, []
+    return best_bid, best_ask, []
+
+
+def _own_text(node: _Node) -> str:
+    return collapse_ws(node.text)
+
+
+def _collect_own_prices(root: _Node) -> list[float]:
+    prices: list[float] = []
+    for node in _walk(root):
+        if _ignored(node):
+            continue
+        price = parse_price(_own_text(node))
+        if price is not None:
+            prices.append(price)
+    return prices
+
+
+def _live_orderbook(
+    root: _Node, last_value: float | None
+) -> tuple[float | None, float | None, list[str]]:
+    """BBO from a unique Order Book panel, split by Last Price only — never mark/index."""
+
+    spec = SELECTOR_CATALOG["live_orderbook"]
+    headings = _label_matches(root, list(spec.get("heading_labels") or []))
+    if not headings:
+        return None, None, []
+    header_labels = [
+        "Fair Price",
+        "Mark Price",
+        "Index Price",
+        "Funding Rate / Countdown",
+        "Funding Rate",
+    ]
+    band = float(spec["price_band_frac"])
+    min_side = int(spec["min_side_levels"])
+    # Coalesce heading parents first. Distinct panels are invalid, never an arbitrary pick.
+    book, problems = _coalesce_book_roots([(heading.parent or heading) for heading in headings])
+    if problems or book is None:
+        return None, None, problems
+    if last_value is None or last_value <= 0:
+        return None, None, []
+    node: _Node | None = book
+    chosen: _Node | None = None
+    while node is not None and node.tag not in {"body", "html", "document"}:
+        if node is not book and _label_matches(node, header_labels):
+            break
+        near = [
+            price
+            for price in _collect_own_prices(node)
+            if abs(price - last_value) / last_value <= band
+        ]
+        asks = [price for price in near if price > last_value]
+        bids = [price for price in near if price < last_value]
+        if len(asks) >= min_side and len(bids) >= min_side:
+            chosen = node
+            break
+        node = node.parent
+    if chosen is None:
+        return None, None, []
+    near = [
+        price
+        for price in _collect_own_prices(chosen)
+        if abs(price - last_value) / last_value <= band
+    ]
+    asks = [price for price in near if price > last_value]
+    bids = [price for price in near if price < last_value]
+    best_ask = min(asks)
+    best_bid = max(bids)
+    if best_bid >= best_ask:
+        return None, None, []
+    return best_bid, best_ask, []
 
 
 def extract_html(
@@ -392,6 +576,56 @@ def extract_html(
                 match_count=1,
             )
 
+    last_rec = fields["last"]
+    last_raw = last_rec.value
+    last_value = (
+        float(last_raw)
+        if isinstance(last_raw, int | float) and not isinstance(last_raw, bool)
+        else None
+    )
+    if fields["bid"].parse_status == "missing" or fields["ask"].parse_status == "missing":
+        wrap_bid, wrap_ask, wrap_problems = _wrapper_bbo(root)
+        extra_reasons.extend(wrap_problems)
+        if wrap_bid is not None and fields["bid"].parse_status == "missing":
+            fields["bid"] = FieldRecord(
+                name="bid",
+                raw_text=str(wrap_bid),
+                value=wrap_bid,
+                selector_id="live_asks_bids_wrapper",
+                parse_status="ok",
+                match_count=1,
+            )
+        if wrap_ask is not None and fields["ask"].parse_status == "missing":
+            fields["ask"] = FieldRecord(
+                name="ask",
+                raw_text=str(wrap_ask),
+                value=wrap_ask,
+                selector_id="live_asks_bids_wrapper",
+                parse_status="ok",
+                match_count=1,
+            )
+    if fields["bid"].parse_status == "missing" or fields["ask"].parse_status == "missing":
+        live_bid, live_ask, live_problems = _live_orderbook(root, last_value)
+        extra_reasons.extend(live_problems)
+        if live_bid is not None and fields["bid"].parse_status == "missing":
+            fields["bid"] = FieldRecord(
+                name="bid",
+                raw_text=str(live_bid),
+                value=live_bid,
+                selector_id="live_orderbook_split_by_last",
+                parse_status="ok",
+                match_count=1,
+            )
+        if live_ask is not None and fields["ask"].parse_status == "missing":
+            fields["ask"] = FieldRecord(
+                name="ask",
+                raw_text=str(live_ask),
+                value=live_ask,
+                selector_id="live_orderbook_split_by_last",
+                parse_status="ok",
+                match_count=1,
+            )
+
     invalid_reasons = list(extra_reasons)
     for name, spec in SELECTOR_CATALOG["fields"].items():
         rec = fields[name]
@@ -404,33 +638,15 @@ def extract_html(
     if isinstance(bid_value, float) and isinstance(ask_value, float) and bid_value >= ask_value:
         invalid_reasons.append("crossed_book")
 
-    changed: list[str] = []
-    aged: dict[str, FieldRecord] = {}
-    dt_ms = 0
-    if previous is not None:
-        dt_ms = _elapsed_ms(previous.received_at_local, received_at_local)
-    for name, rec in fields.items():
-        age: int | None = None
-        if rec.parse_status != "missing":
-            age = 0
-            if previous is not None and name in previous.fields:
-                prev = previous.fields[name]
-                if prev.value == rec.value and prev.parse_status == rec.parse_status:
-                    age = (prev.age_ms or 0) + dt_ms
-                else:
-                    changed.append(name)
-            else:
-                changed.append(name)
-        aged[name] = FieldRecord(
-            name=rec.name,
-            raw_text=rec.raw_text,
-            value=rec.value,
-            selector_id=rec.selector_id,
-            parse_status=rec.parse_status,
-            match_count=rec.match_count,
-            age_ms=age if rec.parse_status != "missing" else None,
-            unit=rec.unit,
-        )
+    aged, changed = apply_field_ages(
+        fields,
+        now_ms=clock_ms(monotonic_ms, received_at_local),
+        page_host=page_host,
+        page_path=page_path,
+        capture_id=capture_id,
+        previous=previous,
+        now_has_monotonic=monotonic_ms is not None,
+    )
 
     exchange_at = None
     exchange_field = aged.get("exchange_display_at")

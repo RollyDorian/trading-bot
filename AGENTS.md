@@ -242,10 +242,13 @@ python -m venv .venv
    accepted by lead; do not tune mom/gap definitions or placeholders.
    Follow-on `MEXC_UI_MARKET_OBSERVATION_CAPTURE_V1` adds a read-only MV3
    UI capture extension plus `ui_capture` normalize/replay (no orders, no
-   B2). Live TAO page labels confirmed; numeric hydration was unavailable
-   in-session. STATUS `MEXC_UI_MARKET_OBSERVATION_CAPTURE_READY`, DECISION
-   `STOP_FOR_LEAD_REVIEW` (`docs/mexc_ui_market_observation_capture_v1.md`).
-   No ML / PAPER / LIVE. Design review
+   B2). Follow-on `MEXC_UI_CAPTURE_HYDRATION_GATE_V1` fixes monotonic
+   field age, IndexedDB chunk durability (no 20k truncation), and proved
+   a ~2.5 min hydrated TAO_USDT sample (bid/ask/mark/index match UI;
+   `timing_adequacy` `MARGINAL_FOR_FEW_BPS`). STATUS
+   `MEXC_UI_CAPTURE_HYDRATION_GATE_READY`, DECISION `STOP_FOR_LEAD_REVIEW`
+   (`docs/mexc_ui_capture_hydration_gate_v1.md`). Frozen profiles
+   unchanged. No ML / PAPER / LIVE. Design review
    `EXTERNAL_RELATIVE_VALUE_FEED_DESIGN_REVIEW` then selected a minimal
    Binance USD-M `ETHUSDT` public `bookTicker`+`aggTrade` pilot (Bybit fallback),
    spool→Parquet→B2 storage (not `market_events`), isolated Compose service

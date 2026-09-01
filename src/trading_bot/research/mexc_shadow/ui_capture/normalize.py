@@ -55,7 +55,10 @@ def _field_from_mapping(name: str, raw: Mapping[str, Any]) -> FieldRecord:
         parse_status=status,
         match_count=int(raw.get("match_count") or 0),
         age_ms=None if raw.get("age_ms") is None else int(raw["age_ms"]),
-        unit=None if raw.get("unit") is None else str(raw.get("unit")),
+        unit=None if raw.get("unit") is None else str(raw["unit"]),
+        changed_at_monotonic_ms=None
+        if raw.get("changed_at_monotonic_ms") is None
+        else float(raw["changed_at_monotonic_ms"]),
     )
 
 
