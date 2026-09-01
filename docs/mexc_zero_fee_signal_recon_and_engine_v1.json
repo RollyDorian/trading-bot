@@ -1,0 +1,66 @@
+{
+  "STATUS": "MEXC_ZERO_FEE_SIGNAL_RECON_AND_ENGINE_READY",
+  "DECISION": "STOP_FOR_LEAD_REVIEW",
+  "ML_STATUS": "NOT_STARTED",
+  "PAPER": false,
+  "LIVE": false,
+  "ETH_SELECTOR_SIGNAL_SCREEN_V1": "paused",
+  "package": "trading_bot.research.mexc_shadow",
+  "safety": {
+    "orders": false,
+    "private_trading_endpoints": false,
+    "trading_credentials": false,
+    "browser_driver": false,
+    "anti_detection": false
+  },
+  "hypotheses_not_truth": {
+    "long": "mom > 0 and gap < 0",
+    "short": "mom < 0 and gap > 0",
+    "mom_abs_min_bps": 3.0,
+    "gap_abs_min_bps": 1.5,
+    "mom_gap_upper_cap": false,
+    "target_multiplier": 2.0,
+    "rapid_adverse_bps": 4.3,
+    "rapid_adverse_window_seconds": 2.0,
+    "hard_stop_bps": 12.0,
+    "trail_activation_bps": 7.0,
+    "trail_retrace_bps": 6.5,
+    "risk_down_notional_multiplier": 0.7,
+    "default_momentum_definition": "mid_return_lookback",
+    "default_gap_definition": "mid_vs_mark",
+    "mom_gap_identities_claimed": false
+  },
+  "placeholders_not_from_logs": {
+    "time_stop_seconds": 60.0,
+    "risk_down_trigger_bps": -80.0,
+    "risk_restore_trigger_bps": -20.0
+  },
+  "profiles": {
+    "author_observed_v0": {
+      "max_shadow_per_hour": null,
+      "max_shadow_per_day": null,
+      "max_positions_per_symbol": 1
+    },
+    "conservative_v0": {
+      "max_shadow_per_hour": 10,
+      "max_shadow_per_day": 250,
+      "max_positions_per_symbol": 1,
+      "throttle_is_research_risk_control": true,
+      "throttle_is_anti_detection": false
+    }
+  },
+  "cost_scenarios_bps_per_side": {
+    "zero_fee": 0.0,
+    "maker": 6.0,
+    "taker": 8.0
+  },
+  "exit_priority": [
+    "HARD_STOP",
+    "RAPID_ADVERSE",
+    "TRAIL_EXIT",
+    "GAP_HIT",
+    "TIME_STOP"
+  ],
+  "collector_storage_dashboard_changed": false,
+  "parameter_tuning_against_results": false
+}

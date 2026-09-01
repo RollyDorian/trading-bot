@@ -1,0 +1,32 @@
+{
+  "profile_id": "conservative_v0",
+  "provenance_note": "Same signal/shadow hypotheses as author_observed_v0. max 10 accepted shadow signals/hour and 250/day are research/risk notification controls, not anti-detection. Every raw candidate is stored. One virtual position per symbol.",
+  "signal": {
+    "momentum_definition": "mid_return_lookback",
+    "gap_definition": "mid_vs_mark",
+    "momentum_lookback": 5,
+    "momentum_lookback_seconds": null,
+    "mom_abs_min_bps": 3.0,
+    "gap_abs_min_bps": 1.5,
+    "target_multiplier": 2.0
+  },
+  "shadow": {
+    "rapid_adverse_bps": 4.3,
+    "rapid_adverse_window_seconds": 2.0,
+    "hard_stop_bps": 12.0,
+    "time_stop_seconds": 60.0,
+    "trail_activation_bps": 7.0,
+    "trail_retrace_bps": 6.5,
+    "risk_down_trigger_bps": -80.0,
+    "risk_restore_trigger_bps": -20.0,
+    "risk_down_notional_multiplier": 0.7,
+    "virtual_leverage": 1.0,
+    "default_notional": 1.0
+  },
+  "throttle": {
+    "max_shadow_per_hour": 10,
+    "max_shadow_per_day": 250,
+    "max_positions_per_symbol": 1
+  },
+  "symbol_overrides": {}
+}

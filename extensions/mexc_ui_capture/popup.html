@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>MEXC UI capture</title>
+    <style>
+      body { font: 13px/1.4 sans-serif; width: 280px; margin: 10px; }
+      button { margin: 4px 4px 0 0; }
+      .note { color: #444; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <strong>Read-only market observation</strong>
+    <p class="note">
+      Observes values already on the open futures page. Does not trade,
+      change leverage, or send orders.
+    </p>
+    <label>
+      Sample interval
+      <select id="interval">
+        <option value="250">250 ms</option>
+        <option value="500" selected>500 ms</option>
+        <option value="1000">1000 ms</option>
+      </select>
+    </label>
+    <div>
+      <button type="button" id="start">Start capture</button>
+      <button type="button" id="stop">Stop</button>
+    </div>
+    <div>
+      <button type="button" id="export">Export NDJSON</button>
+    </div>
+    <p id="status">Stopped.</p>
+    <script src="popup.js"></script>
+  </body>
+</html>
