@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>TAOUSDT fixture</title>
+  </head>
+  <body>
+    <div data-mexc-capture="symbol">TAOUSDT</div>
+    <div>
+      <span>Index Price</span><span>226.10</span>
+    </div>
+    <div>
+      <span>Fair Price</span><span>226.12</span>
+    </div>
+    <div>
+      <span>Last Price</span><span>226.15</span>
+    </div>
+    <div>
+      <span>Funding Rate / Countdown</span><span>0.0100% / 03:21:00</span>
+    </div>
+    <div data-mexc-capture="orderbook">
+      <ol>
+        <li data-mexc-capture-level="ask" data-price="226.20" data-size="1.5">226.20</li>
+        <li data-mexc-capture-level="ask" data-price="226.18" data-size="2.0">226.18</li>
+      </ol>
+      <ol>
+        <li data-mexc-capture-level="bid" data-price="226.10" data-size="1.1">226.10</li>
+        <li data-mexc-capture-level="bid" data-price="226.08" data-size="3.0">226.08</li>
+      </ol>
+    </div>
+    <form data-mexc-capture-ignore="ticket">
+      <div data-mexc-capture="bid">999.99</div>
+      <div data-mexc-capture="ask">1000.01</div>
+      <button type="button">Open Long</button>
+    </form>
+  </body>
+</html>

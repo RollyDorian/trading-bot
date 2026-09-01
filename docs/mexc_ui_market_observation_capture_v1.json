@@ -1,0 +1,41 @@
+{
+  "STATUS": "MEXC_UI_MARKET_OBSERVATION_CAPTURE_READY",
+  "DECISION": "STOP_FOR_LEAD_REVIEW",
+  "ML_STATUS": "NOT_STARTED",
+  "PAPER": false,
+  "LIVE": false,
+  "STRATEGY_TUNING": false,
+  "MEXC_ZERO_FEE_SIGNAL_RECON_AND_ENGINE_V1": "provisionally_accepted_parameters_frozen",
+  "schema": "mexc_ui_raw_snapshot",
+  "schema_version": 1,
+  "extension": "extensions/mexc_ui_capture",
+  "python_package": "trading_bot.research.mexc_shadow.ui_capture",
+  "b2_integration": false,
+  "live_page_hydration": "UNAVAILABLE_IN_SESSION",
+  "fields": {
+    "symbol": {"fixture": true, "live_hydrated_this_session": false},
+    "bid": {"fixture": true, "live_hydrated_this_session": false},
+    "ask": {"fixture": true, "live_hydrated_this_session": false},
+    "bid_size": {"fixture": true, "live_hydrated_this_session": false},
+    "ask_size": {"fixture": true, "live_hydrated_this_session": false},
+    "last": {"fixture": true, "live_hydrated_this_session": false},
+    "mark_fair_price": {"fixture": true, "live_hydrated_this_session": false},
+    "index": {"fixture": true, "live_hydrated_this_session": false},
+    "funding": {"fixture": true, "live_hydrated_this_session": false},
+    "depth": {"fixture": true, "live_hydrated_this_session": false},
+    "exchange_display_at": {"fixture": "optional", "live_hydrated_this_session": false}
+  },
+  "confirmed_live_labels": [
+    "Index Price",
+    "Fair Price",
+    "Funding Rate / Countdown",
+    "Last Price",
+    "Order Book"
+  ],
+  "screenshot_bid_ask_verified": false,
+  "replay_determinism_fixture": true,
+  "executable_shadow_not_mid": true,
+  "mom_gap_temporal_precision_on_live": "UNANSWERED",
+  "profitability_reported": false,
+  "next_operator_step": "hydrated desktop extension capture + screenshot check before any long session"
+}

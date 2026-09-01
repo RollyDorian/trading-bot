@@ -230,7 +230,22 @@ python -m venv .venv
    `ETH_EXECUTABLE_PATH_QUALITY_REMEDIATION_READY`, DECISION
    `STOP_FOR_LEAD_REVIEW`, ML_STATUS `NOT_STARTED`
    (`docs/eth_executable_path_quality_remediation_v1.md`). Do not start ML, signal
-   selection, PAPER, or treat the TP×SL surface as a strategy. Design review
+   selection, PAPER, or treat the TP×SL surface as a strategy. **Paused:**
+   `ETH_SELECTOR_SIGNAL_SCREEN_V1` is not implemented; research priority moved
+   to `MEXC_ZERO_FEE_SIGNAL_RECON_AND_ENGINE_V1`. Isolated package
+   `trading_bot.research.mexc_shadow` is signal/shadow only (no orders, no
+   private trading endpoints, no trading credentials, no browser driver).
+   Sample profiles `author_observed_v0` and `conservative_v0`. STATUS
+   `MEXC_ZERO_FEE_SIGNAL_RECON_AND_ENGINE_READY`, DECISION
+   `STOP_FOR_LEAD_REVIEW`, ML_STATUS `NOT_STARTED`
+   (`docs/mexc_zero_fee_signal_recon_and_engine_v1.md`). Provisionally
+   accepted by lead; do not tune mom/gap definitions or placeholders.
+   Follow-on `MEXC_UI_MARKET_OBSERVATION_CAPTURE_V1` adds a read-only MV3
+   UI capture extension plus `ui_capture` normalize/replay (no orders, no
+   B2). Live TAO page labels confirmed; numeric hydration was unavailable
+   in-session. STATUS `MEXC_UI_MARKET_OBSERVATION_CAPTURE_READY`, DECISION
+   `STOP_FOR_LEAD_REVIEW` (`docs/mexc_ui_market_observation_capture_v1.md`).
+   No ML / PAPER / LIVE. Design review
    `EXTERNAL_RELATIVE_VALUE_FEED_DESIGN_REVIEW` then selected a minimal
    Binance USD-M `ETHUSDT` public `bookTicker`+`aggTrade` pilot (Bybit fallback),
    spool→Parquet→B2 storage (not `market_events`), isolated Compose service
