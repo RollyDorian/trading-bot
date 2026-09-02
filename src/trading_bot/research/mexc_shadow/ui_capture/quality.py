@@ -44,6 +44,7 @@ def _age_stats(values: list[float]) -> dict[str, float | int | None]:
         "n": len(ordered),
         "min_ms": ordered[0] if ordered else None,
         "p50_ms": _percentile(ordered, 0.50),
+        "p90_ms": _percentile(ordered, 0.90),
         "p95_ms": _percentile(ordered, 0.95),
         "p99_ms": _percentile(ordered, 0.99),
         "max_ms": ordered[-1] if ordered else None,
@@ -83,6 +84,33 @@ def _timing_adequacy(
     return "MARGINAL_FOR_FEW_BPS"
 
 
+def _diagnose_by_session(raw_snapshots: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Sequence continuity is per capture_id; stop/start resets sequence to 1."""
+
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for payload in raw_snapshots:
+        session_id = str(payload.get("capture_id") or "_unknown")
+        grouped[session_id].append(payload)
+    out: list[dict[str, Any]] = []
+    for session_id, rows in grouped.items():
+        for item in diagnose_sequence(rows):
+            out.append({**item, "session_id": session_id})
+    return out
+
+
+def _attach_session_end(
+    session_rows: list[dict[str, Any]], payload: dict[str, Any]
+) -> None:
+    session_id = str(payload.get("session_id") or "")
+    for row in reversed(session_rows):
+        if row.get("session_id") == session_id and row.get("end") is None:
+            row["end"] = payload
+            return
+    session_rows.append(
+        {"session_id": session_id or None, "start": None, "end": payload}
+    )
+
+
 def summarize_capture(path: Path) -> CaptureQualityReport:
     missing: Counter[str] = Counter()
     statuses: Counter[str] = Counter()
@@ -92,8 +120,7 @@ def summarize_capture(path: Path) -> CaptureQualityReport:
     ages: dict[str, list[float]] = defaultdict(list)
     arrivals: list[float] = []
     raw_snapshots: list[dict[str, Any]] = []
-    session_start: dict[str, Any] | None = None
-    session_end: dict[str, Any] | None = None
+    session_rows: list[dict[str, Any]] = []
     n_raw = 0
     n_valid = 0
     coexist_valid = 0
@@ -104,9 +131,15 @@ def summarize_capture(path: Path) -> CaptureQualityReport:
     for payload in iter_all_mappings(path):
         if is_session_record(payload):
             if payload.get("record_type") == "session_start":
-                session_start = payload
+                session_rows.append(
+                    {
+                        "session_id": payload.get("session_id"),
+                        "start": payload,
+                        "end": None,
+                    }
+                )
             elif payload.get("record_type") == "session_end":
-                session_end = payload
+                _attach_session_end(session_rows, payload)
             continue
         raw_snapshots.append(payload)
         n_raw += 1
@@ -165,6 +198,7 @@ def summarize_capture(path: Path) -> CaptureQualityReport:
         interarrival = {
             "n": 0,
             "p50_ms": None,
+            "p90_ms": None,
             "p95_ms": None,
             "p99_ms": None,
             "min_ms": None,
@@ -174,6 +208,7 @@ def summarize_capture(path: Path) -> CaptureQualityReport:
         interarrival = {
             "n": len(deltas),
             "p50_ms": _percentile(deltas, 0.50),
+            "p90_ms": _percentile(deltas, 0.90),
             "p95_ms": _percentile(deltas, 0.95),
             "p99_ms": _percentile(deltas, 0.99),
             "min_ms": deltas[0],
@@ -185,30 +220,37 @@ def summarize_capture(path: Path) -> CaptureQualityReport:
     change_rate = {name: count / n_raw for name, count in changes.items()} if n_raw else {}
     field_age = {name: _age_stats(values) for name, values in sorted(ages.items())}
     digest = hashlib.sha256("\n".join(canonical).encode("utf-8")).hexdigest() if canonical else None
-    capture_id = None
-    if len(capture_ids) == 1:
-        capture_id = next(iter(capture_ids))
-    elif session_start and session_start.get("session_id"):
-        capture_id = str(session_start["session_id"])
+    capture_id = next(iter(capture_ids)) if len(capture_ids) == 1 else None
+    if capture_id is None and not capture_ids and session_rows:
+        last_id = session_rows[-1].get("session_id")
+        capture_id = str(last_id) if last_id else None
     session = None
-    if session_start or session_end:
+    if session_rows:
         session = {
-            "start": session_start,
-            "end": session_end,
+            "start": session_rows[-1].get("start"),
+            "end": session_rows[-1].get("end"),
         }
-    seq_diag = diagnose_sequence(raw_snapshots)
-    if session_end:
-        seq_diag = [
-            *seq_diag,
-            *[
-                {**item, "source": "session_end"}
-                for item in (session_end.get("sequence_gaps") or [])
-            ],
-            *[
-                {**item, "source": "client_sequence"}
-                for item in (session_end.get("client_sequence_mismatches") or [])
-            ],
-        ]
+    seq_diag = _diagnose_by_session(raw_snapshots)
+    for row in session_rows:
+        end = row.get("end") or {}
+        session_id = row.get("session_id")
+        seq_diag.extend(
+            {**item, "source": "session_end", "session_id": session_id}
+            for item in (end.get("sequence_gaps") or [])
+        )
+        seq_diag.extend(
+            {**item, "source": "client_sequence", "session_id": session_id}
+            for item in (end.get("client_sequence_mismatches") or [])
+        )
+    n_chunks_total = 0
+    for row in session_rows:
+        end = row.get("end") or {}
+        start = row.get("start") or {}
+        chunks = end.get("n_chunks")
+        if chunks is None:
+            chunks = start.get("n_chunks")
+        if chunks is not None:
+            n_chunks_total += int(chunks)
     adequacy = _timing_adequacy(
         n_raw=n_raw,
         interarrival=interarrival,
@@ -235,6 +277,9 @@ def summarize_capture(path: Path) -> CaptureQualityReport:
         n_simultaneous_bid_ask_mark_index=n_simultaneous,
         sequence_diagnostics=seq_diag,
         session=session,
+        sessions=session_rows,
+        n_sessions=len(session_rows),
+        n_chunks_total=n_chunks_total,
         timing_adequacy=adequacy,
         notes=(
             "No profitability is computed from capture quality.",
@@ -242,6 +287,7 @@ def summarize_capture(path: Path) -> CaptureQualityReport:
             "n_simultaneous_bid_ask_mark_index counts raw rows with bid, ask, mark, and index.",
             "timing_adequacy is a sample-timing review flag, not mom/gap proof.",
             "Frozen-profile replay PnL is pipeline smoke only.",
+            "sequence_diagnostics are per capture_id; a new session restarts sequence at 1.",
         ),
     )
 
@@ -267,6 +313,9 @@ def quality_as_dict(report: CaptureQualityReport) -> dict[str, Any]:
         "n_simultaneous_bid_ask_mark_index": report.n_simultaneous_bid_ask_mark_index,
         "sequence_diagnostics": report.sequence_diagnostics,
         "session": report.session,
+        "sessions": report.sessions,
+        "n_sessions": report.n_sessions,
+        "n_chunks_total": report.n_chunks_total,
         "timing_adequacy": report.timing_adequacy,
         "notes": list(report.notes),
     }

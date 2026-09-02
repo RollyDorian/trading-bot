@@ -16,7 +16,9 @@
     <p class="note">
       Observes values already on the open futures page. Does not trade,
       change leverage, or send orders. Snapshots are stored in local
-      IndexedDB chunks; export reconstructs the ordered NDJSON stream.
+      IndexedDB chunks. Export all sessions reconstructs every
+      session_start / snapshot / session_end boundary (needed after
+      stop/start or a page reload).
     </p>
     <label>
       Sample interval
@@ -31,7 +33,8 @@
       <button type="button" id="stop">Stop</button>
     </div>
     <div>
-      <button type="button" id="export">Export NDJSON</button>
+      <button type="button" id="export">Export all sessions</button>
+      <button type="button" id="export-last">Export last only</button>
     </div>
     <p id="status">Stopped.</p>
     <p id="error"></p>

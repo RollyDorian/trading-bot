@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>hidden duplicate Order Book heading</title>
+  </head>
+  <body>
+    <div data-mexc-capture="symbol">TAOUSDT</div>
+    <div><span>Last Price</span><span>226.15</span></div>
+    <section>
+      <span>Order Book</span>
+      <div class="market-module-scss-module__hash__asksWrapper">
+        <div class="market-module-scss-module__hash__price market-module-scss-module__hash__sell">226.18</div>
+      </div>
+      <div class="market-module-scss-module__hash__bidsWrapper">
+        <div class="market-module-scss-module__hash__price market-module-scss-module__hash__buy">226.10</div>
+      </div>
+    </section>
+    <section hidden>
+      <span>Order Book</span>
+      <div>330.18</div>
+      <div>330.10</div>
+    </section>
+  </body>
+</html>

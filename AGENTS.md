@@ -246,9 +246,25 @@ python -m venv .venv
    field age, IndexedDB chunk durability (no 20k truncation), and proved
    a ~2.5 min hydrated TAO_USDT sample (bid/ask/mark/index match UI;
    `timing_adequacy` `MARGINAL_FOR_FEW_BPS`). STATUS
-   `MEXC_UI_CAPTURE_HYDRATION_GATE_READY`, DECISION `STOP_FOR_LEAD_REVIEW`
+   `MEXC_UI_CAPTURE_HYDRATION_GATE_READY`, DECISION
+   `STOP_FOR_LEAD_REVIEW`
    (`docs/mexc_ui_capture_hydration_gate_v1.md`). Frozen profiles
-   unchanged. No ML / PAPER / LIVE. Design review
+   unchanged. Follow-on `MEXC_UI_EXTENSION_E2E_AND_LONG_CAPTURE_V1`
+   scored two real unpacked-extension TAO IndexedDB exports (12.2 min +
+   20.8 min) and two screenshots. Sequences/chunks/stop-start are intact
+   and session 2 is fully valid, but session 1 has a 25 s
+   `ambiguous_orderbook_heading` burst (111 rows) and screenshot 1
+   last/Fair disagree with nearby raw. Follow-on wrapper-canonical BBO
+   (extension 1.2.1) treats `asksWrapper`/`bidsWrapper` as the live source
+   and headings as fallback only; duplicate headings no longer invalidate
+   a uniquely resolvable visible wrapper pair. Operator Phase A retry
+   (~14.6 + 14.3 min, last-session export twice) confirmed heading
+   false-invalids are gone (session 1: heading_count=2, 0 invalids) but
+   introduced `missing_wrapper_bbo` on 4 snapshots at session-2 start.
+   STATUS `MEXC_UI_EXTENSION_E2E_AND_LONG_CAPTURE_PHASE_A_RETRY_FAIL`,
+   DECISION `STOP_FOR_LEAD_REVIEW`
+   (`docs/mexc_ui_extension_e2e_and_long_capture_v1.md`). Phase B stays
+   not started. No ML / PAPER / LIVE. Design review
    `EXTERNAL_RELATIVE_VALUE_FEED_DESIGN_REVIEW` then selected a minimal
    Binance USD-M `ETHUSDT` public `bookTicker`+`aggTrade` pilot (Bybit fallback),
    spool→Parquet→B2 storage (not `market_events`), isolated Compose service

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -9,6 +10,63 @@ from trading_bot.research.mexc_shadow.types import Observation
 
 ParseStatus = Literal["ok", "ok_redundant", "missing", "unparsable", "ambiguous"]
 CaptureTrigger = Literal["mutation", "interval", "manual", "fixture"]
+
+# Bounded live-BBO diagnostics. Never store HTML, tickets, or credentials.
+ORDERBOOK_DIAGNOSTIC_INT_KEYS = (
+    "orderbook_heading_count",
+    "visible_orderbook_heading_count",
+    "asks_wrapper_count",
+    "visible_asks_wrapper_count",
+    "bids_wrapper_count",
+    "visible_bids_wrapper_count",
+)
+_ALLOWED_BBO_SOURCES = frozenset(
+    {
+        "none",
+        "data_attr",
+        "data_attr:orderbook",
+        "live_asks_bids_wrapper",
+        "live_orderbook_heading_fallback",
+    }
+)
+
+
+def empty_orderbook_diagnostics() -> dict[str, Any]:
+    return {
+        "orderbook_heading_count": 0,
+        "visible_orderbook_heading_count": 0,
+        "asks_wrapper_count": 0,
+        "visible_asks_wrapper_count": 0,
+        "bids_wrapper_count": 0,
+        "visible_bids_wrapper_count": 0,
+        "chosen_bbo_source": "none",
+        "ambiguity_reason": None,
+    }
+
+
+def sanitize_orderbook_diagnostics(raw: Any) -> dict[str, Any]:
+    """Keep only the declared integer/string diagnostic keys. Drop anything else."""
+
+    out = empty_orderbook_diagnostics()
+    if not isinstance(raw, Mapping):
+        return out
+    for key in ORDERBOOK_DIAGNOSTIC_INT_KEYS:
+        value = raw.get(key)
+        if value is None:
+            continue
+        try:
+            out[key] = int(value)
+        except (TypeError, ValueError):
+            continue
+    source = raw.get("chosen_bbo_source")
+    if source is None or source == "":
+        out["chosen_bbo_source"] = "none"
+    else:
+        text = str(source)
+        out["chosen_bbo_source"] = text if text in _ALLOWED_BBO_SOURCES else "none"
+    reason = raw.get("ambiguity_reason")
+    out["ambiguity_reason"] = None if reason in {None, ""} else str(reason)
+    return out
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +119,7 @@ class UiRawSnapshot:
     depth_selector_id: str | None
     exchange_display_at: str | None
     capture_id: str | None = None
+    orderbook_diagnostics: dict[str, Any] = field(default_factory=empty_orderbook_diagnostics)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -89,6 +148,7 @@ class UiRawSnapshot:
             if self.depth_asks is not None
             else None,
             "depth_selector_id": self.depth_selector_id,
+            "orderbook_diagnostics": sanitize_orderbook_diagnostics(self.orderbook_diagnostics),
         }
 
 
@@ -121,4 +181,7 @@ class CaptureQualityReport:
     n_simultaneous_bid_ask_mark_index: int = 0
     sequence_diagnostics: list[dict[str, Any]] = field(default_factory=list)
     session: dict[str, Any] | None = None
+    sessions: list[dict[str, Any]] = field(default_factory=list)
+    n_sessions: int = 0
+    n_chunks_total: int = 0
     timing_adequacy: str = "UNKNOWN"

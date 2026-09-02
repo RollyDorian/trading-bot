@@ -21,6 +21,12 @@ SMOKE_NOTE = (
     "Do not tune mom/gap/thresholds against this replay."
 )
 
+HYPOTHESIS_SMOKE_NOTE = (
+    "HYPOTHESIS_SMOKE: frozen author_observed_v0 diagnostic replay only. "
+    "Not performance evidence. Do not retune lookbacks, mom/gap definitions, "
+    "thresholds, target multiplier, stops, throttle, or risk sizing."
+)
+
 
 def iter_normalized_records(path: Path) -> Iterator[NormalizedCapture]:
     for payload in iter_raw_mappings(path):
@@ -43,10 +49,16 @@ class CaptureNdjsonSource:
         yield from iter_replay_observations(self._path)
 
 
-def replay_capture_smoke(path: Path, profile_id: str = "author_observed_v0") -> ReplayReport:
+def replay_capture_smoke(
+    path: Path,
+    profile_id: str = "author_observed_v0",
+    *,
+    hypothesis_smoke: bool = False,
+) -> ReplayReport:
     """Run a frozen profile as pipeline smoke. Not an edge evaluation."""
 
     config = load_profile(profile_id)
     report = run_shadow_replay(MemorySource(list(iter_replay_observations(path))), config)
-    report.notes = (*report.notes, SMOKE_NOTE)
+    extra = (HYPOTHESIS_SMOKE_NOTE,) if hypothesis_smoke else ()
+    report.notes = (*report.notes, SMOKE_NOTE, *extra)
     return report

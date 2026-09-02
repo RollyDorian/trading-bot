@@ -254,7 +254,7 @@
     };
   }
 
-  function coalesceRoots(roots) {
+  function uniqueNested(roots) {
     const unique = [];
     for (const node of roots) {
       let absorbed = false;
@@ -272,9 +272,59 @@
       }
       if (!absorbed) unique.push(node);
     }
+    return unique;
+  }
+
+  function coalesceRoots(roots, problemCode) {
+    const unique = uniqueNested(roots);
+    const code = problemCode || "ambiguous_orderbook_heading";
     if (!unique.length) return { root: null, problems: [] };
-    if (unique.length > 1) return { root: null, problems: ["ambiguous_orderbook_heading"] };
+    if (unique.length > 1) return { root: null, problems: [code] };
     return { root: unique[0], problems: [] };
+  }
+
+  function classNameOf(node) {
+    if (!node) return "";
+    return node.getAttribute && node.getAttribute("class")
+      ? node.getAttribute("class")
+      : String(node.className || "");
+  }
+
+  function hasRenderableRect(node) {
+    if (!node || !node.getBoundingClientRect) return false;
+    const self = node.getBoundingClientRect();
+    if (self.width > 0 && self.height > 0) return true;
+    // asksWrapper/bidsWrapper can collapse their own box while price rows paint.
+    const descendants = node.querySelectorAll ? node.querySelectorAll("*") : [];
+    for (const child of descendants) {
+      const rect = child.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) return true;
+    }
+    return false;
+  }
+
+  function isVisible(node) {
+    if (!node || node.nodeType !== 1) return false;
+    if (node.isConnected === false) return false;
+    let current = node;
+    while (current && current.nodeType === 1) {
+      if (current.hasAttribute("hidden")) return false;
+      let style = null;
+      try {
+        style = window.getComputedStyle(current);
+      } catch (_err) {
+        return false;
+      }
+      if (!style || style.display === "none" || style.visibility === "hidden") return false;
+      current = current.parentElement;
+    }
+    return hasRenderableRect(node);
+  }
+
+  function classTokenHits(token) {
+    return [...document.querySelectorAll("[class]")].filter(
+      (node) => classNameOf(node).includes(token) && !ignored(node)
+    );
   }
 
   function collectOwnPrices(root) {
@@ -297,18 +347,12 @@
     return prices;
   }
 
-  function wrapperPrices(wrapToken, priceToken, problemCode) {
-    const hits = [...document.querySelectorAll("[class]")].filter(
-      (node) => String(node.className || "").includes(wrapToken) && !ignored(node)
-    );
-    const coalesced = coalesceRoots(hits);
-    if (coalesced.problems.length) return { prices: [], problems: [problemCode] };
-    if (!coalesced.root) return { prices: [], problems: [] };
+  function wrapperPricesIn(wrap, priceToken) {
     const prices = [];
-    const walker = document.createTreeWalker(coalesced.root, NodeFilter.SHOW_ELEMENT);
+    const walker = document.createTreeWalker(wrap, NodeFilter.SHOW_ELEMENT);
     let node = walker.currentNode;
     while (node) {
-      if (!ignored(node) && String(node.className || "").includes(priceToken)) {
+      if (!ignored(node) && classNameOf(node).includes(priceToken)) {
         const own = collapse(
           [...node.childNodes]
             .filter((child) => child.nodeType === Node.TEXT_NODE)
@@ -320,17 +364,177 @@
       }
       node = walker.nextNode();
     }
-    return { prices, problems: [] };
+    return prices;
+  }
+
+  function depthOf(node) {
+    let n = 0;
+    let current = node;
+    while (current) {
+      n += 1;
+      current = current.parentElement;
+    }
+    return n;
+  }
+
+  function lca(left, right) {
+    const seen = new Set();
+    let current = left;
+    while (current) {
+      seen.add(current);
+      current = current.parentElement;
+    }
+    current = right;
+    while (current) {
+      if (seen.has(current)) return current;
+      current = current.parentElement;
+    }
+    return null;
+  }
+
+  function isDocumentish(node) {
+    return !node || node === document.body || node === document.documentElement;
+  }
+
+  function treeDistance(left, right) {
+    const ancestor = lca(left, right);
+    if (!ancestor) return 1e9;
+    return depthOf(left) + depthOf(right) - 2 * depthOf(ancestor);
+  }
+
+  function pairAskBidWrappers(asks, bids) {
+    const asksU = uniqueNested(asks);
+    const bidsU = uniqueNested(bids);
+    if (!asksU.length || !bidsU.length) return [];
+    if (asksU.length === 1 && bidsU.length === 1) return [[asksU[0], bidsU[0]]];
+    const scored = [];
+    for (const askNode of asksU) {
+      for (const bidNode of bidsU) {
+        const ancestor = lca(askNode, bidNode);
+        scored.push({
+          dist: treeDistance(askNode, bidNode),
+          lcaDepth: ancestor ? depthOf(ancestor) : 0,
+          ask: askNode,
+          bid: bidNode,
+        });
+      }
+    }
+    scored.sort((a, b) => a.dist - b.dist || b.lcaDepth - a.lcaDepth);
+    const usedAsks = new Set();
+    const usedBids = new Set();
+    const pairs = [];
+    for (const row of scored) {
+      if (usedAsks.has(row.ask) || usedBids.has(row.bid)) continue;
+      pairs.push([row.ask, row.bid]);
+      usedAsks.add(row.ask);
+      usedBids.add(row.bid);
+    }
+    return pairs;
+  }
+
+  function pairNestedIn(inner, outer) {
+    const container = lca(outer[0], outer[1]);
+    if (isDocumentish(container)) return false;
+    return container.contains(inner[0]) && container.contains(inner[1]);
+  }
+
+  function bboFromWrapperPair(askWrap, bidWrap, askToken, bidToken) {
+    const asks = wrapperPricesIn(askWrap, askToken);
+    const bids = wrapperPricesIn(bidWrap, bidToken);
+    if (!asks.length || !bids.length) return { bid: null, ask: null, error: "missing_wrapper_bbo" };
+    const bestAsk = Math.min(...asks);
+    const bestBid = Math.max(...bids);
+    if (bestBid >= bestAsk) return { bid: null, ask: null, error: "crossed_wrapper_bbo" };
+    return { bid: bestBid, ask: bestAsk, error: null };
+  }
+
+  function emptyOrderbookDiagnostics() {
+    return {
+      orderbook_heading_count: 0,
+      visible_orderbook_heading_count: 0,
+      asks_wrapper_count: 0,
+      visible_asks_wrapper_count: 0,
+      bids_wrapper_count: 0,
+      visible_bids_wrapper_count: 0,
+      chosen_bbo_source: "none",
+      ambiguity_reason: null,
+    };
+  }
+
+  function countOrderbookPresence() {
+    const spec = (catalog && catalog.live_orderbook) || {};
+    const headings = labelNodes(spec.heading_labels || ["Order Book"]);
+    const asks = classTokenHits(spec.asks_class_contains || "asksWrapper");
+    const bids = classTokenHits(spec.bids_class_contains || "bidsWrapper");
+    const diag = emptyOrderbookDiagnostics();
+    diag.orderbook_heading_count = headings.length;
+    diag.visible_orderbook_heading_count = headings.filter(isVisible).length;
+    diag.asks_wrapper_count = asks.length;
+    diag.visible_asks_wrapper_count = asks.filter(isVisible).length;
+    diag.bids_wrapper_count = bids.length;
+    diag.visible_bids_wrapper_count = bids.filter(isVisible).length;
+    return diag;
+  }
+
+  function resolveWrapperBbo() {
+    // Canonical live BBO. Sides from MEXC ask/bid wrappers; never split by last.
+    const spec = catalog.live_orderbook || {};
+    const askWrapToken = spec.asks_class_contains || "asksWrapper";
+    const bidWrapToken = spec.bids_class_contains || "bidsWrapper";
+    const askToken = spec.ask_price_class_contains || "sell";
+    const bidToken = spec.bid_price_class_contains || "buy";
+    const visibleAsks = classTokenHits(askWrapToken).filter(isVisible);
+    const visibleBids = classTokenHits(bidWrapToken).filter(isVisible);
+    if (!visibleAsks.length || !visibleBids.length) return { bid: null, ask: null, problems: [] };
+    const asksU = uniqueNested(visibleAsks);
+    const bidsU = uniqueNested(visibleBids);
+    const pairs = pairAskBidWrappers(visibleAsks, visibleBids);
+    const used = new Set();
+    for (const pair of pairs) {
+      used.add(pair[0]);
+      used.add(pair[1]);
+    }
+    const leftoverPriced =
+      asksU.some((node) => !used.has(node) && wrapperPricesIn(node, askToken).length) ||
+      bidsU.some((node) => !used.has(node) && wrapperPricesIn(node, bidToken).length);
+    if (leftoverPriced || !pairs.length) {
+      return { bid: null, ask: null, problems: ["ambiguous_live_orderbook"] };
+    }
+    const resolved = [];
+    for (const pair of pairs) {
+      const bbo = bboFromWrapperPair(pair[0], pair[1], askToken, bidToken);
+      if (bbo.error) return { bid: null, ask: null, problems: [bbo.error] };
+      resolved.push({ pair, bid: bbo.bid, ask: bbo.ask });
+    }
+    const uniqueKeys = [...new Set(resolved.map((item) => `${item.bid}|${item.ask}`))];
+    if (uniqueKeys.length > 1) {
+      return { bid: null, ask: null, problems: ["ambiguous_live_orderbook"] };
+    }
+    if (resolved.length === 1) {
+      return { bid: resolved[0].bid, ask: resolved[0].ask, problems: [] };
+    }
+    const outers = resolved.filter((candidate) => {
+      return !resolved.some(
+        (other) => other !== candidate && pairNestedIn(candidate.pair, other.pair)
+      );
+    });
+    if (outers.length === 1) {
+      return { bid: outers[0].bid, ask: outers[0].ask, problems: [] };
+    }
+    return { bid: null, ask: null, problems: ["ambiguous_live_orderbook"] };
   }
 
   function liveOrderBook(lastValue) {
     const spec = catalog.live_orderbook || {};
-    const headings = labelNodes(spec.heading_labels || ["Order Book"]);
+    const headings = labelNodes(spec.heading_labels || ["Order Book"]).filter(isVisible);
     if (!headings.length) return { bid: null, ask: null, problems: [] };
     const headerLabels = ["Fair Price", "Mark Price", "Index Price", "Funding Rate / Countdown", "Funding Rate"];
     const band = Number(spec.price_band_frac || 0.1);
     const minSide = Number(spec.min_side_levels || 1);
-    const coalesced = coalesceRoots(headings.map((heading) => heading.parentElement || heading));
+    const coalesced = coalesceRoots(
+      headings.map((heading) => heading.parentElement || heading),
+      "ambiguous_orderbook_heading"
+    );
     if (coalesced.problems.length || !coalesced.root) {
       return { bid: null, ask: null, problems: coalesced.problems };
     }
@@ -363,6 +567,46 @@
     const bestBid = Math.max(...bids);
     if (bestBid >= bestAsk) return { bid: null, ask: null, problems: [] };
     return { bid: bestBid, ask: bestAsk, problems: [] };
+  }
+
+  function chosenBboSource(fields) {
+    const bid = fields.bid;
+    const ask = fields.ask;
+    if (!bid || !ask) return "none";
+    const ok = bid.parse_status === "ok" || bid.parse_status === "ok_redundant";
+    const askOk = ask.parse_status === "ok" || ask.parse_status === "ok_redundant";
+    if (!ok || !askOk) return "none";
+    const bidSel = bid.selector_id || "";
+    const askSel = ask.selector_id || "";
+    if (bidSel === "live_asks_bids_wrapper" || askSel === "live_asks_bids_wrapper") {
+      return "live_asks_bids_wrapper";
+    }
+    if (bidSel === "live_orderbook_split_by_last" || askSel === "live_orderbook_split_by_last") {
+      return "live_orderbook_heading_fallback";
+    }
+    if (bidSel.startsWith("data_attr") || askSel.startsWith("data_attr")) return "data_attr";
+    if (
+      bidSel === "orderbook_max_bid" ||
+      bidSel === "orderbook_min_ask" ||
+      askSel === "orderbook_max_bid" ||
+      askSel === "orderbook_min_ask"
+    ) {
+      return "data_attr:orderbook";
+    }
+    return bidSel || askSel || "none";
+  }
+
+  function ambiguityReason(problems) {
+    const codes = [
+      "ambiguous_live_orderbook",
+      "crossed_wrapper_bbo",
+      "missing_wrapper_bbo",
+      "ambiguous_orderbook_heading",
+    ];
+    for (const code of codes) {
+      if (problems.includes(code)) return code;
+    }
+    return null;
   }
 
   function symbolHint() {
@@ -454,53 +698,46 @@
       }
     }
     const lastValue = typeof fields.last.value === "number" ? fields.last.value : null;
-    if (fields.bid.parse_status === "missing" || fields.ask.parse_status === "missing") {
-      const liveSpec = catalog.live_orderbook || {};
-      const asks = wrapperPrices(
-        liveSpec.asks_class_contains || "asksWrapper",
-        liveSpec.ask_price_class_contains || "sell",
-        "ambiguous_asks_wrapper"
-      );
-      const bids = wrapperPrices(
-        liveSpec.bids_class_contains || "bidsWrapper",
-        liveSpec.bid_price_class_contains || "buy",
-        "ambiguous_bids_wrapper"
-      );
-      book.problems.push(...asks.problems, ...bids.problems);
-      if (asks.prices.length && bids.prices.length) {
-        const bestAsk = Math.min(...asks.prices);
-        const bestBid = Math.max(...bids.prices);
-        if (bestBid < bestAsk) {
-          if (fields.bid.parse_status === "missing") {
-            fields.bid = {
-              name: "bid",
-              raw_text: String(bestBid),
-              value: bestBid,
-              selector_id: "live_asks_bids_wrapper",
-              parse_status: "ok",
-              match_count: 1,
-              age_ms: 0,
-              changed_at_monotonic_ms: null,
-              unit: null,
-            };
-          }
-          if (fields.ask.parse_status === "missing") {
-            fields.ask = {
-              name: "ask",
-              raw_text: String(bestAsk),
-              value: bestAsk,
-              selector_id: "live_asks_bids_wrapper",
-              parse_status: "ok",
-              match_count: 1,
-              age_ms: 0,
-              changed_at_monotonic_ms: null,
-              unit: null,
-            };
-          }
-        }
+    const diagnostics = countOrderbookPresence();
+    const wrapperAvailable =
+      diagnostics.visible_asks_wrapper_count > 0 && diagnostics.visible_bids_wrapper_count > 0;
+    if (
+      (fields.bid.parse_status === "missing" || fields.ask.parse_status === "missing") &&
+      wrapperAvailable
+    ) {
+      const wrap = resolveWrapperBbo();
+      book.problems.push(...wrap.problems);
+      if (wrap.bid !== null && fields.bid.parse_status === "missing") {
+        fields.bid = {
+          name: "bid",
+          raw_text: String(wrap.bid),
+          value: wrap.bid,
+          selector_id: "live_asks_bids_wrapper",
+          parse_status: "ok",
+          match_count: 1,
+          age_ms: 0,
+          changed_at_monotonic_ms: null,
+          unit: null,
+        };
+      }
+      if (wrap.ask !== null && fields.ask.parse_status === "missing") {
+        fields.ask = {
+          name: "ask",
+          raw_text: String(wrap.ask),
+          value: wrap.ask,
+          selector_id: "live_asks_bids_wrapper",
+          parse_status: "ok",
+          match_count: 1,
+          age_ms: 0,
+          changed_at_monotonic_ms: null,
+          unit: null,
+        };
       }
     }
-    if (fields.bid.parse_status === "missing" || fields.ask.parse_status === "missing") {
+    if (
+      (fields.bid.parse_status === "missing" || fields.ask.parse_status === "missing") &&
+      !wrapperAvailable
+    ) {
       const live = liveOrderBook(lastValue);
       book.problems.push(...live.problems);
       if (live.bid !== null && fields.bid.parse_status === "missing") {
@@ -530,6 +767,8 @@
         };
       }
     }
+    diagnostics.chosen_bbo_source = chosenBboSource(fields);
+    diagnostics.ambiguity_reason = ambiguityReason(book.problems);
     const invalid = [...book.problems];
     for (const [name, spec] of Object.entries(catalog.fields)) {
       const rec = fields[name];
@@ -567,6 +806,7 @@
       depth_bids: book.bids,
       depth_asks: book.asks,
       depth_selector_id: book.selector,
+      orderbook_diagnostics: diagnostics,
     };
   }
 

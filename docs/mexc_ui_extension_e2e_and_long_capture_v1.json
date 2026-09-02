@@ -1,0 +1,213 @@
+{
+  "STATUS": "MEXC_UI_EXTENSION_E2E_AND_LONG_CAPTURE_PHASE_A_RETRY_FAIL",
+  "DECISION": "STOP_FOR_LEAD_REVIEW",
+  "ML_STATUS": "NOT_STARTED",
+  "PAPER": false,
+  "LIVE": false,
+  "STRATEGY_TUNING": false,
+  "profiles_frozen": ["author_observed_v0", "conservative_v0"],
+  "prior_milestone": "MEXC_UI_CAPTURE_HYDRATION_GATE_V1",
+  "extension": "extensions/mexc_ui_capture",
+  "extension_version": "1.2.1",
+  "python_package": "trading_bot.research.mexc_shadow.ui_capture",
+  "b2": false,
+  "trading_interaction": "NONE_IN_CAPTURE_CODE",
+  "selector_remediation": {
+    "canonical_live_bbo": "asksWrapper+sell / bidsWrapper+buy",
+    "heading_role": "diagnostic_and_fallback_only",
+    "last_not_used_for_wrapper_sides": true,
+    "visibility_filtered_before_ambiguity": true,
+    "diagnostics_on_every_snapshot": true,
+    "full_page_html": false,
+    "heading_false_invalid_removed": true,
+    "new_failure_class_on_retry": "missing_wrapper_bbo"
+  },
+  "operator_environment": {
+    "unpacked_extension_export": true,
+    "export_mode": "last_session_only_twice",
+    "workspace_dir": "data/mexc_ui_capture",
+    "hydration_cdp_sample_rejected_as_phase_a": true
+  },
+  "phase_a_retry": {
+    "STATUS": "FAIL",
+    "pass": false,
+    "extension_version": "1.2.1",
+    "blocking_reason": "new selector class missing_wrapper_bbo on session 0b298494 seq 1-4 (868 ms after start; wrappers visible, prices absent, last/mark/index also missing). Duplicate-heading invalids are gone. Do not start Phase B.",
+    "files": [
+      {
+        "path": "data/mexc_ui_capture/mexc_ui_capture_1b29865a-9553-49b0-abe4-f00ae2d9261f_2026-09-02T15-09-39-745Z.ndjson",
+        "session_id": "1b29865a-9553-49b0-abe4-f00ae2d9261f",
+        "started_at": "2026-09-02T14:54:58.230Z",
+        "ended_at": "2026-09-02T15:09:36.850Z",
+        "duration_ms": 878466.0,
+        "n_snapshots": 4506,
+        "n_valid_for_replay": 4506,
+        "n_invalid": 0,
+        "n_chunks": 19,
+        "file_sha256": "f05906bce21e76c630fd14631a2dc90e66e91a0ace66ac34f6b04149f9574f64",
+        "replay_determinism_sha256": "f3ee7fc6bc584d102e77c4ed154d940fba6e2c98e0c55c2a5636c6b8c633036c"
+      },
+      {
+        "path": "data/mexc_ui_capture/mexc_ui_capture_0b298494-2863-48c5-b28b-460aebd4093f_2026-09-02T15-24-38-742Z.ndjson",
+        "session_id": "0b298494-2863-48c5-b28b-460aebd4093f",
+        "started_at": "2026-09-02T15:10:20.252Z",
+        "ended_at": "2026-09-02T15:24:37.432Z",
+        "duration_ms": 857055.0,
+        "n_snapshots": 4802,
+        "n_valid_for_replay": 4798,
+        "n_invalid": 4,
+        "n_chunks": 20,
+        "file_sha256": "9eca0b690499e096ec6bbaf835c244cb58f39840dc0a3ffe6a5aea43ed9cf470",
+        "replay_determinism_sha256": "32810f5f837c241a5dc5f2757ecd4b2cbb7712e4aa8a64242390b97eb4945f83"
+      }
+    ],
+    "actual_extension_run": {
+      "page": "https://www.mexc.com/futures/TAO_USDT",
+      "symbol": "TAOUSDT",
+      "snapshots": 9308,
+      "n_valid_for_replay": 9304,
+      "n_invalid": 4,
+      "valid_pct": 99.95702621486893,
+      "invalid_pct": 0.04297378513107091,
+      "span_ms": 1779100.0,
+      "capture_minutes": [14.6411, 14.28425],
+      "chunks": 39,
+      "sequence_gaps": [],
+      "sequence_duplicates": [],
+      "trigger_mix": {"manual": 2, "mutation": 9251, "interval": 55},
+      "storage_export_sha256": {
+        "session_1b29865a": "f05906bce21e76c630fd14631a2dc90e66e91a0ace66ac34f6b04149f9574f64",
+        "session_0b298494": "9eca0b690499e096ec6bbaf835c244cb58f39840dc0a3ffe6a5aea43ed9cf470",
+        "concatenated": "33be16f31347c2334101cb6bca52e176f5115dadc0d42519b1b2621aa5e94623"
+      },
+      "replay_determinism_sha256": {
+        "session_1b29865a": "f3ee7fc6bc584d102e77c4ed154d940fba6e2c98e0c55c2a5636c6b8c633036c",
+        "session_0b298494": "32810f5f837c241a5dc5f2757ecd4b2cbb7712e4aa8a64242390b97eb4945f83",
+        "concatenated": "4b1e60cf644dc4d5822cb8eca4e19f6e69284f159a6732847be113276dadb090",
+        "concatenated_repeat": "4b1e60cf644dc4d5822cb8eca4e19f6e69284f159a6732847be113276dadb090"
+      },
+      "missingness": {
+        "bid_size": 9308,
+        "ask_size": 9308,
+        "exchange_display_at": 9308,
+        "bid": 4,
+        "ask": 4,
+        "last": 8,
+        "mark": 8,
+        "index": 8,
+        "funding": 8
+      },
+      "invalidity": {
+        "observation_invalid": 4,
+        "missing_wrapper_bbo": 4,
+        "missing_required:bid": 4,
+        "missing_required:ask": 4,
+        "ambiguous_orderbook_heading": 0,
+        "window": {
+          "session_id": "0b298494-2863-48c5-b28b-460aebd4093f",
+          "first_sequence": 1,
+          "last_sequence": 4,
+          "first_t": "2026-09-02T15:10:20.345Z",
+          "last_t": "2026-09-02T15:10:21.213Z",
+          "contiguous": true,
+          "visible_asks_wrapper_count": 1,
+          "visible_bids_wrapper_count": 1,
+          "chosen_bbo_source": "none",
+          "note": "wrappers visible but no sell/buy prices; last/mark/index also missing; fail-closed; BBO resumes at seq 5"
+        }
+      },
+      "orderbook_diagnostics": {
+        "session_1b29865a": {
+          "chosen_bbo_source": {"live_asks_bids_wrapper": 4506},
+          "orderbook_heading_count": {"2": 4506},
+          "visible_orderbook_heading_count": {"1": 4506},
+          "visible_asks_wrapper_count": {"1": 4506},
+          "visible_bids_wrapper_count": {"1": 4506},
+          "ambiguity_reason": {}
+        },
+        "session_0b298494": {
+          "chosen_bbo_source": {"live_asks_bids_wrapper": 4798, "none": 4},
+          "orderbook_heading_count": {"2": 4796, "1": 6},
+          "visible_orderbook_heading_count": {"1": 4802},
+          "visible_asks_wrapper_count": {"1": 4802},
+          "visible_bids_wrapper_count": {"1": 4802},
+          "ambiguity_reason": {"missing_wrapper_bbo": 4}
+        }
+      },
+      "n_bid_ge_ask": 0,
+      "n_simultaneous_bid_ask_mark_index": 9300,
+      "timing_adequacy": "ADEQUATE_FOR_REVIEW_NOT_PROOF",
+      "storage_errors": null,
+      "n_sessions": 2,
+      "interruption": {
+        "kind": "session_boundary",
+        "gap_ms": 43579.0,
+        "cause": "operator_stop_start"
+      }
+    },
+    "screenshot_comparison": [
+      {
+        "file": "data/mexc_ui_capture/Снимок экрана 2026-09-02 190927.png",
+        "local_clock": "2026-09-02 19:09:27 UTC+4",
+        "nearby_raw": "2026-09-02T15:09:24.062Z",
+        "delta_s": -2.938,
+        "session_id": "1b29865a-9553-49b0-abe4-f00ae2d9261f",
+        "sequence": 4417,
+        "ui": {"symbol": "TAOUSDT", "last": 216.61, "index": 216.65, "mark": 216.63, "bid": 216.56, "ask": 216.59},
+        "raw": {"symbol": "TAOUSDT", "last": 216.61, "index": 216.65, "mark": 216.63, "bid": 216.56, "ask": 216.59},
+        "notes": "Exact bid/ask/last/Fair/Index match ~2.9s before PNG save time. Nearest-timestamp seq 4438 already ticked to 216.40/216.41/216.50."
+      },
+      {
+        "file": "data/mexc_ui_capture/Снимок экрана 2026-09-02 192432.png",
+        "local_clock": "2026-09-02 19:24:32 UTC+4",
+        "nearby_raw": "2026-09-02T15:24:24.346Z",
+        "delta_s": -7.654,
+        "session_id": "0b298494-2863-48c5-b28b-460aebd4093f",
+        "sequence": 4733,
+        "ui": {"symbol": "TAOUSDT", "last": 216.61, "index": 216.79, "mark": 216.64, "bid": 216.63, "ask": 216.66},
+        "raw": {"symbol": "TAOUSDT", "last": 216.61, "index": 216.79, "mark": 216.64, "bid": 216.63, "ask": 216.66},
+        "notes": "Exact bid/ask/last/Fair/Index match ~7.7s before PNG save time. Nearest-timestamp seq 4772 last still 216.61; BBO already 216.70/216.73."
+      }
+    ],
+    "screenshot_agreement": "PASS_WITH_SAVE_LAG",
+    "gates": [
+      {"name": "operator_unpacked_extension_export", "ok": true, "detail": "two IndexedDB last-session NDJSON exports, extension 1.2.1"},
+      {"name": "indexeddb_chunks_written", "ok": true, "detail": "n_chunks_total=39"},
+      {"name": "sequences_contiguous", "ok": true, "detail": "per-session 1..n no gaps/duplicates"},
+      {"name": "stop_start_session_boundaries", "ok": true, "detail": "two sessions; 43579 ms gap; first export retained"},
+      {"name": "committed_data_survives_later_session", "ok": true, "detail": "first session file still present after second capture"},
+      {"name": "export_all_single_ndjson", "ok": false, "detail": "operator exported last session only twice; concat replay still deterministic"},
+      {"name": "reload_or_sw_restart_survives", "ok": false, "detail": "not attested; gap is consistent with stop/start only"},
+      {"name": "export_ordered_ndjson_hash", "ok": true, "detail": "see storage_export_sha256"},
+      {"name": "quality_stream", "ok": false, "detail": "n_invalid=4 timing=ADEQUATE_FOR_REVIEW_NOT_PROOF"},
+      {"name": "replay_smoke", "ok": true, "detail": "HYPOTHESIS_SMOKE concat SHA stable across repeat"},
+      {"name": "screenshot_quote_agreement", "ok": true, "detail": "PASS_WITH_SAVE_LAG: both shots exact vs nearby; nearest timestamp already ticked"},
+      {"name": "no_storage_errors", "ok": true, "detail": "none"},
+      {"name": "no_crossed_book", "ok": true, "detail": "n_bid_ge_ask=0"},
+      {"name": "no_ambiguous_orderbook_heading", "ok": true, "detail": "zero; session 1 had heading_count=2 visible=1 on every row"},
+      {"name": "no_new_selector_failure_class", "ok": false, "detail": "missing_wrapper_bbo x4 on session 0b298494 seq 1-4"},
+      {"name": "no_trading_interaction", "ok": true, "detail": "NONE_IN_CAPTURE_CODE; UI showed 0.0000 USDT and Positions(0)"},
+      {"name": "duration_15_to_30_min", "ok": true, "detail": "combined span ~29.65 min; sessions 14.64 and 14.28 min"}
+    ],
+    "hypothesis_smoke": {
+      "label": "HYPOTHESIS_SMOKE",
+      "not_performance_evidence": true,
+      "profile_id": "author_observed_v0",
+      "session_1b29865a": {"observations": 4506, "n_candidates": 682, "n_trades": 0, "n_open": 0},
+      "session_0b298494": {"observations": 4798, "n_candidates": 658, "n_trades": 1, "n_open": 0},
+      "concatenated": {"observations": 9304, "n_candidates": 1340, "n_trades": 1, "n_open": 0},
+      "notes": [
+        "Frozen author_observed_v0 diagnostic replay only. Not performance evidence.",
+        "Do not retune lookbacks, mom/gap, thresholds, target, stops, throttle, or sizing."
+      ]
+    }
+  },
+  "phase_a_first_run_1_2_0": {
+    "STATUS": "FAIL",
+    "note": "Historical 1.2.0 run: 111 contiguous ambiguous_orderbook_heading on session f00ba4f6. That class did not recur on the 1.2.1 retry."
+  },
+  "phase_b": {
+    "STATUS": "NOT_STARTED",
+    "reason": "Phase A retry is not clean: new selector class missing_wrapper_bbo (4 snapshots at session-2 start). Lead must authorize any 8-12h capture. Do not start Phase B automatically."
+  }
+}

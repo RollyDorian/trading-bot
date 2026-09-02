@@ -96,8 +96,10 @@ SELECTOR_CATALOG: dict[str, Any] = {
         "size_attr": "data-size",
         "max_levels": 20,
     },
-    # Live MEXC has no data-mexc-capture attrs. Unique "Order Book" panel only;
-    # split sides by Last Price, never Fair/Index, never ticket numbers.
+    # Live MEXC has no data-mexc-capture attrs. Canonical BBO is asksWrapper +
+    # sell / bidsWrapper + buy on a uniquely resolvable visible pair. "Order Book"
+    # headings are diagnostic and heading-fallback only; last is never used to
+    # assign wrapper sides. Duplicate headings must not invalidate a wrapper BBO.
     "live_orderbook": {
         "heading_labels": ["Order Book"],
         "split_field": "last",

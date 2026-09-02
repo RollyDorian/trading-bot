@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -44,6 +45,37 @@ def _stamp(offset_ms: int) -> str:
 def test_extension_catalog_matches_python_catalog() -> None:
     loaded = json.loads(EXTENSION_CATALOG.read_text(encoding="utf-8"))
     assert loaded == SELECTOR_CATALOG
+
+
+def test_mv3_web_accessible_resources_matches_are_chrome_origin_wide() -> None:
+    """Chrome rejects WAR match patterns whose path is not exactly /*."""
+
+    manifest = json.loads(
+        (REPO / "extensions" / "mexc_ui_capture" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert manifest["manifest_version"] == 3
+    war = manifest["web_accessible_resources"]
+    assert len(war) == 1
+    war_matches = war[0]["matches"]
+    # Chrome: "Invalid match pattern" if the path is anything other than /*.
+    chrome_war_match = re.compile(r"^https://[^/\s]+/\*$")
+    assert war_matches == [
+        "https://www.mexc.com/*",
+        "https://futures.mexc.com/*",
+    ]
+    assert all(chrome_war_match.fullmatch(pattern) for pattern in war_matches)
+    assert "https://www.mexc.com/futures/*" not in war_matches
+    # Injection and host access stay futures-scoped; only WAR matches are origin-wide.
+    assert manifest["host_permissions"] == [
+        "https://www.mexc.com/futures/*",
+        "https://futures.mexc.com/*",
+    ]
+    assert manifest["content_scripts"][0]["matches"] == [
+        "https://www.mexc.com/futures/*",
+        "https://futures.mexc.com/*",
+    ]
 
 
 def test_synthetic_dom_captures_header_and_orderbook_not_ticket() -> None:
