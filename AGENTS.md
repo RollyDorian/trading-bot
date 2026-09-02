@@ -263,8 +263,11 @@ python -m venv .venv
    introduced `missing_wrapper_bbo` on 4 snapshots at session-2 start.
    STATUS `MEXC_UI_EXTENSION_E2E_AND_LONG_CAPTURE_PHASE_A_RETRY_FAIL`,
    DECISION `STOP_FOR_LEAD_REVIEW`
-   (`docs/mexc_ui_extension_e2e_and_long_capture_v1.md`). Phase B stays
-   not started. No ML / PAPER / LIVE. Design review
+   (`docs/mexc_ui_extension_e2e_and_long_capture_v1.md`). Follow-on
+   extension 1.2.2 injects on locale futures URLs
+   (`https://www.mexc.com/*/futures/*`, e.g. `/ru-RU/futures/TAO_USDT`)
+   and hardens popup Start/Stop when the content script is absent.
+   Phase B stays not started. No ML / PAPER / LIVE. Design review
    `EXTERNAL_RELATIVE_VALUE_FEED_DESIGN_REVIEW` then selected a minimal
    Binance USD-M `ETHUSDT` public `bookTicker`+`aggTrade` pilot (Bybit fallback),
    spool→Parquet→B2 storage (not `market_events`), isolated Compose service

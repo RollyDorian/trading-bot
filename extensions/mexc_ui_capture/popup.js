@@ -23,12 +23,74 @@ function send(message) {
   });
 }
 
-function broadcast(state) {
-  chrome.storage.local.set(state);
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    const tab = tabs[0];
-    if (!tab || !tab.id) return;
-    chrome.tabs.sendMessage(tab.id, { type: "CAPTURE_STATE", state });
+function persistState(state) {
+  return new Promise((resolve) => {
+    chrome.storage.local.set(state, () => {
+      const err = chrome.runtime.lastError && chrome.runtime.lastError.message;
+      if (err) {
+        resolve({ ok: false, error: err });
+        return;
+      }
+      resolve({ ok: true });
+    });
+  });
+}
+
+function isMissingReceiver(message) {
+  return /Receiving end does not exist/i.test(message || "");
+}
+
+function missingReceiverOperatorError(tabUrl) {
+  const where = tabUrl ? ` This tab is ${tabUrl}.` : "";
+  return (
+    "No capture script on this tab." +
+    where +
+    " Open a MEXC futures contract (for example /futures/TAO_USDT or /ru-RU/futures/TAO_USDT), reload the unpacked extension, then Start."
+  );
+}
+
+function notifyActiveTab(state) {
+  // Always consume chrome.runtime.lastError in the sendMessage callback so
+  // "Receiving end does not exist" is never an uncaught extension error.
+  return new Promise((resolve) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const queryErr = chrome.runtime.lastError && chrome.runtime.lastError.message;
+      if (queryErr) {
+        resolve({
+          ok: false,
+          no_receiver: false,
+          error: queryErr,
+          operator_error: `Could not read the active tab: ${queryErr}`,
+        });
+        return;
+      }
+      const tab = tabs && tabs[0];
+      if (!tab || tab.id == null) {
+        resolve({
+          ok: false,
+          no_receiver: true,
+          error: "no active tab",
+          operator_error: missingReceiverOperatorError(null),
+        });
+        return;
+      }
+      chrome.tabs.sendMessage(tab.id, { type: "CAPTURE_STATE", state }, (_response) => {
+        const err = chrome.runtime.lastError && chrome.runtime.lastError.message;
+        if (err) {
+          const noReceiver = isMissingReceiver(err);
+          resolve({
+            ok: false,
+            no_receiver: noReceiver,
+            error: err,
+            operator_error: noReceiver
+              ? missingReceiverOperatorError(tab.url || "")
+              : `Capture script error: ${err}`,
+          });
+          return;
+        }
+        resolve({ ok: true, no_receiver: false });
+      });
+    });
   });
 }
 
@@ -50,16 +112,41 @@ async function refreshStatus() {
   }
 }
 
-document.getElementById("start").addEventListener("click", () => {
+document.getElementById("start").addEventListener("click", async () => {
   const intervalMs = Number(document.getElementById("interval").value);
-  chrome.storage.local.set({ storageError: null });
-  broadcast({ capturing: true, intervalMs });
+  setError("");
+  const persist = await persistState({ storageError: null, capturing: true, intervalMs });
+  if (!persist.ok) {
+    setError(`Could not persist Start: ${persist.error}`);
+    setStatus("Stopped.");
+    return;
+  }
+  const notified = await notifyActiveTab({ capturing: true, intervalMs });
+  if (!notified.ok) {
+    // Start must not leave capturing=true when the content script is absent.
+    await persistState({ capturing: false });
+    setError(notified.operator_error);
+    setStatus("Stopped.");
+    return;
+  }
   setStatus("Capturing (read-only).");
   setTimeout(refreshStatus, 250);
 });
 
-document.getElementById("stop").addEventListener("click", () => {
-  broadcast({ capturing: false, intervalMs: Number(document.getElementById("interval").value) });
+document.getElementById("stop").addEventListener("click", async () => {
+  const intervalMs = Number(document.getElementById("interval").value);
+  const persist = await persistState({ capturing: false, intervalMs });
+  if (!persist.ok) {
+    setError(`Could not persist Stop: ${persist.error}`);
+    return;
+  }
+  const notified = await notifyActiveTab({ capturing: false, intervalMs });
+  // Stop is local-first: a missing receiver is not an operator failure.
+  if (!notified.ok && !notified.no_receiver) {
+    setError(`Stop persisted, but the page was not notified: ${notified.error}`);
+  } else {
+    setError("");
+  }
   setStatus("Stopped.");
   setTimeout(refreshStatus, 250);
 });

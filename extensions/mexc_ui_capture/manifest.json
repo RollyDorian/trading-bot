@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "MEXC UI Market Observation Capture v1",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Read-only capture of already-rendered MEXC futures market data. Durable local IndexedDB chunks. Does not trade.",
   "permissions": ["storage", "downloads"],
   "host_permissions": [
     "https://www.mexc.com/futures/*",
+    "https://www.mexc.com/*/futures/*",
     "https://futures.mexc.com/*"
   ],
   "background": {
@@ -19,6 +20,7 @@
     {
       "matches": [
         "https://www.mexc.com/futures/*",
+        "https://www.mexc.com/*/futures/*",
         "https://futures.mexc.com/*"
       ],
       "js": ["content.js"],

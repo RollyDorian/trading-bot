@@ -163,6 +163,22 @@ The first operator run **failed** on a 25 s contiguous burst of
 Session `a073233b` was clean. That heading class did **not** recur on
 the 1.2.1 retry.
 
+## Extension 1.2.2 — localized futures URL injection
+
+Not a new Phase A capture. Manifest 1.2.1 only injected on
+`https://www.mexc.com/futures/*`, so operator pages such as
+`https://www.mexc.com/ru-RU/futures/TAO_USDT?type=linear_swap` had no
+content script and popup Start raised uncaught
+`Receiving end does not exist`.
+
+1.2.2 adds `https://www.mexc.com/*/futures/*` to `host_permissions` and
+`content_scripts` (non-localized `/futures/*` and `futures.mexc.com`
+kept). Spot paths such as `/ru-RU/spot/` stay unmatched. Popup Start
+reverts persisted `capturing=false` when the receiver is absent; Stop
+is safe without a content script.
+
+Phase B remains **NOT_STARTED**. STOP_FOR_LEAD_REVIEW.
+
 ## Phase B
 
 **NOT_STARTED.** Do not begin the 8–12 hour TAOUSDT session. A new

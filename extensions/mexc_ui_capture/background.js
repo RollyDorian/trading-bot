@@ -23,8 +23,13 @@ async function failClosed(error) {
     // Still surface the original error to the operator.
   }
   await chrome.storage.local.set({ capturing: false, storageError: message });
+  // Same futures scope as content_scripts: locale paths such as /ru-RU/futures/*.
   const tabs = await chrome.tabs.query({
-    url: ["https://www.mexc.com/futures/*", "https://futures.mexc.com/*"],
+    url: [
+      "https://www.mexc.com/futures/*",
+      "https://www.mexc.com/*/futures/*",
+      "https://futures.mexc.com/*",
+    ],
   });
   for (const tab of tabs) {
     if (!tab.id) continue;
