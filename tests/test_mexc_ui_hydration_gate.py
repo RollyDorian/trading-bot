@@ -208,6 +208,7 @@ def test_live_orderbook_splits_by_last_not_mark_or_ticket() -> None:
     assert obs.last == pytest.approx(226.15)
     assert snap.fields["bid"].selector_id == "live_orderbook_split_by_last"
     assert snap.fields["ask"].selector_id == "live_orderbook_split_by_last"
+    assert snap.orderbook_diagnostics["chosen_bbo_source"] == "live_orderbook_heading_fallback"
 
 
 def test_wrapper_bbo_and_lastprice_class_ignore_ticket() -> None:

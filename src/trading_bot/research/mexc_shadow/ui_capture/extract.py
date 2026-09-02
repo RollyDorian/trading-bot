@@ -32,6 +32,7 @@ from trading_bot.research.mexc_shadow.ui_capture.schema import (
     FieldRecord,
     ParseStatus,
     UiRawSnapshot,
+    empty_orderbook_diagnostics,
 )
 
 _VOID = frozenset(
@@ -334,6 +335,42 @@ def _orderbook(root: _Node) -> tuple[
     return bids, asks, "data_attr:orderbook", []
 
 
+_DOCUMENTISH_TAGS = frozenset({"document", "html", "body"})
+_WRAPPER_AMBIGUITY_CODES = frozenset(
+    {
+        "ambiguous_live_orderbook",
+        "crossed_wrapper_bbo",
+        "missing_wrapper_bbo",
+    }
+)
+
+
+def _own_text(node: _Node) -> str:
+    return collapse_ws(node.text)
+
+
+def _style_hides(style: str) -> bool:
+    compact = "".join(style.lower().split())
+    return "display:none" in compact or "visibility:hidden" in compact
+
+
+def _is_visible(node: _Node) -> bool:
+    """Python fixture visibility: connected tree + not display:none/visibility:hidden/hidden.
+
+    Live extension also requires a non-zero rendered rect. Fixtures have no layout
+    engine, so they encode hidden duplicates with hidden/style rather than zero boxes.
+    """
+
+    current: _Node | None = node
+    while current is not None and current.tag != "document":
+        if "hidden" in current.attrs:
+            return False
+        if _style_hides(current.attrs.get("style") or ""):
+            return False
+        current = current.parent
+    return True
+
+
 def _node_contains(ancestor: _Node, node: _Node) -> bool:
     current: _Node | None = node
     while current is not None:
@@ -343,10 +380,35 @@ def _node_contains(ancestor: _Node, node: _Node) -> bool:
     return False
 
 
-def _coalesce_book_roots(
-    roots: list[_Node], problem_code: str = "ambiguous_orderbook_heading"
-) -> tuple[_Node | None, list[str]]:
-    """One unique panel, or invalid. Nested headings of the same panel are ok."""
+def _depth(node: _Node) -> int:
+    n = 0
+    current: _Node | None = node
+    while current is not None:
+        n += 1
+        current = current.parent
+    return n
+
+
+def _lca(left: _Node, right: _Node) -> _Node | None:
+    seen: set[int] = set()
+    current: _Node | None = left
+    while current is not None:
+        seen.add(id(current))
+        current = current.parent
+    current = right
+    while current is not None:
+        if id(current) in seen:
+            return current
+        current = current.parent
+    return None
+
+
+def _is_documentish(node: _Node | None) -> bool:
+    return node is None or node.tag in _DOCUMENTISH_TAGS
+
+
+def _unique_nested_roots(roots: list[_Node]) -> list[_Node]:
+    """Collapse nested duplicates of the same side. Distinct siblings stay distinct."""
 
     unique: list[_Node] = []
     for node in roots:
@@ -361,6 +423,15 @@ def _coalesce_book_roots(
                 break
         if not absorbed:
             unique.append(node)
+    return unique
+
+
+def _coalesce_book_roots(
+    roots: list[_Node], problem_code: str = "ambiguous_orderbook_heading"
+) -> tuple[_Node | None, list[str]]:
+    """One unique panel, or invalid. Nested headings of the same panel are ok."""
+
+    unique = _unique_nested_roots(roots)
     if not unique:
         return None, []
     if len(unique) > 1:
@@ -368,17 +439,9 @@ def _coalesce_book_roots(
     return unique[0], []
 
 
-def _wrapper_side_prices(
-    root: _Node, wrap_token: str, price_token: str, problem_code: str
-) -> tuple[list[float], list[str]]:
-    hits = _class_hits(root, wrap_token)
-    if not hits:
-        return [], []
-    book, problems = _coalesce_book_roots(hits, problem_code)
-    if problems or book is None:
-        return [], problems
+def _wrapper_prices(wrap: _Node, price_token: str) -> list[float]:
     prices: list[float] = []
-    for node in _walk(book):
+    for node in _walk(wrap):
         if _ignored(node):
             continue
         if price_token not in node.attrs.get("class", ""):
@@ -386,37 +449,180 @@ def _wrapper_side_prices(
         price = parse_price(_own_text(node) or _combined_text(node))
         if price is not None:
             prices.append(price)
-    return prices, []
+    return prices
 
 
-def _wrapper_bbo(root: _Node) -> tuple[float | None, float | None, list[str]]:
-    """BBO from unique asksWrapper/bidsWrapper. Ambiguous wrappers are invalid."""
+def _tree_distance(left: _Node, right: _Node) -> int:
+    ancestor = _lca(left, right)
+    if ancestor is None:
+        return 10**9
+    return _depth(left) + _depth(right) - 2 * _depth(ancestor)
 
-    spec = SELECTOR_CATALOG["live_orderbook"]
-    ask_wrap = spec.get("asks_class_contains")
-    bid_wrap = spec.get("bids_class_contains")
-    if not ask_wrap or not bid_wrap:
-        return None, None, []
-    asks, ask_problems = _wrapper_side_prices(
-        root, str(ask_wrap), str(spec["ask_price_class_contains"]), "ambiguous_asks_wrapper"
-    )
-    bids, bid_problems = _wrapper_side_prices(
-        root, str(bid_wrap), str(spec["bid_price_class_contains"]), "ambiguous_bids_wrapper"
-    )
-    problems = ask_problems + bid_problems
-    if problems:
-        return None, None, problems
+
+def _pair_ask_bid_wrappers(
+    asks: list[_Node], bids: list[_Node]
+) -> list[tuple[_Node, _Node]]:
+    """Pair visible ask/bid wrappers that share a book component.
+
+    Exactly one visible ask + one visible bid is always a pair, even when the
+    LCA is body (MEXC often renders the two wrappers as siblings).
+    """
+
+    asks_u = _unique_nested_roots(asks)
+    bids_u = _unique_nested_roots(bids)
+    if not asks_u or not bids_u:
+        return []
+    if len(asks_u) == 1 and len(bids_u) == 1:
+        return [(asks_u[0], bids_u[0])]
+    scored: list[tuple[int, int, _Node, _Node]] = []
+    for ask_node in asks_u:
+        for bid_node in bids_u:
+            ancestor = _lca(ask_node, bid_node)
+            scored.append(
+                (
+                    _tree_distance(ask_node, bid_node),
+                    0 if ancestor is None else _depth(ancestor),
+                    ask_node,
+                    bid_node,
+                )
+            )
+    scored.sort(key=lambda row: (row[0], -row[1]))
+    used_asks: set[int] = set()
+    used_bids: set[int] = set()
+    pairs: list[tuple[_Node, _Node]] = []
+    for _dist, _lca_depth, ask_node, bid_node in scored:
+        if id(ask_node) in used_asks or id(bid_node) in used_bids:
+            continue
+        pairs.append((ask_node, bid_node))
+        used_asks.add(id(ask_node))
+        used_bids.add(id(bid_node))
+    return pairs
+
+
+def _pair_nested_in(
+    inner: tuple[_Node, _Node], outer: tuple[_Node, _Node]
+) -> bool:
+    """True when inner sits inside the outer pair's non-document container."""
+
+    container = _lca(outer[0], outer[1])
+    if _is_documentish(container) or container is None:
+        return False
+    return _node_contains(container, inner[0]) and _node_contains(container, inner[1])
+
+
+def _bbo_from_wrapper_pair(
+    ask_wrap: _Node, bid_wrap: _Node, ask_token: str, bid_token: str
+) -> tuple[float | None, float | None, str | None]:
+    asks = _wrapper_prices(ask_wrap, ask_token)
+    bids = _wrapper_prices(bid_wrap, bid_token)
     if not asks or not bids:
-        return None, None, []
+        return None, None, "missing_wrapper_bbo"
     best_ask = min(asks)
     best_bid = max(bids)
     if best_bid >= best_ask:
+        return None, None, "crossed_wrapper_bbo"
+    return best_bid, best_ask, None
+
+
+def _count_orderbook_presence(root: _Node) -> dict[str, Any]:
+    spec = SELECTOR_CATALOG["live_orderbook"]
+    headings = _label_matches(root, list(spec.get("heading_labels") or []))
+    asks = _class_hits(root, str(spec.get("asks_class_contains") or "asksWrapper"))
+    bids = _class_hits(root, str(spec.get("bids_class_contains") or "bidsWrapper"))
+    diag = empty_orderbook_diagnostics()
+    diag["orderbook_heading_count"] = len(headings)
+    diag["visible_orderbook_heading_count"] = sum(1 for node in headings if _is_visible(node))
+    diag["asks_wrapper_count"] = len(asks)
+    diag["visible_asks_wrapper_count"] = sum(1 for node in asks if _is_visible(node))
+    diag["bids_wrapper_count"] = len(bids)
+    diag["visible_bids_wrapper_count"] = sum(1 for node in bids if _is_visible(node))
+    return diag
+
+
+def _wrapper_path_available(diag: dict[str, Any]) -> bool:
+    return (
+        int(diag.get("visible_asks_wrapper_count") or 0) > 0
+        and int(diag.get("visible_bids_wrapper_count") or 0) > 0
+    )
+
+
+def _resolve_wrapper_bbo(
+    root: _Node,
+) -> tuple[float | None, float | None, list[str]]:
+    """Canonical live BBO from visible asksWrapper/bidsWrapper pairs.
+
+    Sides come from MEXC wrapper/class tokens only. Last is never used to split.
+    """
+
+    spec = SELECTOR_CATALOG["live_orderbook"]
+    ask_wrap_token = spec.get("asks_class_contains")
+    bid_wrap_token = spec.get("bids_class_contains")
+    if not ask_wrap_token or not bid_wrap_token:
         return None, None, []
-    return best_bid, best_ask, []
-
-
-def _own_text(node: _Node) -> str:
-    return collapse_ws(node.text)
+    ask_token = str(spec["ask_price_class_contains"])
+    bid_token = str(spec["bid_price_class_contains"])
+    visible_asks = [
+        node
+        for node in _class_hits(root, str(ask_wrap_token))
+        if _is_visible(node)
+    ]
+    visible_bids = [
+        node
+        for node in _class_hits(root, str(bid_wrap_token))
+        if _is_visible(node)
+    ]
+    if not visible_asks or not visible_bids:
+        return None, None, []
+    asks_u = _unique_nested_roots(visible_asks)
+    bids_u = _unique_nested_roots(visible_bids)
+    pairs = _pair_ask_bid_wrappers(visible_asks, visible_bids)
+    used = {id(node) for pair in pairs for node in pair}
+    leftover_priced = False
+    for node in asks_u:
+        if id(node) not in used and _wrapper_prices(node, ask_token):
+            leftover_priced = True
+            break
+    if not leftover_priced:
+        for node in bids_u:
+            if id(node) not in used and _wrapper_prices(node, bid_token):
+                leftover_priced = True
+                break
+    if leftover_priced:
+        return None, None, ["ambiguous_live_orderbook"]
+    if not pairs:
+        return None, None, ["ambiguous_live_orderbook"]
+    resolved: list[tuple[tuple[_Node, _Node], float, float]] = []
+    for ask_wrap, bid_wrap in pairs:
+        best_bid, best_ask, error = _bbo_from_wrapper_pair(
+            ask_wrap, bid_wrap, ask_token, bid_token
+        )
+        if error:
+            return None, None, [error]
+        if best_bid is None or best_ask is None:
+            return None, None, ["missing_wrapper_bbo"]
+        resolved.append(((ask_wrap, bid_wrap), best_bid, best_ask))
+    unique_bbos = {(bid, ask) for _pair, bid, ask in resolved}
+    if len(unique_bbos) > 1:
+        return None, None, ["ambiguous_live_orderbook"]
+    if len(resolved) == 1:
+        _pair, best_bid, best_ask = resolved[0]
+        return best_bid, best_ask, []
+    # Identical BBO on multiple visible pairs: allow only nested containment.
+    outers: list[tuple[tuple[_Node, _Node], float, float]] = []
+    for candidate in resolved:
+        nested = False
+        for other in resolved:
+            if candidate[0] is other[0]:
+                continue
+            if _pair_nested_in(candidate[0], other[0]):
+                nested = True
+                break
+        if not nested:
+            outers.append(candidate)
+    if len(outers) == 1:
+        _pair, best_bid, best_ask = outers[0]
+        return best_bid, best_ask, []
+    return None, None, ["ambiguous_live_orderbook"]
 
 
 def _collect_own_prices(root: _Node) -> list[float]:
@@ -433,10 +639,17 @@ def _collect_own_prices(root: _Node) -> list[float]:
 def _live_orderbook(
     root: _Node, last_value: float | None
 ) -> tuple[float | None, float | None, list[str]]:
-    """BBO from a unique Order Book panel, split by Last Price only — never mark/index."""
+    """Heading fallback only: unique visible Order Book panel, split by last.
+
+    Never Fair/Index, never ticket numbers, never used when wrappers are present.
+    """
 
     spec = SELECTOR_CATALOG["live_orderbook"]
-    headings = _label_matches(root, list(spec.get("heading_labels") or []))
+    headings = [
+        node
+        for node in _label_matches(root, list(spec.get("heading_labels") or []))
+        if _is_visible(node)
+    ]
     if not headings:
         return None, None, []
     header_labels = [
@@ -448,8 +661,9 @@ def _live_orderbook(
     ]
     band = float(spec["price_band_frac"])
     min_side = int(spec["min_side_levels"])
-    # Coalesce heading parents first. Distinct panels are invalid, never an arbitrary pick.
-    book, problems = _coalesce_book_roots([(heading.parent or heading) for heading in headings])
+    book, problems = _coalesce_book_roots(
+        [(heading.parent or heading) for heading in headings]
+    )
     if problems or book is None:
         return None, None, problems
     if last_value is None or last_value <= 0:
@@ -484,6 +698,37 @@ def _live_orderbook(
     if best_bid >= best_ask:
         return None, None, []
     return best_bid, best_ask, []
+
+
+def _chosen_bbo_source(fields: dict[str, FieldRecord]) -> str:
+    bid = fields.get("bid")
+    ask = fields.get("ask")
+    if bid is None or ask is None:
+        return "none"
+    ok = {"ok", "ok_redundant"}
+    if bid.parse_status not in ok or ask.parse_status not in ok:
+        return "none"
+    bid_sel = bid.selector_id or ""
+    ask_sel = ask.selector_id or ""
+    if "live_asks_bids_wrapper" in {bid_sel, ask_sel}:
+        return "live_asks_bids_wrapper"
+    if "live_orderbook_split_by_last" in {bid_sel, ask_sel}:
+        return "live_orderbook_heading_fallback"
+    if bid_sel.startswith("data_attr") or ask_sel.startswith("data_attr"):
+        return "data_attr"
+    if bid_sel in {"orderbook_max_bid", "orderbook_min_ask"} or ask_sel in {
+        "orderbook_max_bid",
+        "orderbook_min_ask",
+    }:
+        return "data_attr:orderbook"
+    return bid_sel or ask_sel or "none"
+
+
+def _ambiguity_reason(extra_reasons: list[str]) -> str | None:
+    for code in extra_reasons:
+        if code in _WRAPPER_AMBIGUITY_CODES or code == "ambiguous_orderbook_heading":
+            return code
+    return None
 
 
 def extract_html(
@@ -583,8 +828,13 @@ def extract_html(
         if isinstance(last_raw, int | float) and not isinstance(last_raw, bool)
         else None
     )
-    if fields["bid"].parse_status == "missing" or fields["ask"].parse_status == "missing":
-        wrap_bid, wrap_ask, wrap_problems = _wrapper_bbo(root)
+    diagnostics = _count_orderbook_presence(root)
+    wrapper_available = _wrapper_path_available(diagnostics)
+    needs_live_bbo = (
+        fields["bid"].parse_status == "missing" or fields["ask"].parse_status == "missing"
+    )
+    if needs_live_bbo and wrapper_available:
+        wrap_bid, wrap_ask, wrap_problems = _resolve_wrapper_bbo(root)
         extra_reasons.extend(wrap_problems)
         if wrap_bid is not None and fields["bid"].parse_status == "missing":
             fields["bid"] = FieldRecord(
@@ -604,7 +854,12 @@ def extract_html(
                 parse_status="ok",
                 match_count=1,
             )
-    if fields["bid"].parse_status == "missing" or fields["ask"].parse_status == "missing":
+    # Heading fallback only when the wrapper path is unavailable. Duplicate
+    # headings must not run (or invalidate) when wrappers uniquely resolve.
+    if (
+        (fields["bid"].parse_status == "missing" or fields["ask"].parse_status == "missing")
+        and not wrapper_available
+    ):
         live_bid, live_ask, live_problems = _live_orderbook(root, last_value)
         extra_reasons.extend(live_problems)
         if live_bid is not None and fields["bid"].parse_status == "missing":
@@ -625,6 +880,8 @@ def extract_html(
                 parse_status="ok",
                 match_count=1,
             )
+    diagnostics["chosen_bbo_source"] = _chosen_bbo_source(fields)
+    diagnostics["ambiguity_reason"] = _ambiguity_reason(extra_reasons)
 
     invalid_reasons = list(extra_reasons)
     for name, spec in SELECTOR_CATALOG["fields"].items():
@@ -675,4 +932,5 @@ def extract_html(
         depth_selector_id=depth_selector,
         exchange_display_at=exchange_at,
         capture_id=capture_id,
+        orderbook_diagnostics=diagnostics,
     )

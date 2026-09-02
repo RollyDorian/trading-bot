@@ -299,3 +299,25 @@ class DurableCaptureStore:
 
     def export_ndjson(self, session_id: str) -> str:
         return "\n".join(self.export_lines(session_id)) + "\n"
+
+    def list_session_ids(self) -> list[str]:
+        """Oldest-first session ids so stop/start boundaries stay ordered."""
+
+        return sorted(
+            self.sessions,
+            key=lambda session_id: (self.sessions[session_id].started_at, session_id),
+        )
+
+    def export_all_lines(self) -> list[str]:
+        """Concatenate every session as session_start / snapshots / session_end."""
+
+        session_ids = self.list_session_ids()
+        if not session_ids:
+            raise DurableStorageError("no capture session to export")
+        lines: list[str] = []
+        for session_id in session_ids:
+            lines.extend(self.export_lines(session_id))
+        return lines
+
+    def export_all_ndjson(self) -> str:
+        return "\n".join(self.export_all_lines()) + "\n"

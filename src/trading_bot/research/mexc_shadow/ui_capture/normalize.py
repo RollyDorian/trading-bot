@@ -16,6 +16,7 @@ from trading_bot.research.mexc_shadow.ui_capture.schema import (
     NormalizedCapture,
     ParseStatus,
     UiRawSnapshot,
+    sanitize_orderbook_diagnostics,
 )
 
 _PARSE_STATUS: dict[str, ParseStatus] = {
@@ -107,6 +108,9 @@ def snapshot_from_mapping(payload: Mapping[str, Any]) -> UiRawSnapshot:
         if payload.get("exchange_display_at") is None
         else str(payload["exchange_display_at"]),
         capture_id=None if payload.get("capture_id") is None else str(payload["capture_id"]),
+        orderbook_diagnostics=sanitize_orderbook_diagnostics(
+            payload.get("orderbook_diagnostics")
+        ),
     )
 
 

@@ -99,6 +99,14 @@ async function handleMessage(message) {
       return { ok: false, error: storageErrorText(error) };
     }
   }
+  if (message.type === "EXPORT_BEGIN_ALL") {
+    try {
+      const exported = await MexcDurable.exportMetaAll();
+      return { ok: true, ...exported };
+    } catch (error) {
+      return { ok: false, error: storageErrorText(error) };
+    }
+  }
   if (message.type === "EXPORT_CHUNK") {
     try {
       const lines = await MexcDurable.exportChunk(message.session_id, Number(message.chunk_index));
@@ -113,6 +121,7 @@ async function handleMessage(message) {
     const lastId = await MexcDurable.getMeta("last_session_id");
     const sessionId = activeId || lastId;
     const meta = sessionId ? await MexcDurable.getSession(sessionId) : null;
+    const sessions = await MexcDurable.listSessions();
     return {
       ok: true,
       capturing: Boolean(capturing.capturing),
@@ -121,6 +130,7 @@ async function handleMessage(message) {
       session_id: sessionId,
       n: meta ? meta.n_snapshots : 0,
       n_chunks: meta ? meta.n_chunks : 0,
+      n_sessions: sessions.length,
       last_sequence: meta ? meta.last_sequence : null,
       status: meta ? meta.status : "idle",
     };

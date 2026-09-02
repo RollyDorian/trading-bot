@@ -273,6 +273,40 @@ const MexcDurable = {
     };
   },
 
+  async listSessions() {
+    // Oldest-first so export-all preserves stop/start and reload boundaries.
+    const db = await openDb();
+    try {
+      const tx = db.transaction("sessions", "readonly");
+      const rows = await reqAsPromise(tx.objectStore("sessions").getAll());
+      await waitTx(tx);
+      const list = Array.isArray(rows) ? rows.slice() : [];
+      list.sort((left, right) => {
+        const started = String(left.started_at || "").localeCompare(String(right.started_at || ""));
+        if (started !== 0) return started;
+        return String(left.session_id || "").localeCompare(String(right.session_id || ""));
+      });
+      return list;
+    } finally {
+      db.close();
+    }
+  },
+
+  async exportMetaAll() {
+    const sessions = await this.listSessions();
+    if (!sessions.length) throw new Error("no capture session to export");
+    return {
+      n_sessions: sessions.length,
+      sessions: sessions.map((meta) => ({
+        session_id: meta.session_id,
+        n_chunks: meta.n_chunks,
+        n_snapshots: meta.n_snapshots,
+        session_start: sessionStartRecord(meta),
+        session_end: sessionEndRecord(meta),
+      })),
+    };
+  },
+
   async exportChunk(sessionId, chunkIndex) {
     const db = await openDb();
     try {
