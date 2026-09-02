@@ -6,6 +6,7 @@ import json
 import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -70,12 +71,94 @@ def test_mv3_web_accessible_resources_matches_are_chrome_origin_wide() -> None:
     # Injection and host access stay futures-scoped; only WAR matches are origin-wide.
     assert manifest["host_permissions"] == [
         "https://www.mexc.com/futures/*",
+        "https://www.mexc.com/*/futures/*",
         "https://futures.mexc.com/*",
     ]
     assert manifest["content_scripts"][0]["matches"] == [
         "https://www.mexc.com/futures/*",
+        "https://www.mexc.com/*/futures/*",
         "https://futures.mexc.com/*",
     ]
+    assert "https://www.mexc.com/*" not in manifest["content_scripts"][0]["matches"]
+    assert "https://www.mexc.com/*" not in manifest["host_permissions"]
+
+
+def _chrome_match_pattern_matches(pattern: str, url: str) -> bool:
+    """Path-glob subset of Chrome match patterns for this extension's https hosts.
+
+    Query and fragment are ignored, matching Chrome. ``*`` in the path matches
+    any string including slashes and the empty string; ``/*/futures/*`` therefore
+    does not match ``/futures/...`` (no extra path segment), which is why the
+    manifest keeps both patterns.
+    """
+    scheme, rest = pattern.split("://", 1)
+    host, path_glob = rest.split("/", 1)
+    path_glob = "/" + path_glob
+    parts = urlsplit(url)
+    if parts.scheme != scheme:
+        return False
+    if (parts.hostname or "").lower() != host.lower():
+        return False
+    path = parts.path or "/"
+    regex = ".*".join(re.escape(piece) for piece in path_glob.split("*"))
+    return re.fullmatch(regex, path) is not None
+
+
+def _content_script_matches(url: str) -> bool:
+    manifest = json.loads(
+        (REPO / "extensions" / "mexc_ui_capture" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    patterns = manifest["content_scripts"][0]["matches"]
+    return any(_chrome_match_pattern_matches(pattern, url) for pattern in patterns)
+
+
+def test_content_scripts_match_localized_and_plain_futures_not_spot() -> None:
+    assert _content_script_matches("https://www.mexc.com/futures/TAO_USDT")
+    assert _content_script_matches(
+        "https://www.mexc.com/ru-RU/futures/TAO_USDT?type=linear_swap"
+    )
+    assert _content_script_matches("https://www.mexc.com/en-US/futures/TAO_USDT")
+    assert _content_script_matches("https://futures.mexc.com/exchange/TAO_USDT")
+    assert not _content_script_matches("https://www.mexc.com/ru-RU/spot/TAO_USDT")
+    assert not _content_script_matches("https://www.mexc.com/spot/TAO_USDT")
+    assert not _content_script_matches("https://www.mexc.com/ru-RU/markets")
+    locale_only = "https://www.mexc.com/*/futures/*"
+    assert _chrome_match_pattern_matches(
+        locale_only, "https://www.mexc.com/ru-RU/futures/TAO_USDT"
+    )
+    assert not _chrome_match_pattern_matches(
+        locale_only, "https://www.mexc.com/futures/TAO_USDT"
+    )
+
+
+def test_popup_hardens_absent_content_script_receiver() -> None:
+    popup = (REPO / "extensions" / "mexc_ui_capture" / "popup.js").read_text(
+        encoding="utf-8"
+    )
+    content = (REPO / "extensions" / "mexc_ui_capture" / "content.js").read_text(
+        encoding="utf-8"
+    )
+    background = (REPO / "extensions" / "mexc_ui_capture" / "background.js").read_text(
+        encoding="utf-8"
+    )
+    assert "chrome.runtime.lastError" in popup
+    assert "Receiving end does not exist" in popup
+    assert "no_receiver" in popup
+    assert "capturing: false" in popup
+    assert "notifyActiveTab" in popup
+    assert "function broadcast(" not in popup
+    assert "/ru-RU/futures/TAO_USDT" in popup
+    assert "No capture script on this tab." in popup
+    # sendMessage must use a callback so lastError is consumed.
+    assert re.search(
+        r"chrome\.tabs\.sendMessage\([\s\S]*?,\s*\(_response\)\s*=>",
+        popup,
+    )
+    assert "sendResponse({ ok: true })" in content
+    assert 'message.type === "CAPTURE_STATE"' in content
+    assert "https://www.mexc.com/*/futures/*" in background
 
 
 def test_synthetic_dom_captures_header_and_orderbook_not_ticket() -> None:

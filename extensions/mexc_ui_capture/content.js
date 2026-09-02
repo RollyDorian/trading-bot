@@ -887,8 +887,13 @@
     intervalId = setInterval(() => emit("interval"), intervalMs);
   }
 
-  chrome.runtime.onMessage.addListener((message) => {
-    if (message && message.type === "CAPTURE_STATE") applyState(message.state);
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message && message.type === "CAPTURE_STATE") {
+      // Ack synchronously so the popup can tell "script is present" from
+      // "Receiving end does not exist" without waiting on applyState.
+      sendResponse({ ok: true });
+      applyState(message.state);
+    }
   });
 
   fetch(chrome.runtime.getURL("selector_catalog_v1.json"))

@@ -51,7 +51,9 @@ the operator already opened.
 ## Operator capture (unpacked extension)
 
 Load `extensions/mexc_ui_capture/` as an unpacked Chrome/Edge extension.
-Open `https://www.mexc.com/futures/TAO_USDT` (or another futures pair).
+Open a futures contract, including locale URLs such as
+`https://www.mexc.com/futures/TAO_USDT` or
+`https://www.mexc.com/ru-RU/futures/TAO_USDT?type=linear_swap`.
 Start capture from the popup. Interval is 250 / 500 / 1000 ms as a
 sampling fallback beside MutationObserver. Export NDJSON locally.
 Ingest with:
