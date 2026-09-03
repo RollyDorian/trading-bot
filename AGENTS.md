@@ -267,7 +267,16 @@ python -m venv .venv
    extension 1.2.2 injects on locale futures URLs
    (`https://www.mexc.com/*/futures/*`, e.g. `/ru-RU/futures/TAO_USDT`)
    and hardens popup Start/Stop when the content script is absent.
-   Phase B stays not started. No ML / PAPER / LIVE. Design review
+   Follow-on `MEXC_TAO_LONG_OBSERVATION_V1` scored a real 11.67 h
+   `TAOUSDT` IndexedDB export-all (162 075 snapshots, 1 session, 649
+   chunks). Executable wrapper BBO is continuous (0 `DATA_INVALID` after
+   readiness); raw symbol/mark/index are missing on the ru-RU page (symbol
+   recovered from path at replay only). Frozen `author_observed_v0`
+   HYPOTHESIS_SMOKE is 0 candidates because gap needs mark. Extension
+   1.2.3 parses locale `/…/futures/…` for future captures. STATUS
+   `MEXC_TAO_LONG_OBSERVATION_READY_WITH_FINDINGS`, DECISION
+   `STOP_FOR_LEAD_REVIEW` (`docs/mexc_tao_long_observation_v1.md`).
+   Phase B-style 8–12 h capture is done; do not retune. No ML / PAPER / LIVE. Design review
    `EXTERNAL_RELATIVE_VALUE_FEED_DESIGN_REVIEW` then selected a minimal
    Binance USD-M `ETHUSDT` public `bookTicker`+`aggTrade` pilot (Bybit fallback),
    spool→Parquet→B2 storage (not `market_events`), isolated Compose service

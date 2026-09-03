@@ -7,7 +7,6 @@ from pathlib import Path
 
 from trading_bot.research.mexc_shadow.engine import run_shadow_replay
 from trading_bot.research.mexc_shadow.profiles import load_profile
-from trading_bot.research.mexc_shadow.source import MemorySource
 from trading_bot.research.mexc_shadow.types import Observation, ReplayReport
 from trading_bot.research.mexc_shadow.ui_capture.normalize import (
     observation_from_snapshot,
@@ -58,7 +57,8 @@ def replay_capture_smoke(
     """Run a frozen profile as pipeline smoke. Not an edge evaluation."""
 
     config = load_profile(profile_id)
-    report = run_shadow_replay(MemorySource(list(iter_replay_observations(path))), config)
+    # Stream observations; do not materialize the full capture for smoke.
+    report = run_shadow_replay(CaptureNdjsonSource(path), config)
     extra = (HYPOTHESIS_SMOKE_NOTE,) if hypothesis_smoke else ()
     report.notes = (*report.notes, SMOKE_NOTE, *extra)
     return report

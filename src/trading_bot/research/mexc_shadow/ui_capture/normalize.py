@@ -9,7 +9,10 @@ from typing import Any
 from trading_bot.research.mexc_shadow.safety import assert_no_credential_keys
 from trading_bot.research.mexc_shadow.types import Observation
 from trading_bot.research.mexc_shadow.ui_capture.catalog import SCHEMA_NAME, SCHEMA_VERSION
-from trading_bot.research.mexc_shadow.ui_capture.parse import parse_iso_timestamp
+from trading_bot.research.mexc_shadow.ui_capture.parse import (
+    parse_iso_timestamp,
+    symbol_from_futures_path,
+)
 from trading_bot.research.mexc_shadow.ui_capture.schema import (
     CaptureTrigger,
     FieldRecord,
@@ -139,17 +142,35 @@ def _ok_number(record: FieldRecord | None) -> float | None:
     return None
 
 
+def _snapshot_symbol(snapshot: UiRawSnapshot) -> str | None:
+    symbol_rec = snapshot.fields.get("symbol")
+    symbol = symbol_rec.value if symbol_rec is not None else None
+    if isinstance(symbol, str) and symbol:
+        return symbol
+    if isinstance(snapshot.symbol_hint, str) and snapshot.symbol_hint:
+        return snapshot.symbol_hint
+    return symbol_from_futures_path(snapshot.page_path)
+
+
+def _symbol_only_invalid(snapshot: UiRawSnapshot) -> bool:
+    reasons = snapshot.invalid_reasons
+    if not reasons:
+        return False
+    return all(reason == "missing_required:symbol" for reason in reasons)
+
+
 def observation_from_snapshot(snapshot: UiRawSnapshot) -> NormalizedCapture:
     """Map a snapshot to Observation only when executable bid/ask are valid.
 
     Mid is left None unless the UI supplied a mid field (it does not in v1).
     Shadow PnL must use bid/ask, not a synthesized mid.
+    Locale futures paths such as /ru-RU/futures/TAO_USDT recover identity from
+    the captured page_path when the raw snapshot lacked a symbol field.
     """
 
-    if not snapshot.observation_valid:
+    if not snapshot.observation_valid and not _symbol_only_invalid(snapshot):
         return NormalizedCapture(snapshot, None, "observation_invalid")
-    symbol_rec = snapshot.fields.get("symbol")
-    symbol = symbol_rec.value if symbol_rec is not None else snapshot.symbol_hint
+    symbol = _snapshot_symbol(snapshot)
     if not isinstance(symbol, str) or not symbol:
         return NormalizedCapture(snapshot, None, "missing_symbol")
     bid = _ok_number(snapshot.fields.get("bid"))

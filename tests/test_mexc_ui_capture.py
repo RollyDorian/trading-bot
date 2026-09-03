@@ -158,6 +158,8 @@ def test_popup_hardens_absent_content_script_receiver() -> None:
     )
     assert "sendResponse({ ok: true })" in content
     assert 'message.type === "CAPTURE_STATE"' in content
+    assert "symbolHint" in content
+    assert 'parts.indexOf("futures")' in content
     assert "https://www.mexc.com/*/futures/*" in background
 
 

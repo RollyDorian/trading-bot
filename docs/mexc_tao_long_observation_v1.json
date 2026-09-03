@@ -1,0 +1,916 @@
+{
+  "STATUS": "MEXC_TAO_LONG_OBSERVATION_READY_WITH_FINDINGS",
+  "DECISION": "STOP_FOR_LEAD_REVIEW",
+  "ML_STATUS": "NOT_STARTED",
+  "PAPER": false,
+  "LIVE": false,
+  "STRATEGY_TUNING": false,
+  "profiles_frozen": [
+    "author_observed_v0",
+    "conservative_v0"
+  ],
+  "milestone": "MEXC_TAO_LONG_OBSERVATION_V1",
+  "prior_milestone": "MEXC_UI_EXTENSION_E2E_AND_LONG_CAPTURE_V1",
+  "raw_rewritten": false,
+  "bbo_forward_filled": false,
+  "file": {
+    "path": "data/mexc_ui_capture/mexc_ui_capture_sessions_2026-09-03T04-12-21-619Z.ndjson",
+    "name": "mexc_ui_capture_sessions_2026-09-03T04-12-21-619Z.ndjson",
+    "sha256": "7a41c34d4ae855850cd8a1a47e438e940c38e09d6f5a555c3f397e5650da9c2a",
+    "bytes": 437759548
+  },
+  "capture_quality": {
+    "n_raw": 162075,
+    "n_valid_for_replay": 162075,
+    "n_invalid": 0,
+    "n_startup_warmup": 0,
+    "n_data_invalid": 0,
+    "n_ready_valid": 162075,
+    "class_counts": {
+      "READY_VALID": 162075
+    },
+    "invalid_reasons": {},
+    "startup_warmup_reasons": {},
+    "data_invalid_reasons": {},
+    "missingness": {
+      "symbol": 162075,
+      "bid_size": 162075,
+      "ask_size": 162075,
+      "mark": 162075,
+      "index": 162075,
+      "funding": 162075,
+      "exchange_display_at": 162075
+    },
+    "parse_status_counts": {
+      "missing": 1134525,
+      "ok": 486225
+    },
+    "interarrival_ms": {
+      "n": 162074,
+      "p50_ms": 176.0,
+      "p90_ms": 552.0,
+      "p95_ms": 735.0,
+      "p99_ms": 1071.0,
+      "min_ms": 58.0,
+      "max_ms": 2067.0
+    },
+    "field_age_ms": {
+      "ask": {
+        "n": 162075,
+        "min_ms": 0.0,
+        "p50_ms": 2659.0,
+        "p90_ms": 14220.0,
+        "p95_ms": 22790.0,
+        "p99_ms": 58107.0,
+        "max_ms": 979165.0
+      },
+      "bid": {
+        "n": 162075,
+        "min_ms": 0.0,
+        "p50_ms": 2756.0,
+        "p90_ms": 15854.0,
+        "p95_ms": 26164.0,
+        "p99_ms": 59359.0,
+        "max_ms": 979165.0
+      },
+      "last": {
+        "n": 162075,
+        "min_ms": 0.0,
+        "p50_ms": 3892.0,
+        "p90_ms": 11799.0,
+        "p95_ms": 14949.0,
+        "p99_ms": 39171.0,
+        "max_ms": 107953.0
+      }
+    },
+    "field_change_counts": {
+      "bid": 9179,
+      "ask": 9271,
+      "last": 5465
+    },
+    "field_change_rate": {
+      "bid": 0.0566342742557458,
+      "ask": 0.05720191269474009,
+      "last": 0.0337189572728675
+    },
+    "n_bid_ge_ask": 0,
+    "n_simultaneous_bid_ask_mark_index": 0,
+    "n_simultaneous_bid_ask_last_mark_index": 0,
+    "coexistence_bid_ask_mark_index": 0,
+    "selector_diagnostics": {
+      "chosen_bbo_source": {
+        "live_asks_bids_wrapper": 162075
+      },
+      "ambiguity_reason": {},
+      "orderbook_heading_count": {
+        "0": 162075
+      },
+      "visible_orderbook_heading_count": {
+        "0": 162075
+      }
+    },
+    "warmup_and_invalid_bursts": [],
+    "first_ready": {
+      "session_id": "bc4819c7-6035-4078-8620-e6b6dd122c7b",
+      "sequence": 1,
+      "received_at_local": "2026-09-02T16:32:02.198Z"
+    },
+    "required_ready_fields": [
+      "symbol",
+      "bid",
+      "ask"
+    ],
+    "sequence_diagnostics": [],
+    "sessions": [
+      {
+        "session_id": "bc4819c7-6035-4078-8620-e6b6dd122c7b",
+        "started_at": "2026-09-02T16:32:02.130Z",
+        "ended_at": "2026-09-03T04:12:14.999Z",
+        "status": "stopped",
+        "page_host": "www.mexc.com",
+        "page_path": "/ru-RU/futures/TAO_USDT",
+        "interval_ms": 500,
+        "n_snapshots": 162075,
+        "n_chunks": 649,
+        "first_sequence": 1,
+        "last_sequence": 162075,
+        "storage_error": null,
+        "sequence_gaps": [],
+        "client_sequence_mismatches": []
+      }
+    ],
+    "n_sessions": 1,
+    "n_chunks_total": 649,
+    "storage_errors": [],
+    "duration_ms": 42012795.0,
+    "duration_hours": 11.670220833333333,
+    "in_8_to_12h_window": true,
+    "trigger_counts": {
+      "manual": 1,
+      "mutation": 161671,
+      "interval": 403
+    },
+    "replay_determinism_sha256": "dbad19b0b3877639cee09fc825a22338a69fbff9d0441ed0697b7f92e1b1316c",
+    "timing_adequacy": "MISSING_MARK_INDEX_OR_BBO",
+    "notes": [
+      "STARTUP_WARMUP is pre-readiness invalid after session start/reload; not a selector fail.",
+      "DATA_INVALID is missing/corrupt executable BBO after readiness. Never forward-filled.",
+      "Raw NDJSON is append-only; classification does not rewrite capture bytes.",
+      "Descriptive returns/xcorr are not a trading rule."
+    ]
+  },
+  "descriptive_market": {
+    "start_end": {
+      "first_t": "2026-09-02T16:32:02.198000+00:00",
+      "last_t": "2026-09-03T04:12:14.993000+00:00",
+      "first": {
+        "last": 21811.0,
+        "mid": 21811.5,
+        "mark": null,
+        "index": null
+      },
+      "last": {
+        "last": 21872.0,
+        "mid": 21875.5,
+        "mark": null,
+        "index": null
+      }
+    },
+    "spread_bps": {
+      "n": 162075,
+      "mean": 1.1535855772517252,
+      "std": 0.6737013166104133,
+      "min": 0.4568817818389492,
+      "max": 10.641004880982674,
+      "p50": 1.3759889920880632,
+      "p90": 1.8447631785269565,
+      "p95": 2.3120852697047467,
+      "p99": 3.2408157596240654
+    },
+    "gaps_bps": {
+      "mid_minus_mark_bps": {
+        "n": 0,
+        "mean": null,
+        "std": null,
+        "min": null,
+        "max": null,
+        "p50": null,
+        "p90": null,
+        "p95": null,
+        "p99": null
+      },
+      "mid_minus_index_bps": {
+        "n": 0,
+        "mean": null,
+        "std": null,
+        "min": null,
+        "max": null,
+        "p50": null,
+        "p90": null,
+        "p95": null,
+        "p99": null
+      },
+      "mark_minus_index_bps": {
+        "n": 0,
+        "mean": null,
+        "std": null,
+        "min": null,
+        "max": null,
+        "p50": null,
+        "p90": null,
+        "p95": null,
+        "p99": null
+      }
+    },
+    "horizon_returns_bps": {
+      "1s": {
+        "last": {
+          "n": 162073,
+          "mean": 0.004733493633431035,
+          "std": 1.0563272141552056,
+          "min": -20.594023156834673,
+          "max": 24.95724915653641,
+          "p50": 0.0,
+          "p90": 0.0,
+          "p95": 0.9213617727010792,
+          "p99": 3.6948087936439222,
+          "freq_abs_ge_bps": {
+            "1": 14470,
+            "2": 8552,
+            "3": 5217,
+            "5": 1325,
+            "10": 160
+          }
+        },
+        "mid": {
+          "n": 162073,
+          "mean": 0.0007184159980149497,
+          "std": 1.0225383615406982,
+          "min": -45.17830524022437,
+          "max": 19.502681618721596,
+          "p50": 0.0,
+          "p90": 0.4619471070554937,
+          "p95": 1.3783280880286242,
+          "p99": 3.2206860061201326,
+          "freq_abs_ge_bps": {
+            "1": 19182,
+            "2": 9490,
+            "3": 3462,
+            "5": 956,
+            "10": 132
+          }
+        },
+        "mark": {
+          "n": 0,
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null,
+          "p50": null,
+          "p90": null,
+          "p95": null,
+          "p99": null,
+          "freq_abs_ge_bps": {
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "5": 0,
+            "10": 0
+          }
+        },
+        "index": {
+          "n": 0,
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null,
+          "p50": null,
+          "p90": null,
+          "p95": null,
+          "p99": null,
+          "freq_abs_ge_bps": {
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "5": 0,
+            "10": 0
+          }
+        }
+      },
+      "2s": {
+        "last": {
+          "n": 162071,
+          "mean": 0.0072117155390453965,
+          "std": 1.411285538165132,
+          "min": -20.594023156834673,
+          "max": 24.95724915653641,
+          "p50": 0.0,
+          "p90": 0.46356387910284624,
+          "p95": 1.8525379770295558,
+          "p99": 4.609994468005585,
+          "freq_abs_ge_bps": {
+            "1": 25246,
+            "2": 15138,
+            "3": 9259,
+            "5": 2469,
+            "10": 285
+          }
+        },
+        "mid": {
+          "n": 162071,
+          "mean": 0.0023246764531383063,
+          "std": 1.3608270098999213,
+          "min": -45.40763673890558,
+          "max": 19.967031181074013,
+          "p50": 0.0,
+          "p90": 0.9268055330280411,
+          "p95": 2.065925993939288,
+          "p99": 4.170238398628623,
+          "freq_abs_ge_bps": {
+            "1": 31945,
+            "2": 16653,
+            "3": 6702,
+            "5": 1936,
+            "10": 247
+          }
+        },
+        "mark": {
+          "n": 0,
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null,
+          "p50": null,
+          "p90": null,
+          "p95": null,
+          "p99": null,
+          "freq_abs_ge_bps": {
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "5": 0,
+            "10": 0
+          }
+        },
+        "index": {
+          "n": 0,
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null,
+          "p50": null,
+          "p90": null,
+          "p95": null,
+          "p99": null,
+          "freq_abs_ge_bps": {
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "5": 0,
+            "10": 0
+          }
+        }
+      },
+      "5s": {
+        "last": {
+          "n": 162061,
+          "mean": 0.02219378531089064,
+          "std": 2.16272673643533,
+          "min": -22.172949002217113,
+          "max": 24.95724915653641,
+          "p50": 0.0,
+          "p90": 2.2984278753335197,
+          "p95": 3.6746130173170855,
+          "p99": 6.459948320414188,
+          "freq_abs_ge_bps": {
+            "1": 52955,
+            "2": 32968,
+            "3": 20844,
+            "5": 6539,
+            "10": 770
+          }
+        },
+        "mid": {
+          "n": 162061,
+          "mean": 0.006317355265786699,
+          "std": 2.124114702124977,
+          "min": -45.40763673890558,
+          "max": 26.244302223858984,
+          "p50": 0.0,
+          "p90": 2.0780420226285123,
+          "p95": 3.232883038910561,
+          "p99": 6.450869715470819,
+          "freq_abs_ge_bps": {
+            "1": 63470,
+            "2": 35001,
+            "3": 17644,
+            "5": 5928,
+            "10": 700
+          }
+        },
+        "mark": {
+          "n": 0,
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null,
+          "p50": null,
+          "p90": null,
+          "p95": null,
+          "p99": null,
+          "freq_abs_ge_bps": {
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "5": 0,
+            "10": 0
+          }
+        },
+        "index": {
+          "n": 0,
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null,
+          "p50": null,
+          "p90": null,
+          "p95": null,
+          "p99": null,
+          "freq_abs_ge_bps": {
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "5": 0,
+            "10": 0
+          }
+        }
+      },
+      "10s": {
+        "last": {
+          "n": 162058,
+          "mean": 0.04731383352331129,
+          "std": 3.0562857533771632,
+          "min": -22.974773698478668,
+          "max": 24.95724915653641,
+          "p50": 0.0,
+          "p90": 3.6724201248627963,
+          "p95": 5.033173186914652,
+          "p99": 9.165062780680522,
+          "freq_abs_ge_bps": {
+            "1": 86014,
+            "2": 57477,
+            "3": 38803,
+            "5": 15125,
+            "10": 1928
+          }
+        },
+        "mid": {
+          "n": 162058,
+          "mean": 0.026133701771858395,
+          "std": 3.0229092125922796,
+          "min": -45.40763673890558,
+          "max": 25.55189797656565,
+          "p50": 0.0,
+          "p90": 3.236320765620526,
+          "p95": 4.8745386597337514,
+          "p99": 8.781051415367447,
+          "freq_abs_ge_bps": {
+            "1": 90364,
+            "2": 58957,
+            "3": 36134,
+            "5": 14930,
+            "10": 1927
+          }
+        },
+        "mark": {
+          "n": 0,
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null,
+          "p50": null,
+          "p90": null,
+          "p95": null,
+          "p99": null,
+          "freq_abs_ge_bps": {
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "5": 0,
+            "10": 0
+          }
+        },
+        "index": {
+          "n": 0,
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null,
+          "p50": null,
+          "p90": null,
+          "p95": null,
+          "p99": null,
+          "freq_abs_ge_bps": {
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "5": 0,
+            "10": 0
+          }
+        }
+      },
+      "30s": {
+        "last": {
+          "n": 162034,
+          "mean": 0.07952881418053152,
+          "std": 5.313426243029313,
+          "min": -34.6452328159641,
+          "max": 30.255799028147123,
+          "p50": 0.0,
+          "p90": 6.452802359881993,
+          "p95": 9.194556822360589,
+          "p99": 14.810015272828103,
+          "freq_abs_ge_bps": {
+            "1": 122090,
+            "2": 98996,
+            "3": 78744,
+            "5": 47104,
+            "10": 11231
+          }
+        },
+        "mid": {
+          "n": 162034,
+          "mean": 0.06499637162182306,
+          "std": 5.290235968389939,
+          "min": -45.40763673890558,
+          "max": 27.499598964182415,
+          "p50": 0.0,
+          "p90": 6.414809044881231,
+          "p95": 9.19244381118789,
+          "p99": 14.84402180215616,
+          "freq_abs_ge_bps": {
+            "1": 123816,
+            "2": 98300,
+            "3": 76648,
+            "5": 46153,
+            "10": 11259
+          }
+        },
+        "mark": {
+          "n": 0,
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null,
+          "p50": null,
+          "p90": null,
+          "p95": null,
+          "p99": null,
+          "freq_abs_ge_bps": {
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "5": 0,
+            "10": 0
+          }
+        },
+        "index": {
+          "n": 0,
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null,
+          "p50": null,
+          "p90": null,
+          "p95": null,
+          "p99": null,
+          "freq_abs_ge_bps": {
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "5": 0,
+            "10": 0
+          }
+        }
+      },
+      "60s": {
+        "last": {
+          "n": 162006,
+          "mean": 0.11511873698034723,
+          "std": 7.588072394711921,
+          "min": -36.031042128603644,
+          "max": 36.38540899042031,
+          "p50": 0.0,
+          "p90": 9.623756931396166,
+          "p95": 13.308246523793255,
+          "p99": 20.8748898269695,
+          "freq_abs_ge_bps": {
+            "1": 136556,
+            "2": 119564,
+            "3": 103850,
+            "5": 74499,
+            "10": 27366
+          }
+        },
+        "mid": {
+          "n": 162006,
+          "mean": 0.10813557532160854,
+          "std": 7.547276391626136,
+          "min": -45.40763673890558,
+          "max": 36.157619584993306,
+          "p50": 0.0,
+          "p90": 9.49887635243174,
+          "p95": 13.214633467797388,
+          "p99": 20.641728400725423,
+          "freq_abs_ge_bps": {
+            "1": 137014,
+            "2": 118662,
+            "3": 101459,
+            "5": 72991,
+            "10": 26741
+          }
+        },
+        "mark": {
+          "n": 0,
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null,
+          "p50": null,
+          "p90": null,
+          "p95": null,
+          "p99": null,
+          "freq_abs_ge_bps": {
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "5": 0,
+            "10": 0
+          }
+        },
+        "index": {
+          "n": 0,
+          "mean": null,
+          "std": null,
+          "min": null,
+          "max": null,
+          "p50": null,
+          "p90": null,
+          "p95": null,
+          "p99": null,
+          "freq_abs_ge_bps": {
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "5": 0,
+            "10": 0
+          }
+        }
+      }
+    },
+    "lead_lag_xcorr": {
+      "status": "DESCRIPTIVE_ONLY",
+      "grid_s": 1,
+      "n_return_steps": 42012,
+      "lags_s": [
+        -5,
+        -4,
+        -3,
+        -2,
+        -1,
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "pairs": {
+        "last_vs_mark": {
+          "-5": null,
+          "-4": null,
+          "-3": null,
+          "-2": null,
+          "-1": null,
+          "0": null,
+          "1": null,
+          "2": null,
+          "3": null,
+          "4": null,
+          "5": null
+        },
+        "last_vs_index": {
+          "-5": null,
+          "-4": null,
+          "-3": null,
+          "-2": null,
+          "-1": null,
+          "0": null,
+          "1": null,
+          "2": null,
+          "3": null,
+          "4": null,
+          "5": null
+        },
+        "mark_vs_index": {
+          "-5": null,
+          "-4": null,
+          "-3": null,
+          "-2": null,
+          "-1": null,
+          "0": null,
+          "1": null,
+          "2": null,
+          "3": null,
+          "4": null,
+          "5": null
+        },
+        "mid_vs_last": {
+          "-5": 0.016027657181700863,
+          "-4": 0.013138216530098445,
+          "-3": 0.0032925418878197417,
+          "-2": 0.017876787371110068,
+          "-1": 0.0743382668558904,
+          "0": 0.3557537209364503,
+          "1": 0.16404508343869217,
+          "2": 0.12014035191899025,
+          "3": 0.0806756232275945,
+          "4": 0.062224511424193114,
+          "5": 0.0774207242386617
+        },
+        "mid_vs_mark": {
+          "-5": null,
+          "-4": null,
+          "-3": null,
+          "-2": null,
+          "-1": null,
+          "0": null,
+          "1": null,
+          "2": null,
+          "3": null,
+          "4": null,
+          "5": null
+        }
+      },
+      "note": "Positive lag k is corr(x[t], y[t+k]). Not a trading signal."
+    },
+    "field_availability": {
+      "bid": {
+        "n_ok": 162075,
+        "n_missing": 0,
+        "ok_pct": 100.0
+      },
+      "ask": {
+        "n_ok": 162075,
+        "n_missing": 0,
+        "ok_pct": 100.0
+      },
+      "last": {
+        "n_ok": 162075,
+        "n_missing": 0,
+        "ok_pct": 100.0
+      },
+      "mark": {
+        "n_ok": 0,
+        "n_missing": 162075,
+        "ok_pct": 0.0
+      },
+      "index": {
+        "n_ok": 0,
+        "n_missing": 162075,
+        "ok_pct": 0.0
+      }
+    },
+    "update_interval_ms": {
+      "ask": {
+        "n": 9270,
+        "mean": 4528.943365695793,
+        "std": 12333.701126059508,
+        "min": 70.0,
+        "max": 979309.0,
+        "p50": 2488.0,
+        "p90": 10144.0,
+        "p95": 15215.0,
+        "p99": 33919.0
+      },
+      "bid": {
+        "n": 9178,
+        "mean": 4574.341359773372,
+        "std": 12532.088045951949,
+        "min": 67.0,
+        "max": 979309.0,
+        "p50": 2402.0,
+        "p90": 10114.0,
+        "p95": 15238.0,
+        "p99": 37202.0
+      },
+      "last": {
+        "n": 5464,
+        "mean": 7683.7066251830165,
+        "std": 7696.938862445754,
+        "min": 81.0,
+        "max": 108469.0,
+        "p50": 6393.0,
+        "p90": 14589.0,
+        "p95": 16034.0,
+        "p99": 35931.0
+      }
+    },
+    "update_rate_per_s": {
+      "bid": 0.21848106035316148,
+      "ask": 0.22067086943394268,
+      "last": 0.13007941985292815,
+      "mark": 0.0,
+      "index": 0.0
+    },
+    "mutation_interarrival_ms": {
+      "n": 161267,
+      "mean": 260.0953096417762,
+      "std": 249.3099654130764,
+      "min": 58.099999994039536,
+      "max": 2067.0,
+      "p50": 177.2000000178814,
+      "p90": 553.3000000119209,
+      "p95": 735.8000000119209,
+      "p99": 1071.5
+    },
+    "notes": [
+      "Descriptive only. Not a fitted trading rule and not performance evidence.",
+      "Do not retune lookbacks, mom/gap, thresholds, target, stops, throttle, or sizing.",
+      "Executable mid is omitted (None) on STARTUP_WARMUP and DATA_INVALID rows."
+    ]
+  },
+  "hypothesis_smoke": {
+    "label": "HYPOTHESIS_SMOKE",
+    "not_performance_evidence": true,
+    "not_strategy_evidence": true,
+    "do_not_retune": true,
+    "profile_id": "author_observed_v0",
+    "observations": 162075,
+    "n_candidates": 0,
+    "n_accepted_for_shadow": 0,
+    "n_trades": 0,
+    "n_open": 0,
+    "throttle_counts": {},
+    "exit_reason_counts": {},
+    "trade_gross_bps": {
+      "n": 0,
+      "mean": null,
+      "std": null,
+      "min": null,
+      "max": null,
+      "p50": null,
+      "p90": null,
+      "p95": null,
+      "p99": null
+    },
+    "cost_summaries": {
+      "zero_fee": {
+        "fee_bps_per_side": 0.0,
+        "n_trades": 0,
+        "sum_gross_bps": 0,
+        "sum_net_bps": 0.0,
+        "mean_net_bps": null
+      },
+      "maker_6bps_per_side": {
+        "fee_bps_per_side": 6.0,
+        "n_trades": 0,
+        "sum_gross_bps": 0,
+        "sum_net_bps": 0.0,
+        "mean_net_bps": null
+      },
+      "taker_8bps_per_side": {
+        "fee_bps_per_side": 8.0,
+        "n_trades": 0,
+        "sum_gross_bps": 0,
+        "sum_net_bps": 0.0,
+        "mean_net_bps": null
+      }
+    },
+    "notes": [
+      "mom/gap definitions are configurable hypotheses, not claimed identities.",
+      "Throttle limits are research/risk controls, not anti-detection behavior.",
+      "Do not tune parameters against these replay results in this milestone.",
+      "PIPELINE_SMOKE_ONLY: frozen placeholder profiles; not strategy results. Do not tune mom/gap/thresholds against this replay.",
+      "HYPOTHESIS_SMOKE: frozen author_observed_v0 diagnostic replay only. Not performance evidence. Do not retune lookbacks, mom/gap definitions, thresholds, target multiplier, stops, throttle, or risk sizing."
+    ],
+    "pipeline_smoke_only": true
+  },
+  "interruptions": [],
+  "replay_ok": true,
+  "replay_error": null,
+  "duration_window_ms": [
+    28800000,
+    45000000
+  ],
+  "duration_ms": 42012795.0,
+  "in_8_to_12h_window": true,
+  "findings": [
+    "Raw symbol field is missing on every snapshot. Replay identity was recovered from page_path /ru-RU/futures/TAO_USDT. NDJSON was not rewritten.",
+    "mark (Fair Price) is missing on every snapshot. English header labels likely did not match the ru-RU UI. mid-mark / mark-index stats are empty.",
+    "index is missing on every snapshot. Same locale-label issue as mark.",
+    "orderbook_heading_count=0 on every row; executable BBO is 100% live_asks_bids_wrapper.",
+    "HYPOTHESIS_SMOKE produced 0 candidates and 0 trades. Frozen author_observed_v0 gap is mid_vs_mark and mark is absent. This is not a reason to retune mom/gap/exits.",
+    "Parsed last/mid sit near 21811\u201321875 while Phase A TAO was ~216. Wrapper bid/ask raw_text has no decimal; last uses a comma. bps stats are reported in native parsed units without rescaling."
+  ]
+}
