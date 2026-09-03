@@ -53,6 +53,10 @@ def measure_local_external_bytes(root: Path) -> int:
         return 0
     total = 0
     for path in root.rglob("*"):
-        if path.is_file():
-            total += path.stat().st_size
+        try:
+            if path.is_file():
+                total += path.stat().st_size
+        except FileNotFoundError:
+            # Offloader may unlink tmp/state between directory walk and stat.
+            continue
     return total
