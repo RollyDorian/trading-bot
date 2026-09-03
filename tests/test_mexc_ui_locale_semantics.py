@@ -21,6 +21,7 @@ from trading_bot.research.mexc_shadow.ui_capture.parse import (
     parse_price,
     symbol_from_futures_path,
 )
+from trading_bot.research.mexc_shadow.ui_capture.schema import sanitize_header_diagnostics
 
 REPO = Path(__file__).resolve().parents[1]
 FIXTURES = REPO / "tests" / "fixtures" / "mexc_ui_capture"
@@ -115,6 +116,175 @@ def test_ru_header_and_wrapper_keep_dom_text_and_true_scale() -> None:
     assert "page_html" not in dumped["header_diagnostics"]
 
 
+def test_public_header_emits_bounded_structural_probe() -> None:
+    snap = extract_html(
+        (FIXTURES / "tao_ru_locale_header.html").read_text(encoding="utf-8"),
+        received_at_local=_stamp(0),
+        sequence=1,
+        page_path="/ru-RU/futures/TAO_USDT",
+        capture_id="public-header",
+        monotonic_ms=0.0,
+    )
+
+    probe = snap.as_dict()["header_diagnostics"]["market_header_probe"]
+    assert probe["probe_version"] == 1
+    assert probe["matched_item_count"] == 3
+    assert probe["items_truncated"] is False
+    assert len(probe["items"]) == 3
+    mark_item = next(
+        item for item in probe["items"] if "Справедливая цена" in item["visible_text"]
+    )
+    assert mark_item["current_title_token_matched"] is True
+    assert mark_item["current_value_token_matched"] is True
+    assert mark_item["direct_children"][0]["tag"] == "div"
+    assert "outerHTML" not in json.dumps(probe)
+
+
+def test_header_probe_records_title_class_mismatch_without_extracting_mark() -> None:
+    snap = extract_html(
+        (FIXTURES / "tao_header_title_class_mismatch.html").read_text(encoding="utf-8"),
+        received_at_local=_stamp(0),
+        sequence=1,
+        page_path="/ru-RU/futures/TAO_USDT",
+    )
+
+    assert snap.fields["mark"].parse_status == "missing"
+    assert snap.header_diagnostics["header_title_hits_mark"] == 0
+    item = snap.as_dict()["header_diagnostics"]["market_header_probe"]["items"][0]
+    assert item["current_title_token_matched"] is False
+    assert item["current_value_token_matched"] is True
+    assert "Справедливая цена" in item["visible_text"]
+    assert item["descendant_attributes"] == [
+        {"tag": "div", "attributes": {"title": "Рыночный ориентир"}}
+    ]
+
+
+def test_header_probe_records_value_class_mismatch_without_extracting_mark() -> None:
+    snap = extract_html(
+        (FIXTURES / "tao_header_value_class_mismatch.html").read_text(encoding="utf-8"),
+        received_at_local=_stamp(0),
+        sequence=1,
+        page_path="/ru-RU/futures/TAO_USDT",
+    )
+
+    assert snap.fields["mark"].parse_status in {"missing", "unparsable"}
+    assert snap.fields["mark"].value is None
+    assert snap.header_diagnostics["header_title_hits_mark"] == 1
+    item = snap.as_dict()["header_diagnostics"]["market_header_probe"]["items"][0]
+    assert item["current_title_token_matched"] is True
+    assert item["current_value_token_matched"] is False
+    assert "218,14" in item["visible_text"]
+
+
+def test_header_probe_records_unknown_title_without_guessing_a_field() -> None:
+    snap = extract_html(
+        (FIXTURES / "tao_header_unknown_title.html").read_text(encoding="utf-8"),
+        received_at_local=_stamp(0),
+        sequence=1,
+        page_path="/ru-RU/futures/TAO_USDT",
+    )
+
+    assert all(snap.fields[name].parse_status == "missing" for name in ("mark", "index", "funding"))
+    assert snap.header_diagnostics["header_title_hits_mark"] == 0
+    assert snap.header_diagnostics["header_title_hits_index"] == 0
+    assert snap.header_diagnostics["header_title_hits_funding"] == 0
+    item = snap.as_dict()["header_diagnostics"]["market_header_probe"]["items"][0]
+    assert item["current_title_token_matched"] is True
+    assert item["current_value_token_matched"] is True
+    assert "Расчетная база" in item["visible_text"]
+
+
+def test_header_probe_is_bounded_and_redacts_private_ui_subtrees() -> None:
+    snap = extract_html(
+        (FIXTURES / "tao_header_probe_bounds.html").read_text(encoding="utf-8"),
+        received_at_local=_stamp(0),
+        sequence=1,
+        page_path="/ru-RU/futures/TAO_USDT",
+    )
+
+    probe = snap.as_dict()["header_diagnostics"]["market_header_probe"]
+    assert probe["matched_item_count"] == 14
+    assert probe["items_truncated"] is True
+    assert len(probe["items"]) == 12
+    assert all(len(item["class_string"]) <= 240 for item in probe["items"])
+    assert all(len(item["visible_text_tokens"]) <= 16 for item in probe["items"])
+    dumped = json.dumps(probe, ensure_ascii=False).lower()
+    for forbidden in ("outside-private", "secret", "account", "balance", "999999"):
+        assert forbidden not in dumped
+
+
+def test_header_probe_schema_drops_unknown_keys_and_scrubs_private_text() -> None:
+    sanitized = sanitize_header_diagnostics(
+        {
+            "market_header_probe": {
+                "matched_item_count": 10000,
+                "outerHTML": "<body>SECRET</body>",
+                "items": [
+                    {
+                        "item_index": 0,
+                        "tag": "div",
+                        "visible_text": "Available balance SECRET 999999",
+                        "visible_text_tokens": ["SECRET"] * 30,
+                        "attributes": {"aria-label": "account secret", "data-user": "x"},
+                        "direct_children": [],
+                    }
+                ]
+                * 20,
+            }
+        }
+    )["market_header_probe"]
+
+    assert sanitized["matched_item_count"] == 999
+    assert sanitized["items_truncated"] is True
+    assert len(sanitized["items"]) == 12
+    dumped = json.dumps(sanitized).lower()
+    assert "outerhtml" not in dumped
+    assert "data-user" not in dumped
+    assert "secret" not in dumped
+    assert "account" not in dumped
+    assert "999999" not in dumped
+
+
+def test_header_probe_emits_once_per_session_or_changed_structure() -> None:
+    public_html = (FIXTURES / "tao_ru_locale_header.html").read_text(encoding="utf-8")
+    first = extract_html(
+        public_html,
+        received_at_local=_stamp(0),
+        sequence=1,
+        page_path="/ru-RU/futures/TAO_USDT",
+        capture_id="session-a",
+    )
+    price_changed = extract_html(
+        public_html.replace("218,14", "218,15"),
+        received_at_local=_stamp(1),
+        sequence=2,
+        page_path="/ru-RU/futures/TAO_USDT",
+        capture_id="session-a",
+        previous=first,
+    )
+    structural_change = extract_html(
+        (FIXTURES / "tao_header_title_class_mismatch.html").read_text(encoding="utf-8"),
+        received_at_local=_stamp(2),
+        sequence=3,
+        page_path="/ru-RU/futures/TAO_USDT",
+        capture_id="session-a",
+        previous=price_changed,
+    )
+    new_session = extract_html(
+        public_html,
+        received_at_local=_stamp(3),
+        sequence=1,
+        page_path="/ru-RU/futures/TAO_USDT",
+        capture_id="session-b",
+        previous=structural_change,
+    )
+
+    assert first.header_diagnostics["market_header_probe"] is not None
+    assert price_changed.header_diagnostics["market_header_probe"] is None
+    assert structural_change.header_diagnostics["market_header_probe"] is not None
+    assert new_session.header_diagnostics["market_header_probe"] is not None
+
+
 def test_unknown_locale_does_not_guess_comma_decimals() -> None:
     snap = extract_html(
         (FIXTURES / "tao_ru_locale_header.html").read_text(encoding="utf-8"),
@@ -160,7 +330,7 @@ def test_extension_catalog_version_and_manifest() -> None:
             encoding="utf-8"
         )
     )
-    assert manifest["version"] == "1.3.0"
+    assert manifest["version"] == "1.3.1"
     assert catalog["catalog_version"] == "v1.1"
     assert "Справедливая цена" in catalog["fields"]["mark"]["labels"]
     assert "Индексная цена" in catalog["fields"]["index"]["labels"]
