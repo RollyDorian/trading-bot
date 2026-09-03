@@ -8,7 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from trading_bot.research.mexc_shadow.ui_capture.extract import extract_html
+from trading_bot.research.mexc_shadow.ui_capture.catalog import (
+    MARKET_HEADER_FIELD_TITLE_ALIASES,
+    SELECTOR_CATALOG,
+)
+from trading_bot.research.mexc_shadow.ui_capture.extract import extract_html, header_alias_lookup
 from trading_bot.research.mexc_shadow.ui_capture.locale_remediation import (
     historical_corpus_record,
     write_reports,
@@ -138,6 +142,67 @@ def test_public_header_emits_bounded_structural_probe() -> None:
     assert mark_item["current_value_token_matched"] is True
     assert mark_item["direct_children"][0]["tag"] == "div"
     assert "outerHTML" not in json.dumps(probe)
+
+
+def test_logged_in_probe_structure_extracts_fair_index_funding() -> None:
+    snap = extract_html(
+        (FIXTURES / "tao_logged_in_ru_header_probe.html").read_text(encoding="utf-8"),
+        received_at_local=_stamp(0),
+        sequence=1,
+        page_path="/ru-RU/futures/TAO_USDT",
+        capture_id="logged-in-probe",
+        monotonic_ms=0.0,
+    )
+
+    assert snap.fields["index"].value == pytest.approx(228.90)
+    assert snap.fields["index"].raw_text == "228,90"
+    assert snap.fields["index"].selector_id == "header_struct:index"
+    assert snap.fields["mark"].value == pytest.approx(228.78)
+    assert snap.fields["mark"].raw_text == "228,78"
+    assert snap.fields["mark"].selector_id == "header_struct:mark"
+    assert snap.fields["funding"].value == pytest.approx(0.0025)
+    assert snap.fields["funding"].selector_id == "header_struct:funding"
+    assert snap.header_diagnostics["header_item_count"] == 3
+    assert snap.header_diagnostics["header_title_hits_mark"] == 1
+    assert snap.header_diagnostics["header_title_hits_index"] == 1
+    assert snap.header_diagnostics["header_title_hits_funding"] == 1
+    assert snap.header_diagnostics["header_alias_count"] >= 3
+    probe = snap.as_dict()["header_diagnostics"]["market_header_probe"]
+    items = probe["items"]
+    assert items[0]["visible_text_tokens"][0] == "Индексная цена"
+    assert items[1]["visible_text_tokens"][0] == "Справедливая цена"
+    assert "Ставка финансирования" in items[2]["visible_text"]
+    assert "Обратный отсчет" in items[2]["visible_text"]
+    assert all(item["current_title_token_matched"] for item in items)
+    assert all(item["current_value_token_matched"] for item in items)
+    assert all(item["descendant_attributes"] == [] for item in items)
+    rec = observation_from_snapshot(snap)
+    assert rec.observation is not None
+    assert rec.observation.mark == pytest.approx(228.78)
+    assert rec.observation.index == pytest.approx(228.90)
+
+
+def test_stale_empty_header_aliases_still_match_probe_labels() -> None:
+    lookup = header_alias_lookup({"field_title_aliases": {}})
+    assert lookup["справедливая цена"] == "mark"
+    assert lookup["индексная цена"] == "index"
+    assert lookup["ставка финансирования / обратный отсчет"] == "funding"
+
+
+def test_logged_in_header_extracts_when_catalog_aliases_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(SELECTOR_CATALOG["market_header"], "field_title_aliases", {})
+    snap = extract_html(
+        (FIXTURES / "tao_logged_in_ru_header_probe.html").read_text(encoding="utf-8"),
+        received_at_local=_stamp(0),
+        sequence=1,
+        page_path="/ru-RU/futures/TAO_USDT",
+    )
+    assert snap.fields["mark"].parse_status == "ok"
+    assert snap.fields["index"].parse_status == "ok"
+    assert snap.fields["funding"].parse_status == "ok"
+    assert "Справедливая цена" in MARKET_HEADER_FIELD_TITLE_ALIASES["mark"]
 
 
 def test_header_probe_records_title_class_mismatch_without_extracting_mark() -> None:
@@ -330,10 +395,14 @@ def test_extension_catalog_version_and_manifest() -> None:
             encoding="utf-8"
         )
     )
-    assert manifest["version"] == "1.3.1"
-    assert catalog["catalog_version"] == "v1.1"
+    assert manifest["version"] == "1.3.2"
+    assert catalog["catalog_version"] == "v1.2"
     assert "Справедливая цена" in catalog["fields"]["mark"]["labels"]
     assert "Индексная цена" in catalog["fields"]["index"]["labels"]
+    assert (
+        "Ставка финансирования / Обратный отсчет"
+        in catalog["market_header"]["field_title_aliases"]["funding"]
+    )
     assert catalog["market_header"]["root_class_contains"] == "contractDetail"
 
 

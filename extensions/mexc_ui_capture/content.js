@@ -826,10 +826,26 @@
     return collapse(text).toLowerCase().replace(/\//g, " / ").replace(/\s+/g, " ").trim();
   }
 
+  // Keep in sync with catalog.MARKET_HEADER_FIELD_TITLE_ALIASES.
+  // Used when selector_catalog JSON has no market_header aliases (stale v1).
+  const DEFAULT_MARKET_HEADER_ALIASES = {
+    mark: ["Fair Price", "Mark Price", "Справедливая цена"],
+    index: ["Index Price", "Индексная цена"],
+    funding: [
+      "Funding Rate / Countdown",
+      "Funding Rate/Countdown",
+      "Funding Rate",
+      "Ставка финансирования / Обратный отсчет",
+      "Ставка финансирования/Обратный отсчет",
+      "Ставка финансирования",
+    ],
+  };
+
   function headerAliasLookup() {
     const aliases = ((catalog.market_header || {}).field_title_aliases) || {};
+    const source = Object.keys(aliases).length ? aliases : DEFAULT_MARKET_HEADER_ALIASES;
     const lookup = Object.create(null);
-    for (const [fieldName, titles] of Object.entries(aliases)) {
+    for (const [fieldName, titles] of Object.entries(source)) {
       for (const title of titles || []) {
         lookup[normalizeHeaderTitle(title)] = fieldName;
       }
@@ -861,6 +877,7 @@
       header_title_hits_mark: 0,
       header_title_hits_index: 0,
       header_title_hits_funding: 0,
+      header_alias_count: 0,
       symbol_status: "missing",
       last_status: "missing",
       mark_status: "missing",
@@ -1076,6 +1093,7 @@
     const lookup = headerAliasLookup();
     const grouped = { mark: [], index: [], funding: [] };
     const diag = emptyHeaderDiagnostics();
+    diag.header_alias_count = Object.keys(lookup).length;
     const items = [...document.querySelectorAll("[class]")].filter((node) => {
       if (ignored(node) || !isVisible(node)) return false;
       const classes = classNameOf(node);

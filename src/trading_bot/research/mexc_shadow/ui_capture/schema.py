@@ -50,6 +50,7 @@ _HEADER_INT_KEYS = (
     "header_title_hits_mark",
     "header_title_hits_index",
     "header_title_hits_funding",
+    "header_alias_count",
 )
 _ALLOWED_PARSE_STATUSES = frozenset(
     {"ok", "ok_redundant", "missing", "unparsable", "ambiguous"}
@@ -98,6 +99,7 @@ def empty_header_diagnostics() -> dict[str, Any]:
         "header_title_hits_mark": 0,
         "header_title_hits_index": 0,
         "header_title_hits_funding": 0,
+        "header_alias_count": 0,
         "symbol_status": "missing",
         "last_status": "missing",
         "mark_status": "missing",

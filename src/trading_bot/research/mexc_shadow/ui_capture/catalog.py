@@ -4,13 +4,28 @@ from __future__ import annotations
 
 from typing import Any
 
-CATALOG_VERSION = "v1.1"
+CATALOG_VERSION = "v1.2"
 SCHEMA_NAME = "mexc_ui_raw_snapshot"
 SCHEMA_VERSION = 1
 DATA_CAPTURE_ATTR = "data-mexc-capture"
 IGNORE_ATTR = "data-mexc-capture-ignore"
 ALLOWED_SAMPLE_INTERVALS_MS = (250, 500, 1000)
 DEFAULT_SAMPLE_INTERVAL_MS = 500
+
+# Logged-in 1.3.1 probe titles. Keep in sync with extensions/.../content.js
+# DEFAULT_MARKET_HEADER_ALIASES. Do not add labels that were not observed.
+MARKET_HEADER_FIELD_TITLE_ALIASES: dict[str, list[str]] = {
+    "mark": ["Fair Price", "Mark Price", "Справедливая цена"],
+    "index": ["Index Price", "Индексная цена"],
+    "funding": [
+        "Funding Rate / Countdown",
+        "Funding Rate/Countdown",
+        "Funding Rate",
+        "Ставка финансирования / Обратный отсчет",
+        "Ставка финансирования/Обратный отсчет",
+        "Ставка финансирования",
+    ],
+}
 
 # MEXC header labels confirmed on the public TAO futures page (values may be "--"
 # until the SPA hydrates). Do not map order-ticket Buy/Sell/Open controls.
@@ -82,6 +97,7 @@ SELECTOR_CATALOG: dict[str, Any] = {
                 "Funding Rate / Countdown",
                 "Funding Rate/Countdown",
                 "Funding Rate",
+                "Ставка финансирования / Обратный отсчет",
                 "Ставка финансирования/Обратный отсчет",
                 "Ставка финансирования",
             ],
@@ -124,17 +140,7 @@ SELECTOR_CATALOG: dict[str, Any] = {
         "item_class_exclude": ["lastPriceWrapper", "rateItem"],
         "title_class_contains": "itemTitle",
         "value_class_contains": "itemContent",
-        "field_title_aliases": {
-            "mark": ["Fair Price", "Mark Price", "Справедливая цена"],
-            "index": ["Index Price", "Индексная цена"],
-            "funding": [
-                "Funding Rate / Countdown",
-                "Funding Rate/Countdown",
-                "Funding Rate",
-                "Ставка финансирования/Обратный отсчет",
-                "Ставка финансирования",
-            ],
-        },
+        "field_title_aliases": MARKET_HEADER_FIELD_TITLE_ALIASES,
     },
 }
 

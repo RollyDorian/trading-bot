@@ -17,6 +17,7 @@ from trading_bot.research.mexc_shadow.ui_capture.catalog import (
     CATALOG_VERSION,
     DATA_CAPTURE_ATTR,
     IGNORE_ATTR,
+    MARKET_HEADER_FIELD_TITLE_ALIASES,
     SCHEMA_NAME,
     SCHEMA_VERSION,
     SELECTOR_CATALOG,
@@ -527,15 +528,28 @@ def _normalize_header_title(text: str) -> str:
     return " ".join(compact.split())
 
 
-def _header_alias_lookup() -> dict[str, str]:
-    spec = SELECTOR_CATALOG.get("market_header") or {}
-    aliases = spec.get("field_title_aliases") or {}
+def header_alias_lookup(spec: dict[str, Any] | None = None) -> dict[str, str]:
+    """Map normalized header titles to mark/index/funding.
+
+    Empty catalog aliases fall back to probe-verified labels so a stale
+    ``selector_catalog_v1.json`` (v1, no market_header) cannot zero title hits
+    while the extractor still matches commonItem nodes.
+    """
+
+    header_spec = spec if spec is not None else (SELECTOR_CATALOG.get("market_header") or {})
+    aliases = header_spec.get("field_title_aliases") or {}
+    if not aliases:
+        aliases = MARKET_HEADER_FIELD_TITLE_ALIASES
     lookup: dict[str, str] = {}
     for field_name, titles in aliases.items():
         for title in titles:
             key = _normalize_header_title(str(title))
             lookup[key] = str(field_name)
     return lookup
+
+
+def _header_alias_lookup() -> dict[str, str]:
+    return header_alias_lookup()
 
 
 def _header_items(root: _Node) -> list[_Node]:
@@ -772,11 +786,12 @@ def _extract_market_header(
     spec = SELECTOR_CATALOG.get("market_header") or {}
     title_token = str(spec.get("title_class_contains") or "itemTitle")
     value_token = str(spec.get("value_class_contains") or "itemContent")
-    lookup = _header_alias_lookup()
+    lookup = header_alias_lookup(spec)
     grouped: dict[str, list[tuple[_Node, str]]] = {"mark": [], "index": [], "funding": []}
     diag = empty_header_diagnostics()
     diag["ui_locale"] = locale
     diag["parser_mode"] = locale
+    diag["header_alias_count"] = len(lookup)
     items = _header_items(root)
     diag["header_item_count"] = len(items)
     diag["market_header_probe"] = _header_probe(items, title_token, value_token)
