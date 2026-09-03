@@ -16,6 +16,10 @@
   let ageCaptureId = "";
   let emitChain = Promise.resolve();
 
+  let currentLocale = "unknown";
+  const LOCALE_PREFIX = /^[a-z]{2}-[A-Z]{2}$/;
+  const KNOWN_LOCALES = { "ru-RU": true, "en-US": true };
+
   function collapse(text) {
     return String(text || "")
       .replace(/\u00a0/g, " ")
@@ -29,20 +33,154 @@
     return !value || value === "--" || value === "-" || value === "—" || value === "n/a";
   }
 
-  function parseNumber(text) {
-    if (missingText(text)) return { value: null, unit: null };
-    const compact = collapse(text);
-    const stripped = compact.replace(/,/g, "");
-    const match = stripped.match(/[-+]?(?:\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)/);
-    if (!match) return { value: null, unit: null };
-    const value = Number(match[0]);
-    if (!Number.isFinite(value)) return { value: null, unit: null };
-    return { value, unit: compact.includes("%") ? "percent" : null };
+  function pathParts(pathname) {
+    return String(pathname || "")
+      .split("/")
+      .filter(Boolean)
+      .map((item) => item.split("?")[0]);
   }
 
-  function parsePrice(text) {
-    const parsed = parseNumber(text);
-    if (parsed.value === null || parsed.value <= 0) return null;
+  function localeFromPathname(pathname) {
+    const parts = pathParts(pathname);
+    if (!parts.length) return "unknown";
+    if (LOCALE_PREFIX.test(parts[0]) && parts[1] === "futures") {
+      return KNOWN_LOCALES[parts[0]] ? parts[0] : "unknown";
+    }
+    return "unknown";
+  }
+
+  function stripBidi(text) {
+    return String(text || "").replace(/[\u200e\u200f\u202a-\u202e]/g, "");
+  }
+
+  function compactGroupingSpaces(text) {
+    const translated = String(text || "")
+      .replace(/[\u00a0\u202f\u2007\u2008\u2009\u200a]/g, " ");
+    return translated.replace(/(\d)[ ]+(?=\d)/g, "$1");
+  }
+
+  function splitGrouped(body, groupChar) {
+    const parts = body.split(groupChar);
+    if (!parts.length || parts.some((part) => !/^\d+$/.test(part))) return null;
+    if (!parts[0] || parts[0].length > 3) return null;
+    for (let i = 1; i < parts.length; i += 1) {
+      if (parts[i].length !== 3) return null;
+    }
+    return parts;
+  }
+
+  function interpretEnUs(body) {
+    if (body.includes(",")) {
+      if ((body.match(/\./g) || []).length > 1) return null;
+      if (body.includes(".")) {
+        const idx = body.lastIndexOf(".");
+        const left = body.slice(0, idx);
+        const right = body.slice(idx + 1);
+        const grouped = splitGrouped(left, ",");
+        if (!grouped || !/^\d+$/.test(right) || !right) return null;
+        const value = Number(`${grouped.join("")}.${right}`);
+        return Number.isFinite(value) ? value : null;
+      }
+      const grouped = splitGrouped(body, ",");
+      if (!grouped) return null;
+      const value = Number(grouped.join(""));
+      return Number.isFinite(value) ? value : null;
+    }
+    if ((body.match(/\./g) || []).length > 1) return null;
+    if (body.includes(".")) {
+      const parts = body.split(".");
+      if (parts.length !== 2 || !/^\d+$/.test(parts[0]) || !/^\d+$/.test(parts[1]) || !parts[1]) {
+        return null;
+      }
+      const value = Number(`${parts[0]}.${parts[1]}`);
+      return Number.isFinite(value) ? value : null;
+    }
+    if (!/^\d+$/.test(body)) return null;
+    const value = Number(body);
+    return Number.isFinite(value) ? value : null;
+  }
+
+  function interpretRuRu(body) {
+    if ((body.match(/,/g) || []).length > 1) return null;
+    if (body.includes(",")) {
+      const parts = body.split(",");
+      if (parts.length !== 2 || !/^\d+$/.test(parts[1]) || !parts[1]) return null;
+      if (parts[0].includes(".")) {
+        const grouped = splitGrouped(parts[0], ".");
+        if (!grouped) return null;
+        const value = Number(`${grouped.join("")}.${parts[1]}`);
+        return Number.isFinite(value) ? value : null;
+      }
+      if (!/^\d+$/.test(parts[0])) return null;
+      const value = Number(`${parts[0]}.${parts[1]}`);
+      return Number.isFinite(value) ? value : null;
+    }
+    if (body.includes(".")) {
+      const grouped = splitGrouped(body, ".");
+      if (!grouped) return null;
+      const value = Number(grouped.join(""));
+      return Number.isFinite(value) ? value : null;
+    }
+    if (!/^\d+$/.test(body)) return null;
+    const value = Number(body);
+    return Number.isFinite(value) ? value : null;
+  }
+
+  function interpretUnknown(body) {
+    if (body.includes(",")) return null;
+    if ((body.match(/\./g) || []).length > 1) return null;
+    if (body.includes(".")) {
+      const parts = body.split(".");
+      if (parts.length !== 2 || !/^\d+$/.test(parts[0]) || !/^\d+$/.test(parts[1]) || !parts[1]) {
+        return null;
+      }
+      if (parts[1].length === 3 && parts[0].length >= 1 && parts[0].length <= 3) return null;
+      const value = Number(`${parts[0]}.${parts[1]}`);
+      return Number.isFinite(value) ? value : null;
+    }
+    if (!/^\d+$/.test(body)) return null;
+    const value = Number(body);
+    return Number.isFinite(value) ? value : null;
+  }
+
+  function interpretBody(body, locale) {
+    if (locale === "ru-RU") return interpretRuRu(body);
+    if (locale === "en-US") return interpretEnUs(body);
+    return interpretUnknown(body);
+  }
+
+  function parseNumber(text, locale) {
+    if (missingText(text)) return { value: null, unit: null };
+    const mode = locale || currentLocale || "unknown";
+    const compact = collapse(stripBidi(text));
+    const unit = compact.includes("%") ? "percent" : null;
+    const match = compact.match(/[-+]?(?:\d[\d\s.,]*)(?:[eE][-+]?\d+)?/);
+    if (!match) return { value: null, unit: null };
+    let token = match[0].trim();
+    let sign = 1;
+    if (token[0] === "+" || token[0] === "-") {
+      sign = token[0] === "-" ? -1 : 1;
+      token = token.slice(1);
+    }
+    let exponent = 0;
+    const expMatch = token.match(/[eE]([+-]?\d+)$/);
+    if (expMatch) {
+      exponent = Number(expMatch[1]);
+      token = token.slice(0, expMatch.index);
+    }
+    const body = compactGroupingSpaces(token).replace(/ /g, "");
+    if (!body || !/\d/.test(body)) return { value: null, unit: null };
+    const number = interpretBody(body, mode);
+    if (number === null) return { value: null, unit: null };
+    let value = sign * number;
+    if (exponent) value *= 10 ** exponent;
+    if (!Number.isFinite(value)) return { value: null, unit: null };
+    return { value, unit };
+  }
+
+  function parsePrice(text, locale) {
+    const parsed = parseNumber(text, locale);
+    if (parsed.value === null || parsed.unit === "percent" || parsed.value <= 0) return null;
     return parsed.value;
   }
 
@@ -51,6 +189,57 @@
     const compact = collapse(text).toUpperCase().replace(/[-_/ ]/g, "");
     if (!/^[A-Z0-9]{6,}$/.test(compact)) return null;
     return compact;
+  }
+
+  function symbolFromFuturesPath(pathname) {
+    const parts = pathParts(pathname);
+    if (!parts.length) return null;
+    if (parts[0] === "futures" && parts[1]) return parseSymbol(parts[1]);
+    if (LOCALE_PREFIX.test(parts[0]) && parts[1] === "futures" && parts[2]) {
+      return parseSymbol(parts[2]);
+    }
+    return null;
+  }
+
+  function joinPriceTokens(tokens) {
+    const pieces = [];
+    for (const raw of tokens || []) {
+      const piece = stripBidi(raw).trim();
+      if (piece) pieces.push(piece);
+    }
+    if (!pieces.length) return null;
+    const digitish = /^[+-]?\d+$/;
+    for (let i = 0; i < pieces.length - 1; i += 1) {
+      if (digitish.test(pieces[i]) && digitish.test(pieces[i + 1])) return null;
+    }
+    return pieces.join("");
+  }
+
+  function boundedTextTokens(node, maxTokens) {
+    const limit = maxTokens || 12;
+    const tokens = [];
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    let current = walker.nextNode();
+    while (current) {
+      const piece = current.textContent || "";
+      if (piece.trim()) tokens.push(piece);
+      if (tokens.length >= limit) break;
+      current = walker.nextNode();
+    }
+    return tokens;
+  }
+
+  function nodePriceHit(node) {
+    const tokens = boundedTextTokens(node);
+    const joined = joinPriceTokens(tokens);
+    const combined = collapse(node.textContent || "");
+    if (joined === null && tokens.length > 1) return null;
+    const text = joined || combined;
+    const price = parsePrice(text);
+    if (!price) return null;
+    const rawText = combined || joined;
+    if (!rawText) return null;
+    return { value: price, raw_text: rawText, tokens };
   }
 
   function ignored(node) {
@@ -140,6 +329,8 @@
           age_ms: null,
           changed_at_monotonic_ms: null,
           unit,
+          parser_locale: currentLocale,
+          raw_tokens: null,
         };
       }
       values.push(value);
@@ -156,6 +347,8 @@
         age_ms: null,
         changed_at_monotonic_ms: null,
         unit,
+        parser_locale: currentLocale,
+        raw_tokens: null,
       };
     }
     return {
@@ -168,6 +361,8 @@
       age_ms: 0,
       changed_at_monotonic_ms: null,
       unit,
+      parser_locale: currentLocale,
+      raw_tokens: null,
     };
   }
 
@@ -211,6 +406,8 @@
         age_ms: null,
         changed_at_monotonic_ms: null,
         unit: null,
+        parser_locale: currentLocale,
+        raw_tokens: null,
       };
     }
     return {
@@ -223,6 +420,8 @@
       age_ms: null,
       changed_at_monotonic_ms: null,
       unit: null,
+      parser_locale: currentLocale,
+      raw_tokens: null,
     };
   }
 
@@ -328,7 +527,7 @@
   }
 
   function collectOwnPrices(root) {
-    const prices = [];
+    const hits = [];
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
     let node = walker.currentNode;
     while (node) {
@@ -339,32 +538,28 @@
             .map((child) => child.textContent)
             .join(" ")
         );
-        const price = parsePrice(own);
-        if (price) prices.push(price);
+        if (own) {
+          const hit = nodePriceHit(node);
+          if (hit) hits.push(hit);
+        }
       }
       node = walker.nextNode();
     }
-    return prices;
+    return hits;
   }
 
   function wrapperPricesIn(wrap, priceToken) {
-    const prices = [];
+    const hits = [];
     const walker = document.createTreeWalker(wrap, NodeFilter.SHOW_ELEMENT);
     let node = walker.currentNode;
     while (node) {
       if (!ignored(node) && classNameOf(node).includes(priceToken)) {
-        const own = collapse(
-          [...node.childNodes]
-            .filter((child) => child.nodeType === Node.TEXT_NODE)
-            .map((child) => child.textContent)
-            .join(" ")
-        );
-        const price = parsePrice(own) || parsePrice(collapse(node.textContent));
-        if (price) prices.push(price);
+        const hit = nodePriceHit(node);
+        if (hit) hits.push(hit);
       }
       node = walker.nextNode();
     }
-    return prices;
+    return hits;
   }
 
   function depthOf(node) {
@@ -442,9 +637,9 @@
     const asks = wrapperPricesIn(askWrap, askToken);
     const bids = wrapperPricesIn(bidWrap, bidToken);
     if (!asks.length || !bids.length) return { bid: null, ask: null, error: "missing_wrapper_bbo" };
-    const bestAsk = Math.min(...asks);
-    const bestBid = Math.max(...bids);
-    if (bestBid >= bestAsk) return { bid: null, ask: null, error: "crossed_wrapper_bbo" };
+    const bestAsk = asks.reduce((acc, hit) => (hit.value < acc.value ? hit : acc));
+    const bestBid = bids.reduce((acc, hit) => (hit.value > acc.value ? hit : acc));
+    if (bestBid.value >= bestAsk.value) return { bid: null, ask: null, error: "crossed_wrapper_bbo" };
     return { bid: bestBid, ask: bestAsk, error: null };
   }
 
@@ -506,7 +701,7 @@
       if (bbo.error) return { bid: null, ask: null, problems: [bbo.error] };
       resolved.push({ pair, bid: bbo.bid, ask: bbo.ask });
     }
-    const uniqueKeys = [...new Set(resolved.map((item) => `${item.bid}|${item.ask}`))];
+    const uniqueKeys = [...new Set(resolved.map((item) => `${item.bid.value}|${item.ask.value}`))];
     if (uniqueKeys.length > 1) {
       return { bid: null, ask: null, problems: ["ambiguous_live_orderbook"] };
     }
@@ -528,7 +723,17 @@
     const spec = catalog.live_orderbook || {};
     const headings = labelNodes(spec.heading_labels || ["Order Book"]).filter(isVisible);
     if (!headings.length) return { bid: null, ask: null, problems: [] };
-    const headerLabels = ["Fair Price", "Mark Price", "Index Price", "Funding Rate / Countdown", "Funding Rate"];
+    const headerLabels = [
+      "Fair Price",
+      "Mark Price",
+      "Index Price",
+      "Funding Rate / Countdown",
+      "Funding Rate",
+      "Справедливая цена",
+      "Индексная цена",
+      "Ставка финансирования/Обратный отсчет",
+      "Ставка финансирования",
+    ];
     const band = Number(spec.price_band_frac || 0.1);
     const minSide = Number(spec.min_side_levels || 1);
     const coalesced = coalesceRoots(
@@ -547,10 +752,10 @@
       const headerHits = labelNodes(headerLabels).filter((item) => node.contains(item));
       if (node !== coalesced.root && headerHits.length) break;
       const near = collectOwnPrices(node).filter(
-        (price) => Math.abs(price - lastValue) / lastValue <= band
+        (hit) => Math.abs(hit.value - lastValue) / lastValue <= band
       );
-      const asks = near.filter((price) => price > lastValue);
-      const bids = near.filter((price) => price < lastValue);
+      const asks = near.filter((hit) => hit.value > lastValue);
+      const bids = near.filter((hit) => hit.value < lastValue);
       if (asks.length >= minSide && bids.length >= minSide) {
         chosen = node;
         break;
@@ -559,13 +764,13 @@
     }
     if (!chosen) return { bid: null, ask: null, problems: [] };
     const near = collectOwnPrices(chosen).filter(
-      (price) => Math.abs(price - lastValue) / lastValue <= band
+      (hit) => Math.abs(hit.value - lastValue) / lastValue <= band
     );
-    const asks = near.filter((price) => price > lastValue);
-    const bids = near.filter((price) => price < lastValue);
-    const bestAsk = Math.min(...asks);
-    const bestBid = Math.max(...bids);
-    if (bestBid >= bestAsk) return { bid: null, ask: null, problems: [] };
+    const asks = near.filter((hit) => hit.value > lastValue);
+    const bids = near.filter((hit) => hit.value < lastValue);
+    const bestAsk = asks.reduce((acc, hit) => (hit.value < acc.value ? hit : acc));
+    const bestBid = bids.reduce((acc, hit) => (hit.value > acc.value ? hit : acc));
+    if (bestBid.value >= bestAsk.value) return { bid: null, ask: null, problems: [] };
     return { bid: bestBid, ask: bestAsk, problems: [] };
   }
 
@@ -610,10 +815,136 @@
   }
 
   function symbolHint() {
-    const parts = location.pathname.split("/").filter(Boolean);
-    const idx = parts.indexOf("futures");
-    if (idx >= 0) return parseSymbol(parts[idx + 1] || "");
-    return null;
+    return symbolFromFuturesPath(location.pathname);
+  }
+
+  function normalizeHeaderTitle(text) {
+    return collapse(text).toLowerCase().replace(/\//g, " / ").replace(/\s+/g, " ").trim();
+  }
+
+  function headerAliasLookup() {
+    const aliases = ((catalog.market_header || {}).field_title_aliases) || {};
+    const lookup = Object.create(null);
+    for (const [fieldName, titles] of Object.entries(aliases)) {
+      for (const title of titles || []) {
+        lookup[normalizeHeaderTitle(title)] = fieldName;
+      }
+    }
+    return lookup;
+  }
+
+  function fieldFromHit(name, hit, selectorId) {
+    return {
+      name,
+      raw_text: hit.raw_text,
+      value: hit.value,
+      selector_id: selectorId,
+      parse_status: "ok",
+      match_count: 1,
+      age_ms: 0,
+      changed_at_monotonic_ms: null,
+      unit: null,
+      parser_locale: currentLocale,
+      raw_tokens: hit.tokens || null,
+    };
+  }
+
+  function emptyHeaderDiagnostics() {
+    return {
+      ui_locale: currentLocale,
+      parser_mode: currentLocale,
+      header_item_count: 0,
+      header_title_hits_mark: 0,
+      header_title_hits_index: 0,
+      header_title_hits_funding: 0,
+      symbol_status: "missing",
+      last_status: "missing",
+      mark_status: "missing",
+      index_status: "missing",
+      funding_status: "missing",
+      symbol_selector_id: null,
+      last_selector_id: null,
+      mark_selector_id: null,
+      index_selector_id: null,
+      funding_selector_id: null,
+      ambiguity_reason: null,
+    };
+  }
+
+  function extractMarketHeader() {
+    const spec = catalog.market_header || {};
+    const itemToken = spec.item_class_contains || "commonItem";
+    const rootToken = spec.root_class_contains || "contractDetail";
+    const excluded = spec.item_class_exclude || ["lastPriceWrapper", "rateItem"];
+    const titleToken = spec.title_class_contains || "itemTitle";
+    const valueToken = spec.value_class_contains || "itemContent";
+    const lookup = headerAliasLookup();
+    const grouped = { mark: [], index: [], funding: [] };
+    const diag = emptyHeaderDiagnostics();
+    const items = [...document.querySelectorAll("[class]")].filter((node) => {
+      if (ignored(node)) return false;
+      const classes = classNameOf(node);
+      if (!classes.includes(itemToken) || !classes.includes(rootToken)) return false;
+      return !excluded.some((token) => classes.includes(token));
+    });
+    diag.header_item_count = items.length;
+    for (const item of items) {
+      const titleNodes = [...item.querySelectorAll("[class]")].filter((node) =>
+        classNameOf(node).includes(titleToken)
+      );
+      const valueNodes = [...item.querySelectorAll("[class]")].filter((node) =>
+        classNameOf(node).includes(valueToken)
+      );
+      const titles = titleNodes.map((node) => collapse(node.textContent)).filter(Boolean);
+      const values = valueNodes.map((node) => collapse(node.textContent)).filter(Boolean);
+      const title = titles.sort((a, b) => b.length - a.length)[0] || "";
+      const value = values.sort((a, b) => b.length - a.length)[0] || "";
+      const fieldName = lookup[normalizeHeaderTitle(title)];
+      if (!fieldName || !grouped[fieldName]) continue;
+      grouped[fieldName].push({ node: item, raw: value });
+    }
+    diag.header_title_hits_mark = grouped.mark.length;
+    diag.header_title_hits_index = grouped.index.length;
+    diag.header_title_hits_funding = grouped.funding.length;
+    const fields = {};
+    for (const [name, rows] of Object.entries(grouped)) {
+      if (!rows.length) continue;
+      const specField = catalog.fields[name];
+      fields[name] = decode(
+        name,
+        specField,
+        rows.map((row) => row.node),
+        `header_struct:${name}`,
+        rows.map((row) => row.raw)
+      );
+    }
+    return { fields, diag };
+  }
+
+  function overlayHeaderFields(fields, headerFields) {
+    for (const [name, rec] of Object.entries(headerFields)) {
+      const current = fields[name];
+      if (current && String(current.selector_id || "").startsWith("data_attr")) continue;
+      if (!current || current.parse_status === "missing" || rec.parse_status !== "missing") {
+        fields[name] = rec;
+      }
+    }
+  }
+
+  function finishHeaderDiagnostics(diag, fields) {
+    diag.ui_locale = currentLocale;
+    diag.parser_mode = currentLocale;
+    for (const name of ["symbol", "last", "mark", "index", "funding"]) {
+      const rec = fields[name];
+      diag[`${name}_status`] = rec && rec.parse_status ? rec.parse_status : "missing";
+      diag[`${name}_selector_id`] = rec && rec.selector_id ? rec.selector_id : null;
+    }
+    const reasons = [];
+    for (const name of ["mark", "index", "funding"]) {
+      if (fields[name] && fields[name].parse_status === "ambiguous") reasons.push(`ambiguous:${name}`);
+    }
+    diag.ambiguity_reason = reasons[0] || null;
+    return diag;
   }
 
   function resetAgeClock() {
@@ -656,10 +987,13 @@
 
   function extract(trigger) {
     if (!catalog) return null;
+    currentLocale = localeFromPathname(location.pathname);
     const fields = {};
     for (const [name, spec] of Object.entries(catalog.fields)) {
       fields[name] = extractField(name, spec);
     }
+    const header = extractMarketHeader();
+    overlayHeaderFields(fields, header.fields);
     const book = orderbook();
     const hint = symbolHint();
     if (fields.symbol.parse_status === "missing" && hint) {
@@ -673,6 +1007,8 @@
         age_ms: 0,
         changed_at_monotonic_ms: null,
         unit: null,
+        parser_locale: currentLocale,
+        raw_tokens: null,
       };
     }
     if (
@@ -709,30 +1045,10 @@
       const wrap = resolveWrapperBbo();
       book.problems.push(...wrap.problems);
       if (wrap.bid !== null && fields.bid.parse_status === "missing") {
-        fields.bid = {
-          name: "bid",
-          raw_text: String(wrap.bid),
-          value: wrap.bid,
-          selector_id: "live_asks_bids_wrapper",
-          parse_status: "ok",
-          match_count: 1,
-          age_ms: 0,
-          changed_at_monotonic_ms: null,
-          unit: null,
-        };
+        fields.bid = fieldFromHit("bid", wrap.bid, "live_asks_bids_wrapper");
       }
       if (wrap.ask !== null && fields.ask.parse_status === "missing") {
-        fields.ask = {
-          name: "ask",
-          raw_text: String(wrap.ask),
-          value: wrap.ask,
-          selector_id: "live_asks_bids_wrapper",
-          parse_status: "ok",
-          match_count: 1,
-          age_ms: 0,
-          changed_at_monotonic_ms: null,
-          unit: null,
-        };
+        fields.ask = fieldFromHit("ask", wrap.ask, "live_asks_bids_wrapper");
       }
     }
     if (
@@ -742,30 +1058,10 @@
       const live = liveOrderBook(lastValue);
       book.problems.push(...live.problems);
       if (live.bid !== null && fields.bid.parse_status === "missing") {
-        fields.bid = {
-          name: "bid",
-          raw_text: String(live.bid),
-          value: live.bid,
-          selector_id: "live_orderbook_split_by_last",
-          parse_status: "ok",
-          match_count: 1,
-          age_ms: 0,
-          changed_at_monotonic_ms: null,
-          unit: null,
-        };
+        fields.bid = fieldFromHit("bid", live.bid, "live_orderbook_split_by_last");
       }
       if (live.ask !== null && fields.ask.parse_status === "missing") {
-        fields.ask = {
-          name: "ask",
-          raw_text: String(live.ask),
-          value: live.ask,
-          selector_id: "live_orderbook_split_by_last",
-          parse_status: "ok",
-          match_count: 1,
-          age_ms: 0,
-          changed_at_monotonic_ms: null,
-          unit: null,
-        };
+        fields.ask = fieldFromHit("ask", live.ask, "live_orderbook_split_by_last");
       }
     }
     diagnostics.chosen_bbo_source = chosenBboSource(fields);
@@ -808,6 +1104,9 @@
       depth_asks: book.asks,
       depth_selector_id: book.selector,
       orderbook_diagnostics: diagnostics,
+      ui_locale: currentLocale,
+      parser_mode: currentLocale,
+      header_diagnostics: finishHeaderDiagnostics(header.diag, fields),
     };
   }
 

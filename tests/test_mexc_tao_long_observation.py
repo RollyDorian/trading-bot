@@ -56,7 +56,7 @@ def _append(store: DurableCaptureStore, html: str, *, offset_ms: int, previous=N
         previous=previous,
         monotonic_ms=float(offset_ms),
         trigger="interval",
-        page_path="/ru-RU/futures/TAO_USDT",
+        page_path="/en-US/futures/TAO_USDT",
     )
     store.append_snapshot(snap.as_dict())
     return snap
