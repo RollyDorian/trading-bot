@@ -1,0 +1,42 @@
+{
+  "milestone": "MEXC_UI_LOGGED_IN_HEADER_PROBE_ANALYSIS_V1",
+  "status": "MEXC_UI_LOGGED_IN_HEADER_PROBE_ANALYSIS_READY",
+  "decision": "STOP_FOR_LEAD_REVIEW",
+  "ml_status": "NOT_STARTED",
+  "paper": false,
+  "live": false,
+  "strategy_tuning": false,
+  "extension_version": "1.3.2",
+  "catalog_version": "v1.2",
+  "capture": {
+    "session_id": "57e805e7-8665-431f-8704-113df7c55b4a",
+    "page_path": "/ru-RU/futures/TAO_USDT",
+    "sha256": "2da83ad802f92600d36fad7e4cf0a99a6eddb53b26eca7958c45f9e76dab2a28",
+    "n_snapshots": 138,
+    "n_probes": 1,
+    "structural_signature": "fnv1a32:a059c18c",
+    "selector_catalog_version": "v1.1",
+    "header_item_count": 3,
+    "title_hits": {"mark": 1, "index": 1, "funding": 1},
+    "parsed": {"last": 228.76, "bid": 228.76, "ask": 228.79, "mark": 228.78, "index": 228.9, "funding": 0.0025}
+  },
+  "cause": {
+    "title_class_mismatch": false,
+    "value_class_mismatch": false,
+    "changed_nesting": false,
+    "different_logged_in_labels": false,
+    "duplicated_hidden_variants_in_probe": false,
+    "stale_catalog_v1_empty_aliases": true,
+    "positional_mapping_used": false
+  },
+  "observed_titles": [
+    "Индексная цена",
+    "Справедливая цена",
+    "Ставка финансирования / Обратный отсчет"
+  ],
+  "notes": [
+    "1.3.0 short gate stamped catalog v1 and 8 items with 0 title hits.",
+    "1.3.1 probe shows itemTitle/itemContent match and extracts Fair/Index/Funding.",
+    "1.3.2 falls back to probe-verified aliases when JSON market_header aliases are empty."
+  ]
+}

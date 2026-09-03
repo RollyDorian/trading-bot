@@ -305,7 +305,15 @@ python -m venv .venv
    no aliases and leaves mark/index extraction fail-closed pending logged-in
    evidence. STATUS `MEXC_UI_LOGGED_IN_HEADER_PROBE_READY`, DECISION
    `STOP_FOR_LEAD_REVIEW`
-   (`docs/mexc_ui_logged_in_header_probe_v1.md`). Design review
+   (`docs/mexc_ui_logged_in_header_probe_v1.md`). Follow-on
+   `MEXC_UI_LOGGED_IN_HEADER_PROBE_ANALYSIS_V1` scored the 1.3.1 logged-in
+   probe (3 items, title/value classes match, ru-RU labels present). The
+   prior 8-item/0-hit capture stamped catalog v1 with empty header aliases.
+   Extension 1.3.2 / catalog v1.2 falls back to those probe-verified aliases
+   and records `header_alias_count`. STATUS
+   `MEXC_UI_LOGGED_IN_HEADER_PROBE_ANALYSIS_READY`, DECISION
+   `STOP_FOR_LEAD_REVIEW`
+   (`docs/mexc_ui_logged_in_header_probe_analysis_v1.md`). Design review
    `EXTERNAL_RELATIVE_VALUE_FEED_DESIGN_REVIEW` then selected a minimal
    Binance USD-M `ETHUSDT` public `bookTicker`+`aggTrade` pilot (Bybit fallback),
    spool→Parquet→B2 storage (not `market_events`), isolated Compose service

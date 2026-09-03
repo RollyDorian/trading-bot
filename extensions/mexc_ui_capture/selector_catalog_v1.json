@@ -1,5 +1,5 @@
 {
-  "catalog_version": "v1.1",
+  "catalog_version": "v1.2",
   "data_capture_attr": "data-mexc-capture",
   "ignore_attr": "data-mexc-capture-ignore",
   "sample_interval_ms_allowed": [
@@ -81,6 +81,7 @@
         "Funding Rate / Countdown",
         "Funding Rate/Countdown",
         "Funding Rate",
+        "Ставка финансирования / Обратный отсчет",
         "Ставка финансирования/Обратный отсчет",
         "Ставка финансирования"
       ]
@@ -137,6 +138,7 @@
         "Funding Rate / Countdown",
         "Funding Rate/Countdown",
         "Funding Rate",
+        "Ставка финансирования / Обратный отсчет",
         "Ставка финансирования/Обратный отсчет",
         "Ставка финансирования"
       ]
