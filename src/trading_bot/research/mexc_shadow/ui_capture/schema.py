@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -53,6 +54,27 @@ _HEADER_INT_KEYS = (
 _ALLOWED_PARSE_STATUSES = frozenset(
     {"ok", "ok_redundant", "missing", "unparsable", "ambiguous"}
 )
+_PROBE_MAX_ITEMS = 12
+_PROBE_MAX_CHILDREN = 8
+_PROBE_MAX_CLASS_TOKENS = 16
+_PROBE_MAX_RELEVANT_TOKENS = 24
+_PROBE_MAX_TEXT_TOKENS = 16
+_PROBE_MAX_ATTRIBUTE_RECORDS = 8
+_PROBE_ATTRIBUTE_KEYS = (
+    "title",
+    "aria-label",
+    "aria-labelledby",
+    "data-title",
+    "data-tooltip",
+    "data-original-title",
+    "role",
+)
+_PROBE_PRIVATE_HINT = re.compile(
+    r"account|balance|wallet|position|\borders?\b|order(?:form|panel|entry|history)|"
+    r"margin|asset|equity|available|"
+    r"api.?key|secret|credential|email|\buid\b",
+    re.IGNORECASE,
+)
 
 
 def empty_orderbook_diagnostics() -> dict[str, Any]:
@@ -87,6 +109,142 @@ def empty_header_diagnostics() -> dict[str, Any]:
         "index_selector_id": None,
         "funding_selector_id": None,
         "ambiguity_reason": None,
+        "market_header_probe": None,
+    }
+
+
+def _probe_string(value: Any, limit: int) -> str:
+    text = str(value or "")[:limit]
+    return "[redacted]" if _PROBE_PRIVATE_HINT.search(text) else text
+
+
+def _probe_strings(raw: Any, *, limit: int, count: int) -> list[str]:
+    if not isinstance(raw, list | tuple):
+        return []
+    return [_probe_string(value, limit) for value in raw[:count]]
+
+
+def _probe_attributes(raw: Any) -> dict[str, str]:
+    if not isinstance(raw, Mapping):
+        return {}
+    return {
+        key: _probe_string(raw[key], 120)
+        for key in _PROBE_ATTRIBUTE_KEYS
+        if key in raw and raw[key] not in {None, ""}
+    }
+
+
+def _sanitize_probe_child(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, Mapping):
+        return None
+    if bool(raw.get("redacted")):
+        return {
+            "tag": _probe_string(raw.get("tag"), 24),
+            "class_string": "",
+            "class_tokens": [],
+            "visible_text": "",
+            "visible_text_tokens": [],
+            "attributes": {},
+            "current_title_token_matched": False,
+            "current_value_token_matched": False,
+            "redacted": True,
+        }
+    return {
+        "tag": _probe_string(raw.get("tag"), 24),
+        "class_string": _probe_string(raw.get("class_string"), 240),
+        "class_tokens": _probe_strings(
+            raw.get("class_tokens"), limit=80, count=_PROBE_MAX_CLASS_TOKENS
+        ),
+        "visible_text": _probe_string(raw.get("visible_text"), 240),
+        "visible_text_tokens": _probe_strings(
+            raw.get("visible_text_tokens"), limit=80, count=_PROBE_MAX_TEXT_TOKENS
+        ),
+        "attributes": _probe_attributes(raw.get("attributes")),
+        "current_title_token_matched": bool(raw.get("current_title_token_matched")),
+        "current_value_token_matched": bool(raw.get("current_value_token_matched")),
+        "redacted": bool(raw.get("redacted")),
+    }
+
+
+def _sanitize_probe_item(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, Mapping):
+        return None
+    if bool(raw.get("redacted")):
+        return {
+            "item_index": max(0, int(raw.get("item_index") or 0)),
+            "tag": _probe_string(raw.get("tag"), 24),
+            "class_string": "",
+            "class_tokens": [],
+            "direct_children": [],
+            "descendant_relevant_class_tokens": [],
+            "descendant_attributes": [],
+            "visible_text": "",
+            "visible_text_tokens": [],
+            "attributes": {},
+            "current_title_token_matched": False,
+            "current_value_token_matched": False,
+            "redacted": True,
+        }
+    children = [
+        child
+        for value in list(raw.get("direct_children") or [])[:_PROBE_MAX_CHILDREN]
+        if (child := _sanitize_probe_child(value)) is not None
+    ]
+    attribute_records: list[dict[str, Any]] = []
+    for value in list(raw.get("descendant_attributes") or [])[:_PROBE_MAX_ATTRIBUTE_RECORDS]:
+        if not isinstance(value, Mapping):
+            continue
+        attribute_records.append(
+            {
+                "tag": _probe_string(value.get("tag"), 24),
+                "attributes": _probe_attributes(value.get("attributes")),
+            }
+        )
+    return {
+        "item_index": max(0, int(raw.get("item_index") or 0)),
+        "tag": _probe_string(raw.get("tag"), 24),
+        "class_string": _probe_string(raw.get("class_string"), 240),
+        "class_tokens": _probe_strings(
+            raw.get("class_tokens"), limit=80, count=_PROBE_MAX_CLASS_TOKENS
+        ),
+        "direct_children": children,
+        "descendant_relevant_class_tokens": _probe_strings(
+            raw.get("descendant_relevant_class_tokens"),
+            limit=80,
+            count=_PROBE_MAX_RELEVANT_TOKENS,
+        ),
+        "descendant_attributes": attribute_records,
+        "visible_text": _probe_string(raw.get("visible_text"), 240),
+        "visible_text_tokens": _probe_strings(
+            raw.get("visible_text_tokens"), limit=80, count=_PROBE_MAX_TEXT_TOKENS
+        ),
+        "attributes": _probe_attributes(raw.get("attributes")),
+        "current_title_token_matched": bool(raw.get("current_title_token_matched")),
+        "current_value_token_matched": bool(raw.get("current_value_token_matched")),
+        "redacted": bool(raw.get("redacted")),
+    }
+
+
+def sanitize_market_header_probe(raw: Any) -> dict[str, Any] | None:
+    """Retain only the bounded market-header structure allowlist."""
+
+    if not isinstance(raw, Mapping):
+        return None
+    items = [
+        item
+        for value in list(raw.get("items") or [])[:_PROBE_MAX_ITEMS]
+        if (item := _sanitize_probe_item(value)) is not None
+    ]
+    try:
+        matched = max(0, min(int(raw.get("matched_item_count") or 0), 999))
+    except (TypeError, ValueError):
+        matched = 0
+    return {
+        "probe_version": 1,
+        "structural_signature": _probe_string(raw.get("structural_signature"), 80),
+        "matched_item_count": matched,
+        "items_truncated": bool(raw.get("items_truncated")) or matched > _PROBE_MAX_ITEMS,
+        "items": items,
     }
 
 
@@ -116,6 +274,9 @@ def sanitize_header_diagnostics(raw: Any) -> dict[str, Any]:
         out[key] = None if selector in {None, ""} else str(selector)
     reason = raw.get("ambiguity_reason")
     out["ambiguity_reason"] = None if reason in {None, ""} else str(reason)
+    out["market_header_probe"] = sanitize_market_header_probe(
+        raw.get("market_header_probe")
+    )
     return out
 
 
@@ -202,6 +363,8 @@ class UiRawSnapshot:
     ui_locale: str | None = None
     parser_mode: str | None = None
     header_diagnostics: dict[str, Any] = field(default_factory=empty_header_diagnostics)
+    # Runtime-only deduplication state; intentionally absent from serialized captures.
+    header_probe_signature: str | None = field(default=None, repr=False, compare=False)
 
     def as_dict(self) -> dict[str, Any]:
         return {

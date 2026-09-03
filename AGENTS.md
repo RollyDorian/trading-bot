@@ -298,7 +298,14 @@ python -m venv .venv
    rule before any corrected long TAO corpus is inspected. STATUS
    `MEXC_MOM_GAP_HYPOTHESIS_PROTOCOL_DESIGN_READY`, DECISION
    `STOP_FOR_LEAD_REVIEW`, ML_STATUS `NOT_STARTED`
-   (`docs/mexc_mom_gap_hypothesis_protocol_design_v1.md`). No ML / PAPER / LIVE. Design review
+   (`docs/mexc_mom_gap_hypothesis_protocol_design_v1.md`). No ML / PAPER / LIVE.
+   Follow-on `MEXC_UI_LOGGED_IN_HEADER_PROBE_V1` adds extension 1.3.1 bounded
+   market-header-only structure diagnostics (maximum 12 visible matched items),
+   private-subtree redaction, and once-per-session-or-signature emission. It adds
+   no aliases and leaves mark/index extraction fail-closed pending logged-in
+   evidence. STATUS `MEXC_UI_LOGGED_IN_HEADER_PROBE_READY`, DECISION
+   `STOP_FOR_LEAD_REVIEW`
+   (`docs/mexc_ui_logged_in_header_probe_v1.md`). Design review
    `EXTERNAL_RELATIVE_VALUE_FEED_DESIGN_REVIEW` then selected a minimal
    Binance USD-M `ETHUSDT` public `bookTicker`+`aggTrade` pilot (Bybit fallback),
    spool→Parquet→B2 storage (not `market_events`), isolated Compose service

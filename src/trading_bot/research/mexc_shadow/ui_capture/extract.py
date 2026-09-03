@@ -5,6 +5,9 @@ Live pages are observed by the extension. Python never drives a browser.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from typing import Any
@@ -269,6 +272,11 @@ def _extract_field(
         raws = [_combined_text(node) or node.attrs.get("data-value", "") for node in attr_nodes]
         return _decode_field(name, spec, attr_nodes, f"data_attr:{name}", raws, locale)
     label_nodes = _label_matches(root, list(spec.get("labels") or []))
+    if name in {"mark", "index", "funding"}:
+        # Once a node is inside a recognized market-header item, only the
+        # explicit title/value structure may decode it. A generic label fallback
+        # would conceal the exact class mismatch this diagnostic is meant to expose.
+        label_nodes = [node for node in label_nodes if not _in_market_header_item(node)]
     if label_nodes:
         raws = []
         for node in label_nodes:
@@ -311,6 +319,24 @@ def _extract_field(
         match_count=0,
         parser_locale=locale,
     )
+
+
+def _in_market_header_item(node: _Node) -> bool:
+    spec = SELECTOR_CATALOG.get("market_header") or {}
+    item_token = str(spec.get("item_class_contains") or "commonItem")
+    root_token = str(spec.get("root_class_contains") or "contractDetail")
+    excluded = list(spec.get("item_class_exclude") or [])
+    current: _Node | None = node
+    while current is not None:
+        classes = current.attrs.get("class", "")
+        if (
+            item_token in classes
+            and root_token in classes
+            and not any(token in classes for token in excluded)
+        ):
+            return True
+        current = current.parent
+    return False
 
 
 def _parse_levels(
@@ -519,6 +545,8 @@ def _header_items(root: _Node) -> list[_Node]:
     excluded = list(spec.get("item_class_exclude") or [])
     items: list[_Node] = []
     for node in _walk(root):
+        if _ignored(node) or not _is_visible(node):
+            continue
         classes = node.attrs.get("class", "")
         if item_token not in classes or root_token not in classes:
             continue
@@ -526,6 +554,201 @@ def _header_items(root: _Node) -> list[_Node]:
             continue
         items.append(node)
     return items
+
+
+_HEADER_PROBE_MAX_ITEMS = 12
+_HEADER_PROBE_MAX_CHILDREN = 8
+_HEADER_PROBE_MAX_CLASS_TOKENS = 16
+_HEADER_PROBE_MAX_RELEVANT_TOKENS = 24
+_HEADER_PROBE_MAX_TEXT_TOKENS = 16
+_HEADER_PROBE_MAX_ATTRIBUTE_RECORDS = 8
+_HEADER_PROBE_ATTRIBUTE_KEYS = (
+    "title",
+    "aria-label",
+    "aria-labelledby",
+    "data-title",
+    "data-tooltip",
+    "data-original-title",
+    "role",
+)
+_HEADER_RELEVANT_CLASS = re.compile(
+    r"title|content|value|label|price|rate|fair|index|fund|item", re.IGNORECASE
+)
+_HEADER_NUMBER_SHAPE = re.compile(r"[-+]?\d[\d\s.,:%/:-]*")
+_HEADER_PRIVATE_HINT = re.compile(
+    r"account|balance|wallet|position|\borders?\b|order(?:form|panel|entry|history)|"
+    r"margin|asset|equity|available|"
+    r"api.?key|secret|credential|email|\buid\b",
+    re.IGNORECASE,
+)
+
+
+def _cap_probe_text(value: str, limit: int) -> str:
+    return collapse_ws(value)[:limit]
+
+
+def _probe_class_tokens(node: _Node) -> list[str]:
+    return [
+        _cap_probe_text(token, 80)
+        for token in node.attrs.get("class", "").split()[:_HEADER_PROBE_MAX_CLASS_TOKENS]
+    ]
+
+
+def _probe_attributes(node: _Node) -> dict[str, str]:
+    return {
+        key: _cap_probe_text(node.attrs[key], 120)
+        for key in _HEADER_PROBE_ATTRIBUTE_KEYS
+        if node.attrs.get(key)
+    }
+
+
+def _private_probe_node(node: _Node) -> bool:
+    values = [node.attrs.get("class", ""), _own_text(node)]
+    values.extend(node.attrs.get(key, "") for key in _HEADER_PROBE_ATTRIBUTE_KEYS)
+    return bool(_HEADER_PRIVATE_HINT.search(" ".join(values)))
+
+
+def _under_private_probe_node(node: _Node, root: _Node) -> bool:
+    current: _Node | None = node
+    while current is not None:
+        if _private_probe_node(current):
+            return True
+        if current is root:
+            return False
+        current = current.parent
+    return False
+
+
+def _probe_visible_tokens(node: _Node) -> list[str]:
+    tokens: list[str] = []
+    for child in _walk(node):
+        if _under_private_probe_node(child, node):
+            continue
+        token = _cap_probe_text(child.text, 80)
+        if token:
+            tokens.append(token)
+        if len(tokens) >= _HEADER_PROBE_MAX_TEXT_TOKENS:
+            break
+    return tokens
+
+
+def _probe_child(node: _Node, title_token: str, value_token: str) -> dict[str, Any]:
+    if _private_probe_node(node):
+        return {
+            "tag": _cap_probe_text(node.tag, 24),
+            "class_string": "",
+            "class_tokens": [],
+            "visible_text": "",
+            "visible_text_tokens": [],
+            "attributes": {},
+            "current_title_token_matched": False,
+            "current_value_token_matched": False,
+            "redacted": True,
+        }
+    classes = node.attrs.get("class", "")
+    text_tokens = _probe_visible_tokens(node)
+    return {
+        "tag": _cap_probe_text(node.tag, 24),
+        "class_string": _cap_probe_text(classes, 240),
+        "class_tokens": _probe_class_tokens(node),
+        "visible_text": _cap_probe_text(" ".join(text_tokens), 240),
+        "visible_text_tokens": text_tokens,
+        "attributes": _probe_attributes(node),
+        "current_title_token_matched": title_token in classes,
+        "current_value_token_matched": value_token in classes,
+        "redacted": False,
+    }
+
+
+def _probe_item(
+    item: _Node, item_index: int, title_token: str, value_token: str
+) -> dict[str, Any]:
+    if _private_probe_node(item):
+        return {
+            "item_index": item_index,
+            "tag": _cap_probe_text(item.tag, 24),
+            "class_string": "",
+            "class_tokens": [],
+            "direct_children": [],
+            "descendant_relevant_class_tokens": [],
+            "descendant_attributes": [],
+            "visible_text": "",
+            "visible_text_tokens": [],
+            "attributes": {},
+            "current_title_token_matched": False,
+            "current_value_token_matched": False,
+            "redacted": True,
+        }
+    descendants = _walk(item)[1:]
+    relevant_tokens: list[str] = []
+    attribute_records: list[dict[str, Any]] = []
+    for node in descendants:
+        if _under_private_probe_node(node, item):
+            continue
+        for token in node.attrs.get("class", "").split():
+            if _HEADER_RELEVANT_CLASS.search(token) and token not in relevant_tokens:
+                relevant_tokens.append(_cap_probe_text(token, 80))
+                if len(relevant_tokens) >= _HEADER_PROBE_MAX_RELEVANT_TOKENS:
+                    break
+        attrs = _probe_attributes(node)
+        if attrs and len(attribute_records) < _HEADER_PROBE_MAX_ATTRIBUTE_RECORDS:
+            attribute_records.append({"tag": _cap_probe_text(node.tag, 24), "attributes": attrs})
+    text_tokens = _probe_visible_tokens(item)
+    classes = item.attrs.get("class", "")
+    return {
+        "item_index": item_index,
+        "tag": _cap_probe_text(item.tag, 24),
+        "class_string": _cap_probe_text(classes, 240),
+        "class_tokens": _probe_class_tokens(item),
+        "direct_children": [
+            _probe_child(child, title_token, value_token)
+            for child in item.children[:_HEADER_PROBE_MAX_CHILDREN]
+            if _is_visible(child) and not _ignored(child)
+        ],
+        "descendant_relevant_class_tokens": relevant_tokens,
+        "descendant_attributes": attribute_records,
+        "visible_text": _cap_probe_text(" ".join(text_tokens), 240),
+        "visible_text_tokens": text_tokens,
+        "attributes": _probe_attributes(item),
+        "current_title_token_matched": any(
+            title_token in node.attrs.get("class", "")
+            for node in descendants
+            if not _under_private_probe_node(node, item)
+        ),
+        "current_value_token_matched": any(
+            value_token in node.attrs.get("class", "")
+            for node in descendants
+            if not _under_private_probe_node(node, item)
+        ),
+        "redacted": False,
+    }
+
+
+def _probe_signature_shape(value: Any) -> Any:
+    if isinstance(value, str):
+        return _HEADER_NUMBER_SHAPE.sub("<number>", value.lower())
+    if isinstance(value, list):
+        return [_probe_signature_shape(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _probe_signature_shape(item) for key, item in value.items()}
+    return value
+
+
+def _header_probe(items: list[_Node], title_token: str, value_token: str) -> dict[str, Any]:
+    bounded = items[:_HEADER_PROBE_MAX_ITEMS]
+    summaries = [
+        _probe_item(item, index, title_token, value_token)
+        for index, item in enumerate(bounded)
+    ]
+    signature_shape = _probe_signature_shape(summaries)
+    encoded = json.dumps(signature_shape, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    return {
+        "probe_version": 1,
+        "structural_signature": f"sha256:{hashlib.sha256(encoded).hexdigest()[:16]}",
+        "matched_item_count": len(items),
+        "items_truncated": len(items) > _HEADER_PROBE_MAX_ITEMS,
+        "items": summaries,
+    }
 
 
 def _item_class_text(item: _Node, token: str) -> str:
@@ -556,6 +779,7 @@ def _extract_market_header(
     diag["parser_mode"] = locale
     items = _header_items(root)
     diag["header_item_count"] = len(items)
+    diag["market_header_probe"] = _header_probe(items, title_token, value_token)
     for item in items:
         title = _item_class_text(item, title_token)
         value = _item_class_text(item, value_token)
@@ -1097,6 +1321,18 @@ def extract_html(
     if exchange_field is not None and isinstance(exchange_field.value, str):
         exchange_at = exchange_field.value
 
+    probe = header_diag.get("market_header_probe")
+    probe_signature = (
+        str(probe.get("structural_signature")) if isinstance(probe, dict) else None
+    )
+    if (
+        previous is not None
+        and previous.capture_id == capture_id
+        and probe_signature
+        and previous.header_probe_signature == probe_signature
+    ):
+        header_diag["market_header_probe"] = None
+
     return UiRawSnapshot(
         schema=SCHEMA_NAME,
         schema_version=SCHEMA_VERSION,
@@ -1123,4 +1359,5 @@ def extract_html(
         ui_locale=locale,
         parser_mode=locale,
         header_diagnostics=_finish_header_diagnostics(header_diag, aged, locale),
+        header_probe_signature=probe_signature,
     )

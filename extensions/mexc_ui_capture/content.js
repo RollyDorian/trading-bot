@@ -10,6 +10,7 @@
   let intervalId = null;
   let observer = null;
   let lastEmitKey = "";
+  let lastHeaderProbeSignature = "";
   let lastChangeMono = Object.create(null);
   let lastValue = Object.create(null);
   let agePageKey = "";
@@ -383,7 +384,10 @@
       const raws = attrNodes.map((node) => collapse(node.textContent) || node.getAttribute("data-value") || "");
       return decode(name, spec, attrNodes, `data_attr:${name}`, raws);
     }
-    const nodes = labelNodes(spec.labels || []);
+    let nodes = labelNodes(spec.labels || []);
+    if (["mark", "index", "funding"].includes(name)) {
+      nodes = nodes.filter((node) => !marketHeaderItemAncestor(node));
+    }
     if (nodes.length) {
       const raws = nodes.map((node) => followingText(node, name === "funding"));
       if (!raws.every((raw) => missingText(raw))) {
@@ -868,6 +872,197 @@
       index_selector_id: null,
       funding_selector_id: null,
       ambiguity_reason: null,
+      market_header_probe: null,
+    };
+  }
+
+  const HEADER_PROBE_LIMITS = {
+    items: 12, children: 8, classTokens: 16, relevantTokens: 24,
+    textTokens: 16, attributes: 8, nodes: 256,
+  };
+  const HEADER_PROBE_ATTRS = [
+    "title", "aria-label", "aria-labelledby", "data-title",
+    "data-tooltip", "data-original-title", "role",
+  ];
+  const HEADER_PROBE_RELEVANT = /title|content|value|label|price|rate|fair|index|fund|item/i;
+  const HEADER_PROBE_PRIVATE = /account|balance|wallet|position|\borders?\b|order(?:form|panel|entry|history)|margin|asset|equity|available|api.?key|secret|credential|email|\buid\b/i;
+
+  function capProbe(value, limit) {
+    return collapse(String(value || "")).slice(0, limit);
+  }
+
+  function headerItemConfig() {
+    const spec = catalog.market_header || {};
+    return {
+      itemToken: spec.item_class_contains || "commonItem",
+      rootToken: spec.root_class_contains || "contractDetail",
+      excluded: spec.item_class_exclude || ["lastPriceWrapper", "rateItem"],
+    };
+  }
+
+  function isMarketHeaderItem(node) {
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
+    const { itemToken, rootToken, excluded } = headerItemConfig();
+    const classes = classNameOf(node);
+    return classes.includes(itemToken)
+      && classes.includes(rootToken)
+      && !excluded.some((token) => classes.includes(token));
+  }
+
+  function marketHeaderItemAncestor(node) {
+    let current = node;
+    while (current && current !== document) {
+      if (isMarketHeaderItem(current)) return current;
+      current = current.parentElement;
+    }
+    return null;
+  }
+
+  function probeAttributes(node) {
+    const out = {};
+    for (const key of HEADER_PROBE_ATTRS) {
+      const value = node.getAttribute && node.getAttribute(key);
+      if (value) out[key] = capProbe(value, 120);
+    }
+    return out;
+  }
+
+  function privateProbeNode(node) {
+    const values = [classNameOf(node), ...Object.values(probeAttributes(node))];
+    for (const child of node.childNodes || []) {
+      if (child.nodeType === Node.TEXT_NODE) values.push(child.textContent || "");
+    }
+    return HEADER_PROBE_PRIVATE.test(values.join(" "));
+  }
+
+  function boundedProbeNodes(root) {
+    const out = [];
+    const stack = [root];
+    while (stack.length && out.length < HEADER_PROBE_LIMITS.nodes) {
+      const node = stack.pop();
+      if (!node || node.nodeType !== Node.ELEMENT_NODE || ignored(node) || !isVisible(node)) continue;
+      out.push(node);
+      if (node !== root && privateProbeNode(node)) continue;
+      const children = [...node.children];
+      for (let index = children.length - 1; index >= 0; index -= 1) stack.push(children[index]);
+    }
+    return out;
+  }
+
+  function probeTextTokens(root) {
+    const tokens = [];
+    for (const node of boundedProbeNodes(root)) {
+      if (privateProbeNode(node)) continue;
+      for (const child of node.childNodes || []) {
+        if (child.nodeType !== Node.TEXT_NODE) continue;
+        const token = capProbe(child.textContent, 80);
+        if (token) tokens.push(token);
+        if (tokens.length >= HEADER_PROBE_LIMITS.textTokens) return tokens;
+      }
+    }
+    return tokens;
+  }
+
+  function probeClassTokens(node) {
+    return classNameOf(node).split(/\s+/).filter(Boolean)
+      .slice(0, HEADER_PROBE_LIMITS.classTokens)
+      .map((token) => capProbe(token, 80));
+  }
+
+  function probeChild(node, titleToken, valueToken) {
+    if (privateProbeNode(node)) {
+      return {
+        tag: capProbe(node.tagName && node.tagName.toLowerCase(), 24),
+        class_string: "", class_tokens: [], visible_text: "", visible_text_tokens: [],
+        attributes: {}, current_title_token_matched: false,
+        current_value_token_matched: false, redacted: true,
+      };
+    }
+    const classes = classNameOf(node);
+    const textTokens = probeTextTokens(node);
+    return {
+      tag: capProbe(node.tagName && node.tagName.toLowerCase(), 24),
+      class_string: capProbe(classes, 240),
+      class_tokens: probeClassTokens(node),
+      visible_text: capProbe(textTokens.join(" "), 240),
+      visible_text_tokens: textTokens,
+      attributes: probeAttributes(node),
+      current_title_token_matched: classes.includes(titleToken),
+      current_value_token_matched: classes.includes(valueToken),
+      redacted: false,
+    };
+  }
+
+  function probeItem(item, itemIndex, titleToken, valueToken) {
+    if (privateProbeNode(item)) {
+      return {
+        item_index: itemIndex,
+        tag: capProbe(item.tagName && item.tagName.toLowerCase(), 24),
+        class_string: "", class_tokens: [], direct_children: [],
+        descendant_relevant_class_tokens: [], descendant_attributes: [],
+        visible_text: "", visible_text_tokens: [], attributes: {},
+        current_title_token_matched: false, current_value_token_matched: false,
+        redacted: true,
+      };
+    }
+    const nodes = boundedProbeNodes(item).slice(1).filter((node) => !privateProbeNode(node));
+    const relevant = [];
+    const descendantAttributes = [];
+    for (const node of nodes) {
+      for (const token of classNameOf(node).split(/\s+/).filter(Boolean)) {
+        if (HEADER_PROBE_RELEVANT.test(token) && !relevant.includes(token)) {
+          relevant.push(capProbe(token, 80));
+          if (relevant.length >= HEADER_PROBE_LIMITS.relevantTokens) break;
+        }
+      }
+      const attributes = probeAttributes(node);
+      if (Object.keys(attributes).length && descendantAttributes.length < HEADER_PROBE_LIMITS.attributes) {
+        descendantAttributes.push({
+          tag: capProbe(node.tagName && node.tagName.toLowerCase(), 24), attributes,
+        });
+      }
+    }
+    const textTokens = probeTextTokens(item);
+    const classes = classNameOf(item);
+    return {
+      item_index: itemIndex,
+      tag: capProbe(item.tagName && item.tagName.toLowerCase(), 24),
+      class_string: capProbe(classes, 240),
+      class_tokens: probeClassTokens(item),
+      direct_children: [...item.children].filter((node) => isVisible(node) && !ignored(node))
+        .slice(0, HEADER_PROBE_LIMITS.children)
+        .map((node) => probeChild(node, titleToken, valueToken)),
+      descendant_relevant_class_tokens: relevant,
+      descendant_attributes: descendantAttributes,
+      visible_text: capProbe(textTokens.join(" "), 240),
+      visible_text_tokens: textTokens,
+      attributes: probeAttributes(item),
+      current_title_token_matched: nodes.some((node) => classNameOf(node).includes(titleToken)),
+      current_value_token_matched: nodes.some((node) => classNameOf(node).includes(valueToken)),
+      redacted: false,
+    };
+  }
+
+  function fnv1a32(text) {
+    let hash = 0x811c9dc5;
+    for (let index = 0; index < text.length; index += 1) {
+      hash ^= text.charCodeAt(index);
+      hash = Math.imul(hash, 0x01000193);
+    }
+    return (hash >>> 0).toString(16).padStart(8, "0");
+  }
+
+  function marketHeaderProbe(items, titleToken, valueToken) {
+    const summaries = items.slice(0, HEADER_PROBE_LIMITS.items)
+      .map((item, index) => probeItem(item, index, titleToken, valueToken));
+    const shape = JSON.stringify(summaries).toLowerCase()
+      .replace(/[-+]?\d[\d\s.,:%/:-]*/g, "<number>");
+    return {
+      probe_version: 1,
+      structural_signature: `fnv1a32:${fnv1a32(shape)}`,
+      matched_item_count: items.length,
+      items_truncated: items.length > HEADER_PROBE_LIMITS.items,
+      items: summaries,
     };
   }
 
@@ -882,12 +1077,13 @@
     const grouped = { mark: [], index: [], funding: [] };
     const diag = emptyHeaderDiagnostics();
     const items = [...document.querySelectorAll("[class]")].filter((node) => {
-      if (ignored(node)) return false;
+      if (ignored(node) || !isVisible(node)) return false;
       const classes = classNameOf(node);
       if (!classes.includes(itemToken) || !classes.includes(rootToken)) return false;
       return !excluded.some((token) => classes.includes(token));
     });
     diag.header_item_count = items.length;
+    diag.market_header_probe = marketHeaderProbe(items, titleToken, valueToken);
     for (const item of items) {
       const titleNodes = [...item.querySelectorAll("[class]")].filter((node) =>
         classNameOf(node).includes(titleToken)
@@ -1125,6 +1321,12 @@
       if (!capturing) return;
       const snapshot = extract(trigger);
       if (!snapshot) return;
+      const probe = snapshot.header_diagnostics && snapshot.header_diagnostics.market_header_probe;
+      const probeSignature = probe && probe.structural_signature ? probe.structural_signature : "";
+      const probeChanged = Boolean(probeSignature && probeSignature !== lastHeaderProbeSignature);
+      if (!probeChanged && snapshot.header_diagnostics) {
+        snapshot.header_diagnostics.market_header_probe = null;
+      }
       const key = JSON.stringify({
         bid: snapshot.fields.bid && snapshot.fields.bid.value,
         ask: snapshot.fields.ask && snapshot.fields.ask.value,
@@ -1133,11 +1335,13 @@
         last: snapshot.fields.last && snapshot.fields.last.value,
         valid: snapshot.observation_valid,
       });
-      if (trigger === "interval" && key === lastEmitKey) return;
+      if (trigger === "interval" && key === lastEmitKey && !probeChanged) return;
       lastEmitKey = key;
       const resp = await chrome.runtime.sendMessage({ type: "CAPTURE_SNAPSHOT", snapshot });
       if (!resp || resp.ok !== true) {
         stopLocal();
+      } else if (probeChanged) {
+        lastHeaderProbeSignature = probeSignature;
       }
     }).catch(() => {
       stopLocal();
@@ -1181,6 +1385,7 @@
     captureId = session.session_id;
     resetAgeClock();
     lastEmitKey = "";
+    lastHeaderProbeSignature = "";
     capturing = true;
     startObserver();
     emit("manual");

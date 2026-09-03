@@ -163,6 +163,11 @@ def test_popup_hardens_absent_content_script_receiver() -> None:
     assert "joinPriceTokens" in content
     assert "header_struct:" in content
     assert "raw_tokens" in content
+    assert "HEADER_PROBE_LIMITS" in content
+    assert "HEADER_PROBE_PRIVATE" in content
+    assert "lastHeaderProbeSignature" in content
+    assert "probeChanged" in content
+    assert "market_header_probe = null" in content
     assert 'parts.indexOf("futures")' not in content
     assert "https://www.mexc.com/*/futures/*" in background
 
