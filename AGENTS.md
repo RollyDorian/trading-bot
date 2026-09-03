@@ -288,7 +288,14 @@ python -m venv .venv
    DECISION `GATE_PENDING_OPERATOR_CAPTURE`
    (`docs/mexc_ui_locale_data_semantics_remediation_v1.md`). Operator must
    reload the unpacked extension and capture logged-in TAOUSDT 5–15 min
-   before another long corpus. Do not retune. No ML / PAPER / LIVE. Design review
+   before another long corpus. Do not retune. No ML / PAPER / LIVE. Follow-on
+   `MEXC_MOM_GAP_HYPOTHESIS_PROTOCOL_DESIGN_V1` pre-registers a closed seven-formula,
+   three-lookback MEXC-only identity family, causal magnitude/frequency/stability and
+   catch-up-vs-mean-reversion gates, plus a replicated external-reference conclusion
+   rule before any corrected long TAO corpus is inspected. STATUS
+   `MEXC_MOM_GAP_HYPOTHESIS_PROTOCOL_DESIGN_READY`, DECISION
+   `STOP_FOR_LEAD_REVIEW`, ML_STATUS `NOT_STARTED`
+   (`docs/mexc_mom_gap_hypothesis_protocol_design_v1.md`). Design review
    `EXTERNAL_RELATIVE_VALUE_FEED_DESIGN_REVIEW` then selected a minimal
    Binance USD-M `ETHUSDT` public `bookTicker`+`aggTrade` pilot (Bybit fallback),
    spool→Parquet→B2 storage (not `market_events`), isolated Compose service
