@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-CATALOG_VERSION = "v1"
+CATALOG_VERSION = "v1.1"
 SCHEMA_NAME = "mexc_ui_raw_snapshot"
 SCHEMA_VERSION = 1
 DATA_CAPTURE_ATTR = "data-mexc-capture"
@@ -65,20 +65,26 @@ SELECTOR_CATALOG: dict[str, Any] = {
             "kind": "price",
             "required_for_valid": False,
             "data_attr_value": "mark",
-            # MEXC renders this as Fair Price on the futures header.
-            "labels": ["Fair Price", "Mark Price"],
+            # English + ru-RU aliases verified on the live TAOUSDT header.
+            "labels": ["Fair Price", "Mark Price", "Справедливая цена"],
         },
         "index": {
             "kind": "price",
             "required_for_valid": False,
             "data_attr_value": "index",
-            "labels": ["Index Price"],
+            "labels": ["Index Price", "Индексная цена"],
         },
         "funding": {
             "kind": "number",
             "required_for_valid": False,
             "data_attr_value": "funding",
-            "labels": ["Funding Rate / Countdown", "Funding Rate"],
+            "labels": [
+                "Funding Rate / Countdown",
+                "Funding Rate/Countdown",
+                "Funding Rate",
+                "Ставка финансирования/Обратный отсчет",
+                "Ставка финансирования",
+            ],
         },
         "exchange_display_at": {
             "kind": "timestamp",
@@ -101,7 +107,7 @@ SELECTOR_CATALOG: dict[str, Any] = {
     # headings are diagnostic and heading-fallback only; last is never used to
     # assign wrapper sides. Duplicate headings must not invalidate a wrapper BBO.
     "live_orderbook": {
-        "heading_labels": ["Order Book"],
+        "heading_labels": ["Order Book", "Книга ордеров"],
         "split_field": "last",
         "price_band_frac": 0.10,
         "min_side_levels": 1,
@@ -109,6 +115,26 @@ SELECTOR_CATALOG: dict[str, Any] = {
         "bids_class_contains": "bidsWrapper",
         "ask_price_class_contains": "sell",
         "bid_price_class_contains": "buy",
+    },
+    # Bounded futures ticker (contractDetail commonItem). Prefer this over
+    # document-wide label walks so chart Fair Price duplicates are ignored.
+    "market_header": {
+        "root_class_contains": "contractDetail",
+        "item_class_contains": "commonItem",
+        "item_class_exclude": ["lastPriceWrapper", "rateItem"],
+        "title_class_contains": "itemTitle",
+        "value_class_contains": "itemContent",
+        "field_title_aliases": {
+            "mark": ["Fair Price", "Mark Price", "Справедливая цена"],
+            "index": ["Index Price", "Индексная цена"],
+            "funding": [
+                "Funding Rate / Countdown",
+                "Funding Rate/Countdown",
+                "Funding Rate",
+                "Ставка финансирования/Обратный отсчет",
+                "Ставка финансирования",
+            ],
+        },
     },
 }
 

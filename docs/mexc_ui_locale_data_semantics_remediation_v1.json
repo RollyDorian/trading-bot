@@ -1,0 +1,88 @@
+{
+  "milestone": "MEXC_UI_LOCALE_DATA_SEMANTICS_REMEDIATION_V1",
+  "status": "MEXC_UI_LOCALE_DATA_SEMANTICS_REMEDIATION_IMPLEMENTATION_READY",
+  "decision": "GATE_PENDING_OPERATOR_CAPTURE",
+  "ml_status": "NOT_STARTED",
+  "paper": false,
+  "live": false,
+  "strategy_tuning": false,
+  "generated_at": "2026-09-03T12:42:30.028363+00:00",
+  "extension_version": "1.3.0",
+  "catalog_version": "v1.1",
+  "verified_header_aliases": {
+    "en": {
+      "mark": [
+        "Fair Price",
+        "Mark Price"
+      ],
+      "index": [
+        "Index Price"
+      ],
+      "funding": [
+        "Funding Rate / Countdown",
+        "Funding Rate"
+      ],
+      "order_book": [
+        "Order Book"
+      ]
+    },
+    "ru-RU": {
+      "mark": [
+        "Справедливая цена"
+      ],
+      "index": [
+        "Индексная цена"
+      ],
+      "funding": [
+        "Ставка финансирования/Обратный отсчет"
+      ],
+      "order_book": [
+        "Книга ордеров"
+      ],
+      "verified_on": "https://www.mexc.com/ru-RU/futures/TAO_USDT",
+      "verified_at": "2026-09-03"
+    }
+  },
+  "historical_corpus": {
+    "role": "CAPTURE_INFRASTRUCTURE_EVIDENCE",
+    "name": "mexc_ui_capture_sessions_2026-09-03T04-12-21-619Z.ndjson",
+    "sha256": "7a41c34d4ae855850cd8a1a47e438e940c38e09d6f5a555c3f397e5650da9c2a",
+    "rewrite": false,
+    "rescale": false,
+    "reason": "mark/index were never captured and wrapper raw_text was String(parsed) after unconditional comma stripping. Heuristic /100 cannot restore the original DOM decimal representation.",
+    "present": true,
+    "sha256_match": true,
+    "path": "data\\mexc_ui_capture\\mexc_ui_capture_sessions_2026-09-03T04-12-21-619Z.ndjson",
+    "bytes": 437759548,
+    "sha256_observed": "7a41c34d4ae855850cd8a1a47e438e940c38e09d6f5a555c3f397e5650da9c2a"
+  },
+  "short_validation": null,
+  "selector_verification": {
+    "page": "https://www.mexc.com/ru-RU/futures/TAO_USDT",
+    "when": "2026-09-03",
+    "login": false,
+    "role": "SELECTOR_ALIAS_AND_STRUCTURE_CHECK",
+    "not_the_operator_gate": true,
+    "header_structure": {
+      "root_class_contains": "contractDetail",
+      "item_class_contains": "commonItem",
+      "title_class_contains": "itemTitle",
+      "value_class_contains": "itemContent",
+      "last_class_contains": "lastPrice",
+      "bbo": "asksWrapper/sell + bidsWrapper/buy"
+    },
+    "observed_decimal": "comma",
+    "observed_titles": {
+      "index": "Индексная цена",
+      "mark": "Справедливая цена",
+      "funding": "Ставка финансирования/Обратный отсчет",
+      "order_book": "Книга ордеров"
+    }
+  },
+  "notes": [
+    "Frozen author_observed_v0 / conservative_v0 were not retuned.",
+    "Historical 11.67h NDJSON must not be rewritten or rescaled by /100.",
+    "Required strategy-ready fields are bid, ask, last, mark/fair, index, symbol.",
+    "Funding is desirable but not blocking."
+  ]
+}

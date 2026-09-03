@@ -125,6 +125,7 @@ def summarize_capture(path: Path) -> CaptureQualityReport:
     n_valid = 0
     coexist_valid = 0
     n_simultaneous = 0
+    n_simultaneous_last = 0
     n_bid_ge_ask = 0
     capture_ids: set[str] = set()
     canonical: list[str] = []
@@ -179,8 +180,11 @@ def summarize_capture(path: Path) -> CaptureQualityReport:
         ask = _ok_price(snap.fields.get("ask"))
         mark = _ok_price(snap.fields.get("mark"))
         index = _ok_price(snap.fields.get("index"))
+        last = _ok_price(snap.fields.get("last"))
         if bid is not None and ask is not None and mark is not None and index is not None:
             n_simultaneous += 1
+            if last is not None:
+                n_simultaneous_last += 1
         if bid is not None and ask is not None and bid >= ask:
             n_bid_ge_ask += 1
         for name in snap.changed_fields:
@@ -275,6 +279,7 @@ def summarize_capture(path: Path) -> CaptureQualityReport:
         field_age_ms=field_age,
         n_bid_ge_ask=n_bid_ge_ask,
         n_simultaneous_bid_ask_mark_index=n_simultaneous,
+        n_simultaneous_bid_ask_last_mark_index=n_simultaneous_last,
         sequence_diagnostics=seq_diag,
         session=session,
         sessions=session_rows,
@@ -311,6 +316,7 @@ def quality_as_dict(report: CaptureQualityReport) -> dict[str, Any]:
         "field_age_ms": report.field_age_ms,
         "n_bid_ge_ask": report.n_bid_ge_ask,
         "n_simultaneous_bid_ask_mark_index": report.n_simultaneous_bid_ask_mark_index,
+        "n_simultaneous_bid_ask_last_mark_index": report.n_simultaneous_bid_ask_last_mark_index,
         "sequence_diagnostics": report.sequence_diagnostics,
         "session": report.session,
         "sessions": report.sessions,

@@ -44,7 +44,7 @@ def test_extension_manifest_is_1_2_3_wrapper_bbo() -> None:
             encoding="utf-8"
         )
     )
-    assert manifest["version"] == "1.2.3"
+    assert manifest["version"] == "1.3.0"
 
 
 def _assert_diag_shape(snap) -> None:

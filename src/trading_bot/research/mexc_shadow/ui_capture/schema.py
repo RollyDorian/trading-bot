@@ -29,6 +29,30 @@ _ALLOWED_BBO_SOURCES = frozenset(
         "live_orderbook_heading_fallback",
     }
 )
+_ALLOWED_PARSER_LOCALES = frozenset({"ru-RU", "en-US", "unknown"})
+_HEADER_STATUS_KEYS = (
+    "symbol_status",
+    "last_status",
+    "mark_status",
+    "index_status",
+    "funding_status",
+)
+_HEADER_SELECTOR_KEYS = (
+    "symbol_selector_id",
+    "last_selector_id",
+    "mark_selector_id",
+    "index_selector_id",
+    "funding_selector_id",
+)
+_HEADER_INT_KEYS = (
+    "header_item_count",
+    "header_title_hits_mark",
+    "header_title_hits_index",
+    "header_title_hits_funding",
+)
+_ALLOWED_PARSE_STATUSES = frozenset(
+    {"ok", "ok_redundant", "missing", "unparsable", "ambiguous"}
+)
 
 
 def empty_orderbook_diagnostics() -> dict[str, Any]:
@@ -42,6 +66,57 @@ def empty_orderbook_diagnostics() -> dict[str, Any]:
         "chosen_bbo_source": "none",
         "ambiguity_reason": None,
     }
+
+
+def empty_header_diagnostics() -> dict[str, Any]:
+    return {
+        "ui_locale": "unknown",
+        "parser_mode": "unknown",
+        "header_item_count": 0,
+        "header_title_hits_mark": 0,
+        "header_title_hits_index": 0,
+        "header_title_hits_funding": 0,
+        "symbol_status": "missing",
+        "last_status": "missing",
+        "mark_status": "missing",
+        "index_status": "missing",
+        "funding_status": "missing",
+        "symbol_selector_id": None,
+        "last_selector_id": None,
+        "mark_selector_id": None,
+        "index_selector_id": None,
+        "funding_selector_id": None,
+        "ambiguity_reason": None,
+    }
+
+
+def sanitize_header_diagnostics(raw: Any) -> dict[str, Any]:
+    """Keep bounded header findings only. Drop HTML, tickets, and account UI."""
+
+    out = empty_header_diagnostics()
+    if not isinstance(raw, Mapping):
+        return out
+    locale = raw.get("ui_locale")
+    out["ui_locale"] = str(locale) if locale in _ALLOWED_PARSER_LOCALES else "unknown"
+    mode = raw.get("parser_mode")
+    out["parser_mode"] = str(mode) if mode in _ALLOWED_PARSER_LOCALES else out["ui_locale"]
+    for key in _HEADER_INT_KEYS:
+        value = raw.get(key)
+        if value is None:
+            continue
+        try:
+            out[key] = int(value)
+        except (TypeError, ValueError):
+            continue
+    for key in _HEADER_STATUS_KEYS:
+        status = raw.get(key)
+        out[key] = str(status) if status in _ALLOWED_PARSE_STATUSES else "missing"
+    for key in _HEADER_SELECTOR_KEYS:
+        selector = raw.get(key)
+        out[key] = None if selector in {None, ""} else str(selector)
+    reason = raw.get("ambiguity_reason")
+    out["ambiguity_reason"] = None if reason in {None, ""} else str(reason)
+    return out
 
 
 def sanitize_orderbook_diagnostics(raw: Any) -> dict[str, Any]:
@@ -81,6 +156,8 @@ class FieldRecord:
     unit: str | None = None
     # Monotonic (or fixture clock) time of the last value change for this field.
     changed_at_monotonic_ms: float | None = None
+    parser_locale: str | None = None
+    raw_tokens: tuple[str, ...] | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -93,6 +170,8 @@ class FieldRecord:
             "age_ms": self.age_ms,
             "unit": self.unit,
             "changed_at_monotonic_ms": self.changed_at_monotonic_ms,
+            "parser_locale": self.parser_locale,
+            "raw_tokens": list(self.raw_tokens) if self.raw_tokens is not None else None,
         }
 
 
@@ -120,6 +199,9 @@ class UiRawSnapshot:
     exchange_display_at: str | None
     capture_id: str | None = None
     orderbook_diagnostics: dict[str, Any] = field(default_factory=empty_orderbook_diagnostics)
+    ui_locale: str | None = None
+    parser_mode: str | None = None
+    header_diagnostics: dict[str, Any] = field(default_factory=empty_header_diagnostics)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -149,6 +231,9 @@ class UiRawSnapshot:
             else None,
             "depth_selector_id": self.depth_selector_id,
             "orderbook_diagnostics": sanitize_orderbook_diagnostics(self.orderbook_diagnostics),
+            "ui_locale": self.ui_locale,
+            "parser_mode": self.parser_mode,
+            "header_diagnostics": sanitize_header_diagnostics(self.header_diagnostics),
         }
 
 
@@ -179,6 +264,7 @@ class CaptureQualityReport:
     field_age_ms: dict[str, dict[str, float | int | None]] = field(default_factory=dict)
     n_bid_ge_ask: int = 0
     n_simultaneous_bid_ask_mark_index: int = 0
+    n_simultaneous_bid_ask_last_mark_index: int = 0
     sequence_diagnostics: list[dict[str, Any]] = field(default_factory=list)
     session: dict[str, Any] | None = None
     sessions: list[dict[str, Any]] = field(default_factory=list)

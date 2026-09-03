@@ -276,7 +276,19 @@ python -m venv .venv
    1.2.3 parses locale `/…/futures/…` for future captures. STATUS
    `MEXC_TAO_LONG_OBSERVATION_READY_WITH_FINDINGS`, DECISION
    `STOP_FOR_LEAD_REVIEW` (`docs/mexc_tao_long_observation_v1.md`).
-   Phase B-style 8–12 h capture is done; do not retune. No ML / PAPER / LIVE. Design review
+   Follow-on `MEXC_UI_LOCALE_DATA_SEMANTICS_REMEDIATION_V1` replaces
+   unconditional comma stripping with pathname locale parsers (`ru-RU`
+   decimal comma, `en-US` decimal point, unknown fail-closed), keeps
+   wrapper DOM `raw_text`/`raw_tokens`, recovers symbol at capture time
+   from `/futures/` and `/xx-XX/futures/` only, and reads Fair/Index/Funding
+   from bounded `contractDetail` header items with labels verified on the
+   live ru-RU page. The 11.67h corpus is `CAPTURE_INFRASTRUCTURE_EVIDENCE`
+   (not rewritten, not rescaled). Extension 1.3.0. STATUS
+   `MEXC_UI_LOCALE_DATA_SEMANTICS_REMEDIATION_IMPLEMENTATION_READY`,
+   DECISION `GATE_PENDING_OPERATOR_CAPTURE`
+   (`docs/mexc_ui_locale_data_semantics_remediation_v1.md`). Operator must
+   reload the unpacked extension and capture logged-in TAOUSDT 5–15 min
+   before another long corpus. Do not retune. No ML / PAPER / LIVE. Design review
    `EXTERNAL_RELATIVE_VALUE_FEED_DESIGN_REVIEW` then selected a minimal
    Binance USD-M `ETHUSDT` public `bookTicker`+`aggTrade` pilot (Bybit fallback),
    spool→Parquet→B2 storage (not `market_events`), isolated Compose service

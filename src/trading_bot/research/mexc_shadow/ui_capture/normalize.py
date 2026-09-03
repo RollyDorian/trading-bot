@@ -19,6 +19,7 @@ from trading_bot.research.mexc_shadow.ui_capture.schema import (
     NormalizedCapture,
     ParseStatus,
     UiRawSnapshot,
+    sanitize_header_diagnostics,
     sanitize_orderbook_diagnostics,
 )
 
@@ -35,6 +36,14 @@ _TRIGGER: dict[str, CaptureTrigger] = {
     "manual": "manual",
     "fixture": "fixture",
 }
+
+
+def _token_tuple(raw: Any) -> tuple[str, ...] | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, list | tuple):
+        return None
+    return tuple(str(item) for item in raw)
 
 
 def _parse_status(raw: Any) -> ParseStatus:
@@ -63,6 +72,8 @@ def _field_from_mapping(name: str, raw: Mapping[str, Any]) -> FieldRecord:
         changed_at_monotonic_ms=None
         if raw.get("changed_at_monotonic_ms") is None
         else float(raw["changed_at_monotonic_ms"]),
+        parser_locale=None if raw.get("parser_locale") is None else str(raw["parser_locale"]),
+        raw_tokens=_token_tuple(raw.get("raw_tokens")),
     )
 
 
@@ -114,6 +125,9 @@ def snapshot_from_mapping(payload: Mapping[str, Any]) -> UiRawSnapshot:
         orderbook_diagnostics=sanitize_orderbook_diagnostics(
             payload.get("orderbook_diagnostics")
         ),
+        ui_locale=None if payload.get("ui_locale") is None else str(payload["ui_locale"]),
+        parser_mode=None if payload.get("parser_mode") is None else str(payload["parser_mode"]),
+        header_diagnostics=sanitize_header_diagnostics(payload.get("header_diagnostics")),
     )
 
 
