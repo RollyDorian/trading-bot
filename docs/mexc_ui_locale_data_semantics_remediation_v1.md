@@ -1,8 +1,8 @@
 # MEXC UI locale data semantics remediation v1
 
-STATUS: `MEXC_UI_LOCALE_DATA_SEMANTICS_REMEDIATION_IMPLEMENTATION_READY`
+STATUS: `MEXC_UI_LOCALE_DATA_SEMANTICS_REMEDIATION_SHORT_GATE_FAIL`
 
-DECISION: `GATE_PENDING_OPERATOR_CAPTURE`
+DECISION: `STOP_FOR_LEAD_REVIEW`
 
 ML_STATUS: `NOT_STARTED`
 
@@ -81,19 +81,48 @@ It remains infrastructure evidence. It is not a mom/gap corpus.
 
 ## Short /ru-RU/ validation
 
-**Pending operator capture.** Reload unpacked extension 1.3.0 on
-logged-in `https://www.mexc.com/ru-RU/futures/TAO_USDT`, capture
-5–15 minutes, export NDJSON, and keep screenshots of bid, ask,
-last, Fair/Mark, and Index. Then re-run:
+- path: `data\mexc_ui_capture\mexc_ui_capture_07923da2-8d39-4da1-86f8-cc30a6c14e97_2026-09-03T16-17-00-980Z.ndjson`
+- snapshots: 3194
+- duration hours: 0.2544
+- median last/bid/ask/mark/index: 228.63 / 228.61 / 228.64 / None / None
+- strategy-ready rate: 0.0
+- simultaneous bid+ask+last+mark+index: 0 (0.0)
+- DATA_INVALID: 0
+- passed: **False**
 
-```
-python -m trading_bot.research.mexc_shadow.ui_capture \
-  locale-remediation --raw FILE \
-  --out docs/mexc_ui_locale_data_semantics_remediation_v1.json \
-  --md docs/mexc_ui_locale_data_semantics_remediation_v1.md
-```
+| Gate | Result |
+| --- | --- |
+| `duration_5_to_15_min` | FAIL |
+| `absolute_price_scale` | PASS |
+| `bid_lt_ask` | PASS |
+| `symbol_taousdt` | PASS |
+| `mark_index_present` | FAIL |
+| `mark_index_not_swapped_selectors` | FAIL |
+| `no_selector_ambiguity_burst` | PASS |
+| `no_post_readiness_data_invalid` | PASS |
+| `sequence_storage_ok` | PASS |
+| `export_replay_deterministic` | PASS |
+| `ru_RU_parser_mode` | PASS |
+| `wrapper_raw_text_not_stringified` | PASS |
+
+HYPOTHESIS_SMOKE is not strategy evidence.
+
+### Operator screenshot vs nearest snapshots
+
+One logged-in screenshot (`data/mexc_ui_capture`, local `2026-09-03 20:13:03` = `16:13:03Z`):
+
+| Visible UI | Captured near 16:13:03Z |
+| --- | --- |
+| last `228,87` | last `228,91` raw `228,91` at `16:13:03.191Z` (age 669 ms) |
+| Fair `228,94` | mark missing on every snapshot |
+| Index `229,11` | index missing on every snapshot |
+| book bid/ask ~`228,97` / `228,98` | bid `228,91` ask `228,93` (same second; later `228,87` / `228,88`) |
+
+Absolute scale matches (TAO ~229, not ~22900). Bid stays below ask. Symbol is `TAOUSDT` from `/ru-RU/futures/TAO_USDT`. Wrapper `raw_text` keeps the decimal comma (`228,71`). Last is within a few cents of the screenshot, not a ×10/×100 error.
+
+Header diagnostics: `header_item_count=8`, `header_title_hits_mark/index/funding=0` on all sampled rows. Structural `contractDetail` items are found; verified ru-RU title aliases do not hit the logged-in header. Duration is 15.26 min (gate max 15.00).
 
 ## Decision
 
-**GATE_PENDING_OPERATOR_CAPTURE.** Do not start ML or PAPER. Do not retune frozen profiles.
+**STOP_FOR_LEAD_REVIEW.** Short gate failed: Fair/Index/Funding were not extracted on the logged-in page, and duration slightly exceeded 15 minutes. Do not start ML or PAPER. Do not retune frozen profiles. Do not start another long strategy corpus until header extraction is fixed and a passing 5–15 min recapture exists.
 

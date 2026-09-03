@@ -283,19 +283,22 @@ python -m venv .venv
    from `/futures/` and `/xx-XX/futures/` only, and reads Fair/Index/Funding
    from bounded `contractDetail` header items with labels verified on the
    live ru-RU page. The 11.67h corpus is `CAPTURE_INFRASTRUCTURE_EVIDENCE`
-   (not rewritten, not rescaled). Extension 1.3.0. STATUS
-   `MEXC_UI_LOCALE_DATA_SEMANTICS_REMEDIATION_IMPLEMENTATION_READY`,
-   DECISION `GATE_PENDING_OPERATOR_CAPTURE`
-   (`docs/mexc_ui_locale_data_semantics_remediation_v1.md`). Operator must
-   reload the unpacked extension and capture logged-in TAOUSDT 5–15 min
-   before another long corpus. Do not retune. No ML / PAPER / LIVE. Follow-on
+   (not rewritten, not rescaled). Extension 1.3.0. Operator 15.26 min
+   logged-in `/ru-RU/futures/TAO_USDT` recapture (3194 snapshots): locale
+   scale and wrapper commas are correct (median last 228.63, bid < ask,
+   symbol TAOUSDT), but Fair/Index/Funding stay missing (`header_item_count=8`,
+   0 title hits). STATUS
+   `MEXC_UI_LOCALE_DATA_SEMANTICS_REMEDIATION_SHORT_GATE_FAIL`,
+   DECISION `STOP_FOR_LEAD_REVIEW`
+   (`docs/mexc_ui_locale_data_semantics_remediation_v1.md`). Do not start
+   another long corpus or retune. Follow-on
    `MEXC_MOM_GAP_HYPOTHESIS_PROTOCOL_DESIGN_V1` pre-registers a closed seven-formula,
    three-lookback MEXC-only identity family, causal magnitude/frequency/stability and
    catch-up-vs-mean-reversion gates, plus a replicated external-reference conclusion
    rule before any corrected long TAO corpus is inspected. STATUS
    `MEXC_MOM_GAP_HYPOTHESIS_PROTOCOL_DESIGN_READY`, DECISION
    `STOP_FOR_LEAD_REVIEW`, ML_STATUS `NOT_STARTED`
-   (`docs/mexc_mom_gap_hypothesis_protocol_design_v1.md`). Design review
+   (`docs/mexc_mom_gap_hypothesis_protocol_design_v1.md`). No ML / PAPER / LIVE. Design review
    `EXTERNAL_RELATIVE_VALUE_FEED_DESIGN_REVIEW` then selected a minimal
    Binance USD-M `ETHUSDT` public `bookTicker`+`aggTrade` pilot (Bybit fallback),
    spool→Parquet→B2 storage (not `market_events`), isolated Compose service
