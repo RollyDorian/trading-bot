@@ -611,7 +611,8 @@
 
   function symbolHint() {
     const parts = location.pathname.split("/").filter(Boolean);
-    if (parts[0] === "futures") return parseSymbol(parts[1] || "");
+    const idx = parts.indexOf("futures");
+    if (idx >= 0) return parseSymbol(parts[idx + 1] || "");
     return null;
   }
 

@@ -64,11 +64,14 @@ def parse_symbol(text: str | None) -> str | None:
 
 
 def symbol_from_futures_path(path: str) -> str | None:
-    # /futures/TAO_USDT → TAOUSDT. Path is displayed routing, not a manufactured price.
-    parts = [item for item in path.split("/") if item]
-    if len(parts) >= 2 and parts[0] == "futures":
-        return parse_symbol(parts[1])
-    return None
+    # /futures/TAO_USDT and locale prefixes such as /ru-RU/futures/TAO_USDT.
+    parts = [item.split("?")[0] for item in path.split("/") if item]
+    if "futures" not in parts:
+        return None
+    idx = parts.index("futures")
+    if idx + 1 >= len(parts):
+        return None
+    return parse_symbol(parts[idx + 1])
 
 
 def parse_iso_timestamp(text: str | None) -> str | None:

@@ -49,6 +49,14 @@ def main(argv: list[str] | None = None) -> int:
     long_report.add_argument("--screenshot-agreement", default="NOT_VERIFIED")
     long_report.add_argument("--restart-attested", action="store_true")
 
+    long_obs = sub.add_parser(
+        "long-observation",
+        help="8-12h TAOUSDT quality + descriptive stats. No retune.",
+    )
+    long_obs.add_argument("--raw", type=Path, required=True)
+    long_obs.add_argument("--out", type=Path, required=True)
+    long_obs.add_argument("--md", type=Path, default=None)
+
     args = parser.parse_args(argv)
     if args.cmd == "extract-html":
         html = args.html.read_text(encoding="utf-8")
@@ -71,6 +79,14 @@ def main(argv: list[str] | None = None) -> int:
             restart_attested=args.restart_attested,
         )
         args.out.write_text(json.dumps(payload, indent=2, default=str) + "\n", encoding="utf-8")
+        return 0
+    if args.cmd == "long-observation":
+        from trading_bot.research.mexc_shadow.ui_capture.long_observation import (
+            write_long_observation_reports,
+        )
+
+        md_path = args.md if args.md is not None else args.out.with_suffix(".md")
+        write_long_observation_reports(args.raw, out_json=args.out, out_md=md_path)
         return 0
     report = replay_capture_smoke(
         args.raw,
