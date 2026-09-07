@@ -1,0 +1,212 @@
+{
+  "milestone": "MEXC_UI_LOCALE_DATA_SEMANTICS_FINAL_GATE_V1",
+  "status": "MEXC_UI_LOCALE_DATA_SEMANTICS_FINAL_GATE_FAIL",
+  "decision": "STOP_FOR_LEAD_REVIEW",
+  "ml_status": "NOT_STARTED",
+  "paper": false,
+  "live": false,
+  "strategy_tuning": false,
+  "mom_gap_inspected": false,
+  "long_capture_started": false,
+  "generated_at": "2026-09-07T13:11:42.614368+00:00",
+  "extension_expected": "1.3.2",
+  "catalog_required": "v1.2",
+  "frozen_protocol_preview": {
+    "simultaneous_min": 0.95,
+    "interarrival_le_2000_min": 0.99,
+    "p95_max_ms": 1000.0,
+    "hours_requirement": "not applied to this 5-15 min gate",
+    "catalog_text_in_protocol": "v1.1",
+    "catalog_required_here": "v1.2"
+  },
+  "short_validation": {
+    "path": "data/mexc_ui_capture/mexc_ui_capture_56f504d4-5dbe-47b7-8df9-2448fb6f96e6_2026-09-07T12-54-45-135Z.ndjson",
+    "sha256": "5665207fd95c46611fecf8a2082ba39ceb5809ada5f7dd26aefdb4807f9613e9",
+    "n_snapshots": 1083,
+    "duration_ms": 484454.0,
+    "duration_minutes": 8.0742,
+    "page_paths": {
+      "/futures/TAO_USDT": 1083
+    },
+    "locales": {
+      "unknown": 1083
+    },
+    "field_parser_locales": {
+      "unknown": 5415
+    },
+    "implied_locale_from_path": "unknown",
+    "catalog_versions": {
+      "v1.2": 1083
+    },
+    "header_alias_counts": {
+      "9": 1083
+    },
+    "min_header_alias_count": 9,
+    "header_item_counts": {
+      "3": 1083
+    },
+    "header_title_hits_mark_index_funding": {
+      "1,1,1": 1083
+    },
+    "median_last": 265.23,
+    "median_bid": 265.24,
+    "median_ask": 265.27,
+    "median_mark": 265.28,
+    "median_index": 265.28,
+    "n_strategy_ready": 1083,
+    "strategy_ready_rate": 1.0,
+    "strategy_ready_pct": 100.0,
+    "simultaneous_bid_ask_last_mark_index": 1083,
+    "simultaneous_rate": 1.0,
+    "simultaneous_pct": 100.0,
+    "missing_field_bursts": [],
+    "n_missing_field_bursts": 0,
+    "n_data_invalid": 0,
+    "n_startup_warmup": 0,
+    "n_ready_valid": 1083,
+    "class_counts": {
+      "READY_VALID": 1083
+    },
+    "warmup_and_invalid_bursts": [],
+    "n_bid_ge_ask": 0,
+    "raw_text_has_comma": 0,
+    "raw_text_has_dot": 5415,
+    "selector_diagnostics": {
+      "chosen_bbo_source": {
+        "live_asks_bids_wrapper": 1083
+      },
+      "ambiguity_reason": {},
+      "orderbook_heading_count": {
+        "2": 1083
+      },
+      "visible_orderbook_heading_count": {
+        "1": 1083
+      }
+    },
+    "first_ready": {
+      "session_id": "56f504d4-5dbe-47b7-8df9-2448fb6f96e6",
+      "sequence": 1,
+      "received_at_local": "2026-09-07T12:46:37.529Z"
+    },
+    "mark_selectors": {
+      "header_struct:mark": 1083
+    },
+    "index_selectors": {
+      "header_struct:index": 1083
+    },
+    "replay_canonical_sha256": "e0446eb97216fad2b28a63f03825d0f34d941b45581441f9c1a4ce74b291faeb",
+    "storage_errors": [],
+    "sessions": [
+      {
+        "session_id": "56f504d4-5dbe-47b7-8df9-2448fb6f96e6",
+        "started_at": "2026-09-07T12:46:37.417Z",
+        "ended_at": "2026-09-07T12:54:42.219Z",
+        "status": "stopped",
+        "page_host": "www.mexc.com",
+        "page_path": "/futures/TAO_USDT",
+        "interval_ms": 500,
+        "n_snapshots": 1083,
+        "n_chunks": 5,
+        "first_sequence": 1,
+        "last_sequence": 1083,
+        "storage_error": null,
+        "sequence_gaps": [],
+        "client_sequence_mismatches": []
+      }
+    ],
+    "sequence_diagnostics": [],
+    "interarrival_ms": {
+      "n": 1082,
+      "p50_ms": 176.0,
+      "p90_ms": 1445.0,
+      "p95_ms": 1917.0,
+      "p99_ms": 2002.0,
+      "min_ms": 71.0,
+      "max_ms": 2049.0
+    },
+    "interarrival_frac_le_2000_ms": 0.987985212569316,
+    "interarrival_n_gt_2000_ms": 13,
+    "timing_adequacy": "MARGINAL_FOR_FEW_BPS",
+    "n_sessions": 1,
+    "n_chunks_total": 5,
+    "quality_invalid_reasons": {},
+    "gates": {
+      "duration_5_to_15_min": true,
+      "page_path_ru_RU_futures": false,
+      "parser_locale_ru_RU": false,
+      "catalog_v1_2": true,
+      "header_alias_count_positive": true,
+      "symbol_taousdt": true,
+      "absolute_price_scale": true,
+      "bid_lt_ask": true,
+      "mark_index_header_struct": true,
+      "no_selector_ambiguity_burst": true,
+      "no_post_readiness_data_invalid": true,
+      "sequence_storage_ok": true,
+      "export_replay_deterministic": true,
+      "simultaneous_coverage_ge_95pct": true,
+      "frozen_interarrival": false,
+      "raw_text_ru_decimal_comma": false
+    },
+    "failure_classes": [
+      "page_path_ru_RU_futures",
+      "parser_locale_ru_RU",
+      "frozen_interarrival",
+      "raw_text_ru_decimal_comma"
+    ],
+    "passed": false
+  },
+  "screenshots": [
+    {
+      "local_time": "2026-09-07T16:48:04+04:00",
+      "utc": "2026-09-07T12:48:04Z",
+      "visible": {
+        "last": "265.02",
+        "index": "265.08",
+        "fair": "265.09",
+        "bid": "264.99",
+        "ask": "265.03",
+        "ui_labels": "English",
+        "decimal": "point"
+      },
+      "nearest_snapshot": "2026-09-07T12:48:04.125Z",
+      "captured": {
+        "last": 265.04,
+        "bid": 265.03,
+        "ask": 265.08,
+        "mark": 265.08,
+        "index": 265.08
+      },
+      "scale_match": true,
+      "notes": "Last within 2 cents. BBO/Fair differ by ordinary lag. Index matches 265.08."
+    },
+    {
+      "local_time": "2026-09-07T16:53:55+04:00",
+      "utc": "2026-09-07T12:53:55Z",
+      "visible": {
+        "last": "265.44",
+        "index": "265.48",
+        "fair": "265.49",
+        "bid": "265.48",
+        "ask": "265.51",
+        "ui_labels": "English",
+        "decimal": "point"
+      },
+      "nearest_snapshot": "2026-09-07T12:53:54.917Z",
+      "captured": {
+        "last": 265.44,
+        "bid": 265.53,
+        "ask": 265.58,
+        "mark": 265.5,
+        "index": 265.49
+      },
+      "scale_match": true,
+      "notes": "Last exact. Fair/index within 1–2 cents. Wrapper BBO a few cents behind the screenshot book."
+    }
+  ],
+  "notes": [
+    "Did not inspect or execute MEXC_MOM_GAP_HYPOTHESIS_PROTOCOL_DESIGN_V1.",
+    "Did not retune frozen profiles, thresholds, exits, or lookbacks.",
+    "Did not start a replacement long corpus."
+  ]
+}

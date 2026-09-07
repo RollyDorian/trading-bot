@@ -313,7 +313,20 @@ python -m venv .venv
    and records `header_alias_count`. STATUS
    `MEXC_UI_LOGGED_IN_HEADER_PROBE_ANALYSIS_READY`, DECISION
    `STOP_FOR_LEAD_REVIEW`
-   (`docs/mexc_ui_logged_in_header_probe_analysis_v1.md`). Design review
+   (`docs/mexc_ui_logged_in_header_probe_analysis_v1.md`). Follow-on
+   `MEXC_UI_LOCALE_DATA_SEMANTICS_FINAL_GATE_V1` scored a fresh 8.07 min
+   logged-in 1.3.2 / catalog v1.2 export (`56f504d4`, SHA-256
+   `5665207fd95c46611fecf8a2082ba39ceb5809ada5f7dd26aefdb4807f9613e9`).
+   Header aliases work (`header_alias_count=9`, Fair/Index
+   `header_struct:*`, 100% simultaneous bid/ask/last/mark/index, 0
+   DATA_INVALID, 0 missing-field bursts, absolute prices ~265). The
+   page is `/futures/TAO_USDT` with `parser_locale=unknown` and English
+   decimal points, not `/ru-RU/futures/TAO_USDT`. Frozen interarrival
+   also fails (p95 1917 ms; 13/1082 gaps 2001–2049 ms). STATUS
+   `MEXC_UI_LOCALE_DATA_SEMANTICS_FINAL_GATE_FAIL`, DECISION
+   `STOP_FOR_LEAD_REVIEW`
+   (`docs/mexc_ui_locale_data_semantics_final_gate_v1.md`). Do not start
+   the replacement long corpus or retune. Design review
    `EXTERNAL_RELATIVE_VALUE_FEED_DESIGN_REVIEW` then selected a minimal
    Binance USD-M `ETHUSDT` public `bookTicker`+`aggTrade` pilot (Bybit fallback),
    spool→Parquet→B2 storage (not `market_events`), isolated Compose service
