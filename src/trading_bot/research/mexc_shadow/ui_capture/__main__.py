@@ -106,6 +106,19 @@ def main(argv: list[str] | None = None) -> int:
     forensics.add_argument("--out", type=Path, required=True)
     forensics.add_argument("--md", type=Path, default=None)
 
+    stage_diag = sub.add_parser(
+        "stage-diagnostics",
+        help="Stage-diagnostics contract report. Optional capture summary. No retune.",
+    )
+    stage_diag.add_argument("--out", type=Path, required=True)
+    stage_diag.add_argument("--md", type=Path, default=None)
+    stage_diag.add_argument(
+        "--raw",
+        type=Path,
+        default=None,
+        help="Optional NDJSON with stage_diagnostics; live capture is not required",
+    )
+
     args = parser.parse_args(argv)
     if args.cmd == "extract-html":
         html = args.html.read_text(encoding="utf-8")
@@ -169,6 +182,19 @@ def main(argv: list[str] | None = None) -> int:
 
         md_path = args.md if args.md is not None else args.out.with_suffix(".md")
         write_cadence_forensics(raw=args.raw, out_json=args.out, out_md=md_path)
+        return 0
+    if args.cmd == "stage-diagnostics":
+        from trading_bot.research.mexc_shadow.ui_capture import (
+            stage_diagnostics as stage_diag_mod,
+        )
+
+        md_path = args.md if args.md is not None else args.out.with_suffix(".md")
+        stage_report = stage_diag_mod.write_reports(out_json=args.out, out_md=md_path)
+        if args.raw is not None:
+            stage_report["capture_summary"] = (
+                stage_diag_mod.summarize_capture_stage_diagnostics(args.raw)
+            )
+            args.out.write_text(json.dumps(stage_report, indent=2) + "\n", encoding="utf-8")
         return 0
     report = replay_capture_smoke(
         args.raw,

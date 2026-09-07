@@ -43,6 +43,14 @@ class SessionMeta:
     storage_error: str | None = None
     sequence_gaps: list[dict[str, Any]] = field(default_factory=list)
     client_sequence_mismatches: list[dict[str, Any]] = field(default_factory=list)
+    producer_epoch: str | None = None
+    session_generation: int | None = None
+    worker_boot_id: str | None = None
+    content_time_origin: float | None = None
+    worker_time_origin: float | None = None
+    extension_version: str | None = None
+    diagnostic_format_version: int | None = None
+    stage_diagnostic_summary: dict[str, Any] | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -68,6 +76,13 @@ def session_start_record(meta: SessionMeta) -> dict[str, Any]:
         "page_path": meta.page_path,
         "chunk_size": meta.chunk_size,
         "status": meta.status,
+        "producer_epoch": meta.producer_epoch,
+        "session_generation": meta.session_generation,
+        "worker_boot_id": meta.worker_boot_id,
+        "content_time_origin": meta.content_time_origin,
+        "worker_time_origin": meta.worker_time_origin,
+        "extension_version": meta.extension_version,
+        "diagnostic_format_version": meta.diagnostic_format_version,
     }
 
 
@@ -91,6 +106,12 @@ def session_end_record(meta: SessionMeta) -> dict[str, Any]:
         "storage_error": meta.storage_error,
         "sequence_gaps": list(meta.sequence_gaps),
         "client_sequence_mismatches": list(meta.client_sequence_mismatches),
+        "producer_epoch": meta.producer_epoch,
+        "session_generation": meta.session_generation,
+        "worker_boot_id": meta.worker_boot_id,
+        "extension_version": meta.extension_version,
+        "diagnostic_format_version": meta.diagnostic_format_version,
+        "stage_diagnostic_summary": meta.stage_diagnostic_summary,
     }
 
 
@@ -179,6 +200,13 @@ class DurableCaptureStore:
         page_host: str | None = None,
         page_path: str | None = None,
         session_id: str | None = None,
+        producer_epoch: str | None = None,
+        session_generation: int | None = None,
+        worker_boot_id: str | None = None,
+        content_time_origin: float | None = None,
+        worker_time_origin: float | None = None,
+        extension_version: str | None = None,
+        diagnostic_format_version: int | None = None,
     ) -> SessionMeta:
         if self.active_session_id:
             active = self.sessions[self.active_session_id]
@@ -191,6 +219,13 @@ class DurableCaptureStore:
             page_host=page_host,
             page_path=page_path,
             chunk_size=self.chunk_size,
+            producer_epoch=producer_epoch,
+            session_generation=session_generation,
+            worker_boot_id=worker_boot_id,
+            content_time_origin=content_time_origin,
+            worker_time_origin=worker_time_origin,
+            extension_version=extension_version,
+            diagnostic_format_version=diagnostic_format_version,
         )
         self.sessions[meta.session_id] = meta
         self.active_session_id = meta.session_id
@@ -265,10 +300,18 @@ class DurableCaptureStore:
         meta.last_sequence = assigned
         return committed
 
-    def stop_session(self, *, ended_at: str, status: str = "stopped") -> SessionMeta:
+    def stop_session(
+        self,
+        *,
+        ended_at: str,
+        status: str = "stopped",
+        stage_diagnostic_summary: dict[str, Any] | None = None,
+    ) -> SessionMeta:
         meta = self._active()
         meta.ended_at = ended_at
         meta.status = status
+        if stage_diagnostic_summary is not None:
+            meta.stage_diagnostic_summary = stage_diagnostic_summary
         self.active_session_id = None
         return meta
 

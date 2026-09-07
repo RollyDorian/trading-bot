@@ -362,7 +362,19 @@ python -m venv .venv
    queue wait/depth, visibility, and IDB append timing. STATUS
    `MEXC_UI_CAPTURE_CADENCE_FORENSICS_READY`, DECISION
    `STOP_FOR_LEAD_REVIEW`
-   (`docs/mexc_ui_capture_cadence_forensics_v1.md`). Design review
+   (`docs/mexc_ui_capture_cadence_forensics_v1.md`). Follow-on
+   `MEXC_UI_CAPTURE_STAGE_DIAGNOSTICS_V1` instruments the existing 1.3.4
+   capture path (timer → content FIFO → extract → send/IPC → background
+   FIFO → IndexedDB append → ACK) with bounded local diagnostics, visibility
+   transitions, producer epoch / session generation fencing (detect-only),
+   and cumulative opportunity/callback/enqueue/start/persist/ACK/abandon
+   counters. Observation timestamps stay extract-time; expected deadlines
+   are never written onto `received_at_local`. Scheduler, mutation
+   coalescing, persistence batching, and protocol v2 are unchanged. Live
+   diagnostic capture was not run. STATUS
+   `MEXC_UI_CAPTURE_STAGE_DIAGNOSTICS_READY`, DECISION
+   `STOP_FOR_LEAD_REVIEW`
+   (`docs/mexc_ui_capture_stage_diagnostics_v1.md`). Design review
    `EXTERNAL_RELATIVE_VALUE_FEED_DESIGN_REVIEW` then selected a minimal
    Binance USD-M `ETHUSDT` public `bookTicker`+`aggTrade` pilot (Bybit fallback),
    spool→Parquet→B2 storage (not `market_events`), isolated Compose service

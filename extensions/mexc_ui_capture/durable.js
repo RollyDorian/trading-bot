@@ -61,6 +61,14 @@ function emptySession(fields) {
     storage_error: null,
     sequence_gaps: [],
     client_sequence_mismatches: [],
+    producer_epoch: fields.producer_epoch || null,
+    session_generation: fields.session_generation == null ? null : fields.session_generation,
+    worker_boot_id: fields.worker_boot_id || null,
+    content_time_origin: fields.content_time_origin == null ? null : fields.content_time_origin,
+    worker_time_origin: fields.worker_time_origin == null ? null : fields.worker_time_origin,
+    extension_version: fields.extension_version || null,
+    diagnostic_format_version: fields.diagnostic_format_version == null ? null : fields.diagnostic_format_version,
+    stage_diagnostic_summary: null,
   };
 }
 
@@ -76,6 +84,13 @@ function sessionStartRecord(meta) {
     page_path: meta.page_path,
     chunk_size: meta.chunk_size,
     status: meta.status,
+    producer_epoch: meta.producer_epoch || null,
+    session_generation: meta.session_generation == null ? null : meta.session_generation,
+    worker_boot_id: meta.worker_boot_id || null,
+    content_time_origin: meta.content_time_origin == null ? null : meta.content_time_origin,
+    worker_time_origin: meta.worker_time_origin == null ? null : meta.worker_time_origin,
+    extension_version: meta.extension_version || null,
+    diagnostic_format_version: meta.diagnostic_format_version == null ? null : meta.diagnostic_format_version,
   };
 }
 
@@ -99,6 +114,12 @@ function sessionEndRecord(meta) {
     storage_error: meta.storage_error,
     sequence_gaps: meta.sequence_gaps || [],
     client_sequence_mismatches: meta.client_sequence_mismatches || [],
+    producer_epoch: meta.producer_epoch || null,
+    session_generation: meta.session_generation == null ? null : meta.session_generation,
+    worker_boot_id: meta.worker_boot_id || null,
+    extension_version: meta.extension_version || null,
+    diagnostic_format_version: meta.diagnostic_format_version == null ? null : meta.diagnostic_format_version,
+    stage_diagnostic_summary: meta.stage_diagnostic_summary || null,
   };
 }
 
@@ -168,6 +189,13 @@ const MexcDurable = {
       page_host: fields.page_host,
       page_path: fields.page_path,
       chunk_size: this.chunkSize,
+      producer_epoch: fields.producer_epoch || null,
+      session_generation: fields.session_generation == null ? null : fields.session_generation,
+      worker_boot_id: fields.worker_boot_id || null,
+      content_time_origin: fields.content_time_origin == null ? null : fields.content_time_origin,
+      worker_time_origin: fields.worker_time_origin == null ? null : fields.worker_time_origin,
+      extension_version: fields.extension_version || null,
+      diagnostic_format_version: fields.diagnostic_format_version == null ? null : fields.diagnostic_format_version,
     });
     await this.putSession(meta);
     await this.setMeta("active_session_id", meta.session_id);
@@ -176,17 +204,25 @@ const MexcDurable = {
   },
 
   async appendSnapshot(snapshot) {
+    // Timing wraps the existing two-open / one-row append. Algorithm unchanged.
+    const timings = {};
+    const tLookup = performance.now();
     const activeId = await this.getMeta("active_session_id");
+    timings.meta_lookup_ms = performance.now() - tLookup;
     if (!activeId) {
       throw new Error("no active capture session");
     }
+    const tOpen = performance.now();
     const db = await openDb();
+    timings.db_open_ms = performance.now() - tOpen;
     try {
       const tx = db.transaction(["sessions", "chunks", "meta"], "readwrite");
       const sessions = tx.objectStore("sessions");
       const chunks = tx.objectStore("chunks");
       const metaStore = tx.objectStore("meta");
+      const tSession = performance.now();
       const meta = await reqAsPromise(sessions.get(activeId));
+      timings.session_read_ms = performance.now() - tSession;
       if (!meta || meta.status !== "running") {
         throw new Error("no running capture session");
       }
@@ -202,21 +238,32 @@ const MexcDurable = {
           assigned,
         });
       }
+      const clientCaptureId = snapshot.capture_id;
+      const sessionMismatch = Boolean(clientCaptureId && clientCaptureId !== meta.session_id);
       const committed = Object.assign({}, snapshot, {
         sequence: assigned,
         capture_id: meta.session_id,
       });
+      if (committed.stage_diagnostics && typeof committed.stage_diagnostics === "object") {
+        committed.stage_diagnostics.active_session_id = meta.session_id;
+        committed.stage_diagnostics.session_id_mismatch = sessionMismatch;
+      }
       const chunkIndex = Math.floor(meta.n_snapshots / meta.chunk_size);
       const chunkKey = [meta.session_id, chunkIndex];
+      const tChunk = performance.now();
       let chunk = await reqAsPromise(chunks.get(chunkKey));
+      timings.chunk_read_ms = performance.now() - tChunk;
       if (!chunk) {
         chunk = { session_id: meta.session_id, chunk_index: chunkIndex, lines: [] };
       }
       if (chunk.lines.length >= meta.chunk_size) {
         throw new Error("chunk overflow");
       }
-      chunk.lines.push(JSON.stringify(committed));
+      const tStringify = performance.now();
+      const line = JSON.stringify(committed);
+      chunk.lines.push(line);
       chunks.put(chunk);
+      timings.stringify_put_ms = performance.now() - tStringify;
       meta.n_snapshots += 1;
       meta.n_chunks = chunkIndex + 1;
       if (meta.first_sequence === null) meta.first_sequence = assigned;
@@ -226,8 +273,18 @@ const MexcDurable = {
       meta.last_sequence = assigned;
       sessions.put(meta);
       metaStore.put({ key: "last_session_id", value: meta.session_id });
+      const tWait = performance.now();
       await waitTx(tx);
-      return { committed, meta };
+      timings.tx_wait_ms = performance.now() - tWait;
+      return {
+        committed,
+        meta,
+        append_timings: timings,
+        payload_bytes: line.length,
+        chunk_index: chunkIndex,
+        chunk_occupancy: chunk.lines.length,
+        session_id_mismatch: sessionMismatch,
+      };
     } finally {
       db.close();
     }
@@ -246,13 +303,14 @@ const MexcDurable = {
     return meta;
   },
 
-  async stopSession(endedAt, status) {
+  async stopSession(endedAt, status, summary) {
     const activeId = await this.getMeta("active_session_id");
     if (!activeId) return null;
     const meta = await this.getSession(activeId);
     if (!meta) return null;
     meta.status = status || "stopped";
     meta.ended_at = endedAt || new Date().toISOString();
+    if (summary) meta.stage_diagnostic_summary = summary;
     await this.putSession(meta);
     await this.setMeta("active_session_id", null);
     await this.setMeta("last_session_id", meta.session_id);
