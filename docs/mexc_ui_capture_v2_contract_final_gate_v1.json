@@ -1,0 +1,299 @@
+{
+  "milestone": "MEXC_UI_CAPTURE_V2_CONTRACT_FINAL_GATE",
+  "status": "MEXC_UI_CAPTURE_V2_CONTRACT_FINAL_GATE_FAIL",
+  "decision": "STOP_FOR_LEAD_REVIEW",
+  "ml_status": "NOT_STARTED",
+  "paper": false,
+  "live": false,
+  "strategy_tuning": false,
+  "mom_gap_inspected": false,
+  "n_cells_executed": 0,
+  "long_capture_started": false,
+  "generated_at": "2026-09-07T14:15:17.403463+00:00",
+  "extension_expected": "1.3.3",
+  "extension_version_in_ndjson": null,
+  "catalog_required": "v1.2",
+  "protocol": {
+    "version_scored": "2.0.0",
+    "version_not_scored": "1.0.0",
+    "amendment_doc": "docs/mexc_mom_gap_hypothesis_protocol_v2_data_contract_amendment.md",
+    "v1_design_doc": "docs/mexc_mom_gap_hypothesis_protocol_design_v1.md",
+    "v1_blob": "4e8d05940b2bc759acff881779159a7bcba1604e",
+    "v2_merge_commit": "0b4f761bb4c7fa8a6e4520901bfc32f8f2bf59d1",
+    "v2_amendment_commit": "cb679745b1fda6ecde509d8f2656232a89dd192b"
+  },
+  "frozen_protocol_v2": {
+    "simultaneous_min": 0.95,
+    "interarrival_le_2000_min": 0.99,
+    "p95_max_ms": 1000.0,
+    "hours_requirement": "not applied to this 5-15 min gate",
+    "catalog_v1": "v1.1",
+    "catalog_v2": "v1.2",
+    "heartbeat_required": true,
+    "locale_routes": [
+      "path",
+      "document_lang"
+    ]
+  },
+  "short_validation": {
+    "protocol_version_scored": "2.0.0",
+    "protocol_version_not_scored": "1.0.0",
+    "path": "data/mexc_ui_capture/mexc_ui_capture_3c6e0474-5270-4cf0-88b0-5b0207a62006_2026-09-07T14-01-05-500Z.ndjson",
+    "sha256": "1f83d307cc42324f803b26c01f6a6afde5eb1dc65b938909cf50eaeb09b56f2b",
+    "n_snapshots": 994,
+    "duration_ms": 432423.0,
+    "duration_minutes": 7.207,
+    "page_paths": {
+      "/futures/TAO_USDT": 994
+    },
+    "locales": {
+      "en-US": 994
+    },
+    "locale_sources": {
+      "document_lang": 994
+    },
+    "document_langs": {
+      "en-US": 994
+    },
+    "locale_routes": {
+      "document_lang": 994
+    },
+    "n_locale_path_document_disagree": 0,
+    "n_locale_route_fail": 0,
+    "field_parser_locales": {
+      "en-US": 4970
+    },
+    "catalog_versions": {
+      "v1.2": 994
+    },
+    "schema_versions": {
+      "1": 994
+    },
+    "sample_interval_ms": {
+      "500": 994
+    },
+    "session_interval_ms": [
+      500,
+      500
+    ],
+    "header_alias_counts": {
+      "9": 994
+    },
+    "min_header_alias_count": 9,
+    "header_item_counts": {
+      "3": 994
+    },
+    "header_title_hits_mark_index_funding": {
+      "1,1,1": 994
+    },
+    "median_last": 264.5,
+    "median_bid": 264.48,
+    "median_ask": 264.51,
+    "median_mark": 264.49,
+    "median_index": 264.48,
+    "n_strategy_ready": 994,
+    "strategy_ready_rate": 1.0,
+    "strategy_ready_pct": 100.0,
+    "n_unknown_locale_on_strategy_ready": 0,
+    "simultaneous_bid_ask_last_mark_index": 994,
+    "simultaneous_rate": 1.0,
+    "simultaneous_pct": 100.0,
+    "missing_field_bursts": [],
+    "n_missing_field_bursts": 0,
+    "n_data_invalid": 0,
+    "n_startup_warmup": 0,
+    "n_ready_valid": 994,
+    "class_counts": {
+      "READY_VALID": 994
+    },
+    "warmup_and_invalid_bursts": [],
+    "n_bid_ge_ask": 0,
+    "raw_text_has_comma": 0,
+    "raw_text_has_dot": 4970,
+    "n_scale_audit_fail": 0,
+    "scale_audit_first_reason": null,
+    "numeric_scale_audit_ok": true,
+    "selector_diagnostics": {
+      "chosen_bbo_source": {
+        "live_asks_bids_wrapper": 994
+      },
+      "ambiguity_reason": {},
+      "orderbook_heading_count": {
+        "2": 994
+      },
+      "visible_orderbook_heading_count": {
+        "1": 994
+      }
+    },
+    "first_ready": {
+      "session_id": "3c6e0474-5270-4cf0-88b0-5b0207a62006",
+      "sequence": 1,
+      "received_at_local": "2026-09-07T13:53:51.026Z"
+    },
+    "mark_selectors": {
+      "header_struct:mark": 994
+    },
+    "index_selectors": {
+      "header_struct:index": 994
+    },
+    "replay_canonical_sha256": "aff56eb1e6fc00481f40bd225caeb338046cf52f7b9b35b9d0927fb10b74a451",
+    "storage_errors": [],
+    "sessions": [
+      {
+        "session_id": "3c6e0474-5270-4cf0-88b0-5b0207a62006",
+        "started_at": "2026-09-07T13:53:50.930Z",
+        "ended_at": "2026-09-07T14:01:03.458Z",
+        "status": "stopped",
+        "page_host": "www.mexc.com",
+        "page_path": "/futures/TAO_USDT",
+        "interval_ms": 500,
+        "n_snapshots": 994,
+        "n_chunks": 4,
+        "first_sequence": 1,
+        "last_sequence": 994,
+        "storage_error": null,
+        "sequence_gaps": [],
+        "client_sequence_mismatches": []
+      }
+    ],
+    "sequence_diagnostics": [],
+    "trigger_counts": {
+      "manual": 1,
+      "mutation": 696,
+      "interval": 297
+    },
+    "n_interval_triggers": 297,
+    "n_unchanged_interval_commits": 284,
+    "n_missing_v133_keys": 0,
+    "interarrival_ms": {
+      "n": 993,
+      "p50_ms": 113.0,
+      "p90_ms": 665.0,
+      "p95_ms": 1353.0,
+      "p99_ms": 7510.0,
+      "min_ms": 68.0,
+      "max_ms": 14098.0
+    },
+    "quality_interarrival_ms": {
+      "n": 993,
+      "p50_ms": 113.0,
+      "p90_ms": 665.0,
+      "p95_ms": 1353.0,
+      "p99_ms": 7510.0,
+      "min_ms": 68.0,
+      "max_ms": 14098.0
+    },
+    "interarrival_frac_le_2000_ms": 0.9587109768378651,
+    "interarrival_n_gt_2000_ms": 41,
+    "interarrival_n_gt_1000_ms": 68,
+    "timing_adequacy": "MARGINAL_FOR_FEW_BPS",
+    "n_sessions": 1,
+    "n_chunks_total": 4,
+    "quality_invalid_reasons": {},
+    "hours_requirement": {
+      "protocol_v2_item": 6,
+      "required_usable_hours": 8.0,
+      "applied": false,
+      "reason": "short_gate_5_15_min_not_identification_corpus"
+    },
+    "v1_vs_v2": {
+      "catalog_v1": "v1.1",
+      "catalog_v2": "v1.2",
+      "heartbeat_v1": "not required",
+      "heartbeat_v2": "interval ticks persist when values are unchanged",
+      "locale_v1": "path-implied; catalog v1.1",
+      "locale_v2": "localized path with locale_source=path, or bare /futures/ with locale_source=document_lang",
+      "timing_bars": "unchanged p95<=1000ms and >=99% <=2000ms"
+    },
+    "gates": {
+      "duration_5_to_15_min": true,
+      "extension_1_3_3_locale_fields": true,
+      "schema_mexc_ui_raw_snapshot_v1": true,
+      "catalog_v1_2": true,
+      "configured_interval_500_ms": true,
+      "heartbeat_unchanged_interval_commits": true,
+      "sequence_chunk_continuity": true,
+      "no_storage_errors": true,
+      "locale_v2_provenance": true,
+      "no_unknown_locale_on_strategy_ready": true,
+      "symbol_taousdt": true,
+      "raw_text_tokens_match_locale_scale": true,
+      "absolute_price_scale": true,
+      "bid_lt_ask": true,
+      "mark_index_not_swapped": true,
+      "simultaneous_coverage_ge_95pct": true,
+      "startup_warmup_separated_from_data_invalid": true,
+      "no_post_readiness_data_invalid": true,
+      "no_selector_ambiguity_burst": true,
+      "export_replay_deterministic": true,
+      "frozen_interarrival_p95": false,
+      "frozen_interarrival_le_2000": false
+    },
+    "failure_classes": [
+      "frozen_interarrival_p95",
+      "frozen_interarrival_le_2000"
+    ],
+    "passed": false
+  },
+  "screenshots": [
+    {
+      "local_time": "2026-09-07T17:54:14+04:00",
+      "utc": "2026-09-07T13:54:14Z",
+      "visible": {
+        "last": "264.50",
+        "index": "264.55",
+        "fair": "264.55",
+        "bid": "264.51",
+        "ask": "264.55",
+        "ui_labels": "English",
+        "decimal": "point",
+        "logged_in": true,
+        "symbol": "TAOUSDT"
+      },
+      "nearest_snapshot": "2026-09-07T13:54:14.020Z",
+      "captured": {
+        "last": 264.62,
+        "bid": 264.57,
+        "ask": 264.6,
+        "mark": 264.57,
+        "index": 264.56
+      },
+      "scale_match": true,
+      "bid_lt_ask": true,
+      "notes": "Absolute prices ~264. Last within 12 cents of the screenshot. Fair/index within 2 cents of header_struct mark/index. Ordinary lag."
+    },
+    {
+      "local_time": "2026-09-07T17:59:17+04:00",
+      "utc": "2026-09-07T13:59:17Z",
+      "visible": {
+        "last": "264.56",
+        "index": "264.49",
+        "fair": "264.52",
+        "bid": "264.53",
+        "ask": "264.56",
+        "ui_labels": "English",
+        "decimal": "point",
+        "logged_in": true,
+        "symbol": "TAOUSDT"
+      },
+      "nearest_snapshot": "2026-09-07T13:59:16.981Z",
+      "captured": {
+        "last": 264.53,
+        "bid": 264.52,
+        "ask": 264.55,
+        "mark": 264.57,
+        "index": 264.57
+      },
+      "scale_match": true,
+      "bid_lt_ask": true,
+      "notes": "Last within 3 cents. Screenshot Fair 264.52 / Index 264.49 vs snapshot mark 264.57 / index 264.57: lag, not a mark/index swap (selectors remain header_struct:mark vs header_struct:index)."
+    }
+  ],
+  "notes": [
+    "Scored against protocol v2.0.0 data admissibility, not v1.0.0.",
+    "Did not inspect mom/gap formulas or execute any of the 21 cells.",
+    "Did not retune frozen profiles, thresholds, exits, or lookbacks.",
+    "Did not start the 8-12h identification corpus.",
+    "Extension version is not stamped in NDJSON; 1.3.3 is attested by locale_source/document_lang/parser_locale on every snapshot."
+  ]
+}
