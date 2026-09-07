@@ -350,7 +350,19 @@ python -m venv .venv
    `MEXC_UI_CAPTURE_V2_CONTRACT_FINAL_GATE_FAIL`, DECISION
    `STOP_FOR_LEAD_REVIEW`
    (`docs/mexc_ui_capture_v2_contract_final_gate_v1.md`). Do not start
-   the 8–12h corpus or retune mom/gap. Design review
+   the 8–12h corpus or retune mom/gap. Follow-on
+   `MEXC_UI_CAPTURE_CADENCE_FORENSICS_V1` analyzed that same SHA-locked
+   7.207 min RAW without changing the extension or protocol v2: 297
+   interval rows vs ~865 scheduled 500 ms ticks; ~568 missing interval
+   est. Gaps are time-local (windows 2–9 sparse while mutations continue;
+   window 11 is 60/60). Wall and monotonic agree (p95 |Δ| 0.8 ms; all
+   41 gaps >2 s `elapsed_both`). Quiet-market skip and drained-queue
+   catch-up are poor fits; Chrome timer clamping vs un-telemetred drop
+   cannot be separated because v1 RAW lacks scheduled_tick_monotonic,
+   queue wait/depth, visibility, and IDB append timing. STATUS
+   `MEXC_UI_CAPTURE_CADENCE_FORENSICS_READY`, DECISION
+   `STOP_FOR_LEAD_REVIEW`
+   (`docs/mexc_ui_capture_cadence_forensics_v1.md`). Design review
    `EXTERNAL_RELATIVE_VALUE_FEED_DESIGN_REVIEW` then selected a minimal
    Binance USD-M `ETHUSDT` public `bookTicker`+`aggTrade` pilot (Bybit fallback),
    spool→Parquet→B2 storage (not `market_events`), isolated Compose service

@@ -98,6 +98,14 @@ def main(argv: list[str] | None = None) -> int:
     v2_gate.add_argument("--out", type=Path, required=True)
     v2_gate.add_argument("--md", type=Path, default=None)
 
+    forensics = sub.add_parser(
+        "cadence-forensics",
+        help="Forensics on interval cadence. Does not change capture or protocol.",
+    )
+    forensics.add_argument("--raw", type=Path, required=True)
+    forensics.add_argument("--out", type=Path, required=True)
+    forensics.add_argument("--md", type=Path, default=None)
+
     args = parser.parse_args(argv)
     if args.cmd == "extract-html":
         html = args.html.read_text(encoding="utf-8")
@@ -153,6 +161,14 @@ def main(argv: list[str] | None = None) -> int:
 
         md_path = args.md if args.md is not None else args.out.with_suffix(".md")
         write_v2_contract_gate(raw=args.raw, out_json=args.out, out_md=md_path)
+        return 0
+    if args.cmd == "cadence-forensics":
+        from trading_bot.research.mexc_shadow.ui_capture.cadence_forensics import (
+            write_reports as write_cadence_forensics,
+        )
+
+        md_path = args.md if args.md is not None else args.out.with_suffix(".md")
+        write_cadence_forensics(raw=args.raw, out_json=args.out, out_md=md_path)
         return 0
     report = replay_capture_smoke(
         args.raw,
