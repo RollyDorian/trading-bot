@@ -80,6 +80,15 @@ def main(argv: list[str] | None = None) -> int:
         help="11.67h corpus classified as CAPTURE_INFRASTRUCTURE_EVIDENCE",
     )
 
+    final_gate = sub.add_parser(
+        "final-gate",
+        help="Score 5-15 min 1.3.2 locale/header gate. Does not retune mom/gap.",
+    )
+    # Operator NDJSON only. Does not launch a long capture or hypothesis replay.
+    final_gate.add_argument("--raw", type=Path, required=True)
+    final_gate.add_argument("--out", type=Path, required=True)
+    final_gate.add_argument("--md", type=Path, default=None)
+
     args = parser.parse_args(argv)
     if args.cmd == "extract-html":
         html = args.html.read_text(encoding="utf-8")
@@ -119,6 +128,14 @@ def main(argv: list[str] | None = None) -> int:
             short_raw=args.raw,
             historical_raw=args.historical,
         )
+        return 0
+    if args.cmd == "final-gate":
+        from trading_bot.research.mexc_shadow.ui_capture.final_gate import (
+            write_reports as write_final_gate,
+        )
+
+        md_path = args.md if args.md is not None else args.out.with_suffix(".md")
+        write_final_gate(raw=args.raw, out_json=args.out, out_md=md_path)
         return 0
     report = replay_capture_smoke(
         args.raw,
