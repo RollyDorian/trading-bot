@@ -356,9 +356,12 @@ def test_unknown_locale_does_not_guess_comma_decimals() -> None:
         received_at_local=_stamp(0),
         sequence=1,
         page_path="/futures/TAO_USDT",
+        document_lang="",
         monotonic_ms=0.0,
     )
     assert snap.ui_locale == "unknown"
+    assert snap.parser_locale == "unknown"
+    assert snap.locale_source == "unknown"
     assert snap.fields["bid"].parse_status == "missing"
     assert snap.fields["last"].parse_status == "unparsable"
     rec = observation_from_snapshot(snap)
@@ -395,7 +398,7 @@ def test_extension_catalog_version_and_manifest() -> None:
             encoding="utf-8"
         )
     )
-    assert manifest["version"] == "1.3.2"
+    assert manifest["version"] == "1.3.3"
     assert catalog["catalog_version"] == "v1.2"
     assert "Справедливая цена" in catalog["fields"]["mark"]["labels"]
     assert "Индексная цена" in catalog["fields"]["index"]["labels"]

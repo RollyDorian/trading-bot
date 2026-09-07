@@ -59,9 +59,10 @@ def test_nonlocalized_futures_path_fails_ru_locale_gate(tmp_path: Path) -> None:
     _write_pair(raw, "/futures/TAO_USDT", gap_minutes=6)
     scored = score_final_gate(raw)
     assert scored["gates"]["page_path_ru_RU_futures"] is False
-    assert scored["gates"]["parser_locale_ru_RU"] is False
+    # Bare /futures/ plus fixture html lang=ru now resolves via document_lang.
+    assert scored["gates"]["parser_locale_ru_RU"] is True
     assert "page_path_ru_RU_futures" in scored["failure_classes"]
-    assert "parser_locale_ru_RU" in scored["failure_classes"]
+    assert "parser_locale_ru_RU" not in scored["failure_classes"]
 
 
 def test_final_gate_report_writes_fail_status(tmp_path: Path) -> None:

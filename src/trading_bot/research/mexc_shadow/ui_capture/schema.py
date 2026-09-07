@@ -31,6 +31,17 @@ _ALLOWED_BBO_SOURCES = frozenset(
     }
 )
 _ALLOWED_PARSER_LOCALES = frozenset({"ru-RU", "en-US", "unknown"})
+_ALLOWED_LOCALE_SOURCES = frozenset({"path", "document_lang", "unknown"})
+
+
+def coerce_parser_locale(raw: Any) -> str:
+    text = str(raw) if raw not in {None, ""} else "unknown"
+    return text if text in _ALLOWED_PARSER_LOCALES else "unknown"
+
+
+def coerce_locale_source(raw: Any) -> str:
+    text = str(raw) if raw not in {None, ""} else "unknown"
+    return text if text in _ALLOWED_LOCALE_SOURCES else "unknown"
 _HEADER_STATUS_KEYS = (
     "symbol_status",
     "last_status",
@@ -364,6 +375,10 @@ class UiRawSnapshot:
     orderbook_diagnostics: dict[str, Any] = field(default_factory=empty_orderbook_diagnostics)
     ui_locale: str | None = None
     parser_mode: str | None = None
+    parser_locale: str = "unknown"
+    locale_source: str = "unknown"
+    document_lang: str | None = None
+    locale_path_document_disagree: bool = False
     header_diagnostics: dict[str, Any] = field(default_factory=empty_header_diagnostics)
     # Runtime-only deduplication state; intentionally absent from serialized captures.
     header_probe_signature: str | None = field(default=None, repr=False, compare=False)
@@ -398,6 +413,10 @@ class UiRawSnapshot:
             "orderbook_diagnostics": sanitize_orderbook_diagnostics(self.orderbook_diagnostics),
             "ui_locale": self.ui_locale,
             "parser_mode": self.parser_mode,
+            "parser_locale": coerce_parser_locale(self.parser_locale),
+            "locale_source": coerce_locale_source(self.locale_source),
+            "document_lang": self.document_lang,
+            "locale_path_document_disagree": bool(self.locale_path_document_disagree),
             "header_diagnostics": sanitize_header_diagnostics(self.header_diagnostics),
         }
 

@@ -160,6 +160,9 @@ def test_popup_hardens_absent_content_script_receiver() -> None:
     assert 'message.type === "CAPTURE_STATE"' in content
     assert "symbolFromFuturesPath" in content
     assert "localeFromPathname" in content
+    assert "localeFromDocumentLang" in content
+    assert "resolveLocaleContext" in content
+    assert "lastEmitKey" not in content
     assert "joinPriceTokens" in content
     assert "header_struct:" in content
     assert "raw_tokens" in content

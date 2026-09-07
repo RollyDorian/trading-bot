@@ -1,17 +1,20 @@
 """Parse displayed text only. Never invent a number that was not in the text.
 
-Locale is derived from the futures pathname. Comma is not stripped unconditionally:
-ru-RU uses a decimal comma, en-US a decimal point, and unknown/default refuses
-ambiguous punctuation instead of guessing.
+Locale comes from an explicit context (localized futures pathname, then
+normalized document language, else unknown). Comma is not stripped
+unconditionally: ru-RU uses a decimal comma, en-US a decimal point, and
+unknown refuses ambiguous punctuation instead of guessing from digits.
 """
 
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
 
 ParserLocale = Literal["ru-RU", "en-US", "unknown"]
+LocaleSource = Literal["path", "document_lang", "unknown"]
 
 _MISSING_TEXT = frozenset({"", "--", "—", "-", "n/a", "na", "null"})
 _LOCALE_PREFIX = re.compile(r"^[a-z]{2}-[A-Z]{2}$")
@@ -64,6 +67,68 @@ def locale_from_pathname(path: str) -> ParserLocale:
             return "en-US"
         return "unknown"
     return "unknown"
+
+
+def locale_from_document_lang(lang: str | None) -> ParserLocale:
+    """Normalize ``document.documentElement.lang`` without guessing punctuation.
+
+    Only ``ru`` / ``ru-RU`` and ``en`` / ``en-US`` are recognized. ``en-GB``,
+    ``zh-CN``, empty, and missing values stay unknown.
+    """
+
+    compact = (lang or "").strip().replace("_", "-")
+    if not compact:
+        return "unknown"
+    parts = compact.split("-")
+    primary = parts[0].lower()
+    region = parts[1].upper() if len(parts) > 1 else ""
+    if primary == "ru" and region in {"", "RU"}:
+        return "ru-RU"
+    if primary == "en" and region in {"", "US"}:
+        return "en-US"
+    return "unknown"
+
+
+@dataclass(frozen=True, slots=True)
+class LocaleContext:
+    """Bounded locale provenance stamped on every raw snapshot."""
+
+    parser_locale: ParserLocale
+    locale_source: LocaleSource
+    document_lang: str | None
+    page_path: str
+    locale_path_document_disagree: bool
+
+
+def resolve_locale_context(*, page_path: str, document_lang: str | None) -> LocaleContext:
+    """Path locale wins. Document language is a fallback for bare ``/futures/``.
+
+    Disagreement is recorded; document language is never selected when the
+    pathname already resolved to a known locale.
+    """
+
+    observed = (document_lang or "").strip() or None
+    path_locale = locale_from_pathname(page_path)
+    doc_locale = locale_from_document_lang(observed)
+    disagree = (
+        path_locale != "unknown" and doc_locale != "unknown" and path_locale != doc_locale
+    )
+    if path_locale != "unknown":
+        parser_locale: ParserLocale = path_locale
+        source: LocaleSource = "path"
+    elif doc_locale != "unknown":
+        parser_locale = doc_locale
+        source = "document_lang"
+    else:
+        parser_locale = "unknown"
+        source = "unknown"
+    return LocaleContext(
+        parser_locale=parser_locale,
+        locale_source=source,
+        document_lang=observed,
+        page_path=page_path,
+        locale_path_document_disagree=disagree,
+    )
 
 
 def symbol_from_futures_path(path: str) -> str | None:

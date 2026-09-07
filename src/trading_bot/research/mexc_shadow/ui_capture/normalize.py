@@ -19,6 +19,8 @@ from trading_bot.research.mexc_shadow.ui_capture.schema import (
     NormalizedCapture,
     ParseStatus,
     UiRawSnapshot,
+    coerce_locale_source,
+    coerce_parser_locale,
     sanitize_header_diagnostics,
     sanitize_orderbook_diagnostics,
 )
@@ -127,6 +129,14 @@ def snapshot_from_mapping(payload: Mapping[str, Any]) -> UiRawSnapshot:
         ),
         ui_locale=None if payload.get("ui_locale") is None else str(payload["ui_locale"]),
         parser_mode=None if payload.get("parser_mode") is None else str(payload["parser_mode"]),
+        parser_locale=coerce_parser_locale(
+            payload.get("parser_locale") or payload.get("ui_locale") or payload.get("parser_mode")
+        ),
+        locale_source=coerce_locale_source(payload.get("locale_source")),
+        document_lang=None
+        if payload.get("document_lang") in {None, ""}
+        else str(payload["document_lang"]),
+        locale_path_document_disagree=bool(payload.get("locale_path_document_disagree")),
         header_diagnostics=sanitize_header_diagnostics(payload.get("header_diagnostics")),
     )
 
