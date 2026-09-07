@@ -326,7 +326,17 @@ python -m venv .venv
    `MEXC_UI_LOCALE_DATA_SEMANTICS_FINAL_GATE_FAIL`, DECISION
    `STOP_FOR_LEAD_REVIEW`
    (`docs/mexc_ui_locale_data_semantics_final_gate_v1.md`). Do not start
-   the replacement long corpus or retune. Design review
+   the replacement long corpus or retune. Follow-on
+   `MEXC_UI_CAPTURE_CADENCE_AND_LOCALE_PROVENANCE_V1` removes interval-tick
+   suppression of unchanged bid/ask/last/mark/index, stamps
+   `parser_locale` / `locale_source` / `document_lang` / `page_path` on
+   every snapshot, and falls back from bare `/futures/` to normalized
+   `document.documentElement.lang` (`ru`/`ru-RU`, `en`/`en-US` only).
+   Extension **1.3.3**; catalog remains **v1.2**. Frozen p95/99% timing
+   bars are unchanged. STATUS
+   `MEXC_UI_CAPTURE_CADENCE_AND_LOCALE_PROVENANCE_READY`, DECISION
+   `STOP_FOR_LEAD_REVIEW`
+   (`docs/mexc_ui_capture_cadence_and_locale_provenance_v1.md`). Design review
    `EXTERNAL_RELATIVE_VALUE_FEED_DESIGN_REVIEW` then selected a minimal
    Binance USD-M `ETHUSDT` public `bookTicker`+`aggTrade` pilot (Bybit fallback),
    spool→Parquet→B2 storage (not `market_events`), isolated Compose service

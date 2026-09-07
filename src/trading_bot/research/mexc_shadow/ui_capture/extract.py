@@ -26,12 +26,12 @@ from trading_bot.research.mexc_shadow.ui_capture.parse import (
     collapse_ws,
     is_missing_text,
     join_price_tokens,
-    locale_from_pathname,
     parse_iso_timestamp,
     parse_number,
     parse_price,
     parse_size,
     parse_symbol,
+    resolve_locale_context,
     symbol_from_futures_path,
 )
 from trading_bot.research.mexc_shadow.ui_capture.schema import (
@@ -1168,6 +1168,16 @@ def _ambiguity_reason(extra_reasons: list[str]) -> str | None:
     return None
 
 
+def _html_document_lang(root: _Node) -> str | None:
+    """Read the fixture ``<html lang>`` analog of document.documentElement.lang."""
+
+    for node in _walk(root):
+        if node.tag == "html":
+            lang = (node.attrs.get("lang") or "").strip()
+            return lang or None
+    return None
+
+
 def extract_html(
     html: str,
     *,
@@ -1180,12 +1190,16 @@ def extract_html(
     previous: UiRawSnapshot | None = None,
     monotonic_ms: float | None = None,
     capture_id: str | None = None,
+    document_lang: str | None = None,
 ) -> UiRawSnapshot:
     parser = _TreeParser()
     parser.feed(html)
     parser.close()
     root = parser.root
-    locale = locale_from_pathname(page_path)
+    html_lang = _html_document_lang(root)
+    observed_lang = html_lang if document_lang is None else (document_lang.strip() or None)
+    locale_ctx = resolve_locale_context(page_path=page_path, document_lang=observed_lang)
+    locale = locale_ctx.parser_locale
     fields: dict[str, FieldRecord] = {}
     for name, spec in SELECTOR_CATALOG["fields"].items():
         fields[name] = _extract_field(root, name, spec, locale)
@@ -1373,6 +1387,10 @@ def extract_html(
         orderbook_diagnostics=diagnostics,
         ui_locale=locale,
         parser_mode=locale,
+        parser_locale=locale,
+        locale_source=locale_ctx.locale_source,
+        document_lang=locale_ctx.document_lang,
+        locale_path_document_disagree=locale_ctx.locale_path_document_disagree,
         header_diagnostics=_finish_header_diagnostics(header_diag, aged, locale),
         header_probe_signature=probe_signature,
     )

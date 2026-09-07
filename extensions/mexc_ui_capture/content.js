@@ -9,7 +9,6 @@
   let intervalMs = 500;
   let intervalId = null;
   let observer = null;
-  let lastEmitKey = "";
   let lastHeaderProbeSignature = "";
   let lastChangeMono = Object.create(null);
   let lastValue = Object.create(null);
@@ -48,6 +47,49 @@
       return KNOWN_LOCALES[parts[0]] ? parts[0] : "unknown";
     }
     return "unknown";
+  }
+
+  function localeFromDocumentLang(lang) {
+    const compact = String(lang || "").trim().replace(/_/g, "-");
+    if (!compact) return "unknown";
+    const parts = compact.split("-");
+    const primary = (parts[0] || "").toLowerCase();
+    const region = parts[1] ? parts[1].toUpperCase() : "";
+    if (primary === "ru" && (region === "" || region === "RU")) return "ru-RU";
+    if (primary === "en" && (region === "" || region === "US")) return "en-US";
+    return "unknown";
+  }
+
+  function resolveLocaleContext(pathname, documentLang) {
+    const observed = String(documentLang || "").trim() || null;
+    const pathLocale = localeFromPathname(pathname);
+    const docLocale = localeFromDocumentLang(observed);
+    const disagree =
+      pathLocale !== "unknown" && docLocale !== "unknown" && pathLocale !== docLocale;
+    let parserLocale = "unknown";
+    let localeSource = "unknown";
+    if (pathLocale !== "unknown") {
+      parserLocale = pathLocale;
+      localeSource = "path";
+    } else if (docLocale !== "unknown") {
+      parserLocale = docLocale;
+      localeSource = "document_lang";
+    }
+    return {
+      parser_locale: parserLocale,
+      locale_source: localeSource,
+      document_lang: observed,
+      page_path: pathname,
+      locale_path_document_disagree: disagree,
+    };
+  }
+
+  function refreshLocaleContext() {
+    const lang =
+      document.documentElement && document.documentElement.lang
+        ? document.documentElement.lang
+        : "";
+    return resolveLocaleContext(location.pathname, lang);
   }
 
   function stripBidi(text) {
@@ -1201,7 +1243,8 @@
 
   function extract(trigger) {
     if (!catalog) return null;
-    currentLocale = localeFromPathname(location.pathname);
+    const localeCtx = refreshLocaleContext();
+    currentLocale = localeCtx.parser_locale;
     const fields = {};
     for (const [name, spec] of Object.entries(catalog.fields)) {
       fields[name] = extractField(name, spec);
@@ -1236,16 +1279,16 @@
     }
     if (fields.bid.parse_status === "missing" && book.bids && book.bids.length) {
       const best = book.bids.reduce((acc, row) => (row[0] > acc[0] ? row : acc));
-      fields.bid = { name: "bid", raw_text: String(best[0]), value: best[0], selector_id: "orderbook_max_bid", parse_status: "ok", match_count: 1, age_ms: 0, changed_at_monotonic_ms: null, unit: null };
+      fields.bid = { name: "bid", raw_text: String(best[0]), value: best[0], selector_id: "orderbook_max_bid", parse_status: "ok", match_count: 1, age_ms: 0, changed_at_monotonic_ms: null, unit: null, parser_locale: currentLocale, raw_tokens: null };
       if (fields.bid_size.parse_status === "missing" && best[1] > 0) {
-        fields.bid_size = { name: "bid_size", raw_text: String(best[1]), value: best[1], selector_id: "orderbook_max_bid", parse_status: "ok", match_count: 1, age_ms: 0, changed_at_monotonic_ms: null, unit: null };
+        fields.bid_size = { name: "bid_size", raw_text: String(best[1]), value: best[1], selector_id: "orderbook_max_bid", parse_status: "ok", match_count: 1, age_ms: 0, changed_at_monotonic_ms: null, unit: null, parser_locale: currentLocale, raw_tokens: null };
       }
     }
     if (fields.ask.parse_status === "missing" && book.asks && book.asks.length) {
       const best = book.asks.reduce((acc, row) => (row[0] < acc[0] ? row : acc));
-      fields.ask = { name: "ask", raw_text: String(best[0]), value: best[0], selector_id: "orderbook_min_ask", parse_status: "ok", match_count: 1, age_ms: 0, changed_at_monotonic_ms: null, unit: null };
+      fields.ask = { name: "ask", raw_text: String(best[0]), value: best[0], selector_id: "orderbook_min_ask", parse_status: "ok", match_count: 1, age_ms: 0, changed_at_monotonic_ms: null, unit: null, parser_locale: currentLocale, raw_tokens: null };
       if (fields.ask_size.parse_status === "missing" && best[1] > 0) {
-        fields.ask_size = { name: "ask_size", raw_text: String(best[1]), value: best[1], selector_id: "orderbook_min_ask", parse_status: "ok", match_count: 1, age_ms: 0, changed_at_monotonic_ms: null, unit: null };
+        fields.ask_size = { name: "ask_size", raw_text: String(best[1]), value: best[1], selector_id: "orderbook_min_ask", parse_status: "ok", match_count: 1, age_ms: 0, changed_at_monotonic_ms: null, unit: null, parser_locale: currentLocale, raw_tokens: null };
       }
     }
     const lastValue = typeof fields.last.value === "number" ? fields.last.value : null;
@@ -1320,6 +1363,10 @@
       orderbook_diagnostics: diagnostics,
       ui_locale: currentLocale,
       parser_mode: currentLocale,
+      parser_locale: localeCtx.parser_locale,
+      locale_source: localeCtx.locale_source,
+      document_lang: localeCtx.document_lang,
+      locale_path_document_disagree: localeCtx.locale_path_document_disagree,
       header_diagnostics: finishHeaderDiagnostics(header.diag, fields),
     };
   }
@@ -1337,6 +1384,8 @@
     if (!capturing) return;
     emitChain = emitChain.then(async () => {
       if (!capturing) return;
+      // Interval ticks always extract and commit. Equal bid/ask/last/mark/index
+      // values are a new observation, not a skip or a forward-fill.
       const snapshot = extract(trigger);
       if (!snapshot) return;
       const probe = snapshot.header_diagnostics && snapshot.header_diagnostics.market_header_probe;
@@ -1345,16 +1394,6 @@
       if (!probeChanged && snapshot.header_diagnostics) {
         snapshot.header_diagnostics.market_header_probe = null;
       }
-      const key = JSON.stringify({
-        bid: snapshot.fields.bid && snapshot.fields.bid.value,
-        ask: snapshot.fields.ask && snapshot.fields.ask.value,
-        mark: snapshot.fields.mark && snapshot.fields.mark.value,
-        index: snapshot.fields.index && snapshot.fields.index.value,
-        last: snapshot.fields.last && snapshot.fields.last.value,
-        valid: snapshot.observation_valid,
-      });
-      if (trigger === "interval" && key === lastEmitKey && !probeChanged) return;
-      lastEmitKey = key;
       const resp = await chrome.runtime.sendMessage({ type: "CAPTURE_SNAPSHOT", snapshot });
       if (!resp || resp.ok !== true) {
         stopLocal();
@@ -1402,7 +1441,6 @@
     }
     captureId = session.session_id;
     resetAgeClock();
-    lastEmitKey = "";
     lastHeaderProbeSignature = "";
     capturing = true;
     startObserver();
