@@ -374,7 +374,21 @@ python -m venv .venv
    diagnostic capture was not run. STATUS
    `MEXC_UI_CAPTURE_STAGE_DIAGNOSTICS_READY`, DECISION
    `STOP_FOR_LEAD_REVIEW`
-   (`docs/mexc_ui_capture_stage_diagnostics_v1.md`). Design review
+   (`docs/mexc_ui_capture_stage_diagnostics_v1.md`). Follow-on
+   `MEXC_UI_CAPTURE_STAGE_DIAGNOSTIC_ANALYSIS_V1` scored the completed
+   extension 1.3.4 visibility experiment (Chrome 152.0.7977.82; SHA-256
+   `c3699bb2261b153dda093e36e801e9f352ffb02891345c7aea1b1ff1ba6c81c2`)
+   from recorded lifecycle only. Reconstructible visible→hidden→visible
+   (~121s / ~359s / ~261s). Hidden is
+   `TIMER_RENDERER_SCHEDULING_DOMINANT` (~1 Hz callbacks, small queues);
+   final visible is `CONTENT_FIFO_BACKPRESSURE_DOMINANT` (depth 26);
+   overall `MIXED_CAUSE`. Zero raw gaps >2000 ms. Protocol v2 unchanged;
+   capture unchanged. Recommend interval-only / mutation-dirty or
+   heartbeat-priority coalescing for visible FIFO; none of A–D restore
+   hidden 2 Hz. No ML / PAPER / LIVE. STATUS
+   `MEXC_UI_CAPTURE_STAGE_DIAGNOSTIC_ANALYSIS_READY`, DECISION
+   `STOP_FOR_LEAD_REVIEW`
+   (`docs/mexc_ui_capture_stage_diagnostic_analysis_v1.md`). Design review
    `EXTERNAL_RELATIVE_VALUE_FEED_DESIGN_REVIEW` then selected a minimal
    Binance USD-M `ETHUSDT` public `bookTicker`+`aggTrade` pilot (Bybit fallback),
    spool→Parquet→B2 storage (not `market_events`), isolated Compose service
