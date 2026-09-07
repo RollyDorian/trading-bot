@@ -380,11 +380,13 @@ class UiRawSnapshot:
     document_lang: str | None = None
     locale_path_document_disagree: bool = False
     header_diagnostics: dict[str, Any] = field(default_factory=empty_header_diagnostics)
+    # Optional bounded stage timings. Never used as observation timestamps.
+    stage_diagnostics: dict[str, Any] | None = None
     # Runtime-only deduplication state; intentionally absent from serialized captures.
     header_probe_signature: str | None = field(default=None, repr=False, compare=False)
 
     def as_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "schema": self.schema,
             "schema_version": self.schema_version,
             "capture_id": self.capture_id,
@@ -419,6 +421,9 @@ class UiRawSnapshot:
             "locale_path_document_disagree": bool(self.locale_path_document_disagree),
             "header_diagnostics": sanitize_header_diagnostics(self.header_diagnostics),
         }
+        if self.stage_diagnostics:
+            payload["stage_diagnostics"] = dict(self.stage_diagnostics)
+        return payload
 
 
 @dataclass(frozen=True, slots=True)

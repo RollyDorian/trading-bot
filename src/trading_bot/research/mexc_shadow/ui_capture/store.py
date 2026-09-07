@@ -11,6 +11,9 @@ from typing import Any
 from trading_bot.research.mexc_shadow.safety import assert_no_credential_keys
 from trading_bot.research.mexc_shadow.ui_capture.durable import is_session_record
 from trading_bot.research.mexc_shadow.ui_capture.schema import UiRawSnapshot
+from trading_bot.research.mexc_shadow.ui_capture.stage_diagnostics import (
+    is_stage_diagnostic_record,
+)
 
 
 def append_snapshot(path: Path, snapshot: UiRawSnapshot | Mapping[str, Any]) -> None:
@@ -42,7 +45,7 @@ def iter_ndjson_objects(path: Path) -> Iterator[dict[str, Any]]:
 
 def iter_raw_mappings(path: Path) -> Iterator[dict[str, Any]]:
     for payload in iter_ndjson_objects(path):
-        if is_session_record(payload):
+        if is_session_record(payload) or is_stage_diagnostic_record(payload):
             continue
         yield payload
 

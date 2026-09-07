@@ -164,6 +164,9 @@ def test_popup_hardens_absent_content_script_receiver() -> None:
     assert "resolveLocaleContext" in content
     assert "lastEmitKey" not in content
     assert "joinPriceTokens" in content
+    assert "stage_diagnostics" in content
+    assert "emitInterval" in content
+    assert "Never copy expected_deadline_mono" in content
     assert "header_struct:" in content
     assert "raw_tokens" in content
     assert "HEADER_PROBE_LIMITS" in content

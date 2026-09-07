@@ -15,6 +15,22 @@
   let agePageKey = "";
   let ageCaptureId = "";
   let emitChain = Promise.resolve();
+  const D = globalThis.MexcStageDiagnostics;
+  const producerEpoch = D.clipId(
+    (crypto.randomUUID && crypto.randomUUID()) || `p-${performance.now()}`
+  );
+  const contentTimeOrigin = performance.timeOrigin;
+  let sessionGeneration = 0;
+  let requestOrdinal = 0;
+  let intervalCallbackOrdinal = 0;
+  let mutationCallbackOrdinal = 0;
+  let timerRegisteredMono = null;
+  let contentCounters = D.emptyCounters();
+  let waitingEnqueueMonos = [];
+  let contentActive = false;
+  let lastVisibility = "unknown";
+  let unsentLifecycle = [];
+  let lastAckPrevious = null;
 
   let currentLocale = "unknown";
   const LOCALE_PREFIX = /^[a-z]{2}-[A-Z]{2}$/;
@@ -1337,6 +1353,7 @@
     const nowMono = performance.now();
     const pageKey = `${location.host}|${location.pathname}|${fields.symbol && fields.symbol.value ? fields.symbol.value : ""}`;
     const changed = applyAges(fields, nowMono, pageKey);
+    // Extract-time wall/monotonic stamps. Never backdate these to a timer deadline.
     const received = new Date().toISOString();
     return {
       schema: "mexc_ui_raw_snapshot",
@@ -1371,6 +1388,76 @@
     };
   }
 
+  function currentVisibility() {
+    try {
+      return document.visibilityState || "unknown";
+    } catch (_ignored) {
+      return "unknown";
+    }
+  }
+
+  function recordLifecycle(kind, extra) {
+    const event = Object.assign(
+      {
+        kind,
+        mono: performance.now(),
+        producer_epoch: producerEpoch,
+        session_generation: sessionGeneration,
+      },
+      extra || {}
+    );
+    unsentLifecycle.push(event);
+    if (unsentLifecycle.length > D.LIFECYCLE_CAP) {
+      unsentLifecycle = unsentLifecycle.slice(-D.LIFECYCLE_CAP);
+      contentCounters.suppressed_lifecycle += 1;
+      contentCounters.diagnostic_truncated = true;
+    }
+  }
+
+  function takeLifecycleDelta() {
+    const rows = unsentLifecycle.slice();
+    unsentLifecycle = [];
+    return rows;
+  }
+
+  function contentDelta() {
+    return {
+      counters: contentCounters,
+      lifecycle: takeLifecycleDelta(),
+      ack_previous: lastAckPrevious,
+      producer_epoch: producerEpoch,
+      session_generation: sessionGeneration,
+    };
+  }
+
+  function onVisibilityChange() {
+    const now = performance.now();
+    const state = currentVisibility();
+    recordLifecycle("visibilitychange", {
+      mono: now,
+      from_state: lastVisibility,
+      to_state: state,
+    });
+    lastVisibility = state;
+  }
+
+  function bindLifecycleListeners() {
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    document.addEventListener("freeze", () => {
+      recordLifecycle("freeze", { to_state: currentVisibility() });
+    });
+    document.addEventListener("resume", () => {
+      recordLifecycle("resume", { to_state: currentVisibility() });
+    });
+    window.addEventListener("pagehide", () => {
+      recordLifecycle("pagehide", { to_state: currentVisibility() });
+    });
+    window.addEventListener("pageshow", () => {
+      recordLifecycle("pageshow", { to_state: currentVisibility() });
+    });
+    lastVisibility = currentVisibility();
+  }
+
   function stopLocal() {
     capturing = false;
     if (intervalId !== null) {
@@ -1380,35 +1467,149 @@
     if (observer) observer.disconnect();
   }
 
-  function emit(trigger) {
+  function emit(trigger, hook) {
     if (!capturing) return;
+    const callbackMono = hook && hook.callback_mono != null ? hook.callback_mono : performance.now();
+    const generation = sessionGeneration;
+    requestOrdinal += 1;
+    const ordinal = requestOrdinal;
+    const enqueueMono = performance.now();
+    const queueDepth = waitingEnqueueMonos.length;
+    const oldestWait = queueDepth ? enqueueMono - waitingEnqueueMonos[0] : 0;
+    waitingEnqueueMonos.push(enqueueMono);
+    contentCounters.callbacks_enqueued[trigger] =
+      (contentCounters.callbacks_enqueued[trigger] || 0) + 1;
     emitChain = emitChain.then(async () => {
-      if (!capturing) return;
+      waitingEnqueueMonos.shift();
+      const stale = generation !== sessionGeneration;
+      if (stale) contentCounters.stale_generation_detected += 1;
+      if (!capturing) {
+        contentCounters.abandoned[trigger] = (contentCounters.abandoned[trigger] || 0) + 1;
+        return;
+      }
+      contentActive = true;
+      contentCounters.tasks_started[trigger] = (contentCounters.tasks_started[trigger] || 0) + 1;
+      const extractStart = performance.now();
+      const visibilityAtExtract = currentVisibility();
       // Interval ticks always extract and commit. Equal bid/ask/last/mark/index
       // values are a new observation, not a skip or a forward-fill.
       const snapshot = extract(trigger);
-      if (!snapshot) return;
+      const extractEnd = performance.now();
+      // received_at_local / observed_at_local / monotonic_ms stay extract-time
+      // inside extract(). Never copy expected_deadline_mono onto them.
+      if (!snapshot) {
+        contentActive = false;
+        return;
+      }
+      contentCounters.extracted[trigger] = (contentCounters.extracted[trigger] || 0) + 1;
       const probe = snapshot.header_diagnostics && snapshot.header_diagnostics.market_header_probe;
       const probeSignature = probe && probe.structural_signature ? probe.structural_signature : "";
       const probeChanged = Boolean(probeSignature && probeSignature !== lastHeaderProbeSignature);
       if (!probeChanged && snapshot.header_diagnostics) {
         snapshot.header_diagnostics.market_header_probe = null;
       }
-      const resp = await chrome.runtime.sendMessage({ type: "CAPTURE_SNAPSHOT", snapshot });
+      const sendStart = performance.now();
+      snapshot.stage_diagnostics = D.sanitizeStage({
+        diagnostic_format_version: D.FORMAT_VERSION,
+        extension_version: D.EXTENSION_VERSION,
+        request_ordinal: ordinal,
+        trigger,
+        producer_epoch: producerEpoch,
+        session_generation: generation,
+        session_generation_now: sessionGeneration,
+        session_id: captureId,
+        stale_generation: stale,
+        interval_callback_ordinal: hook && hook.interval_callback_ordinal,
+        mutation_callback_ordinal: hook && hook.mutation_callback_ordinal,
+        expected_deadline_mono: hook && hook.expected_deadline_mono,
+        elapsed_ideal_slot_ordinal: hook && hook.elapsed_ideal_slot_ordinal,
+        callback_mono: callbackMono,
+        callback_delay_ms: hook && hook.callback_delay_ms,
+        content_enqueue_mono: enqueueMono,
+        content_queue_depth: queueDepth,
+        content_oldest_wait_ms: oldestWait,
+        content_queue_wait_ms: D.queueWaitMs(extractStart, callbackMono),
+        extract_start_mono: extractStart,
+        extract_end_mono: extractEnd,
+        extract_duration_ms: extractEnd - extractStart,
+        send_start_mono: sendStart,
+        visibility_state: hook && hook.visibility_state ? hook.visibility_state : currentVisibility(),
+        visibility_state_at_extract: visibilityAtExtract,
+      });
+      contentCounters.sent[trigger] = (contentCounters.sent[trigger] || 0) + 1;
+      const resp = await chrome.runtime.sendMessage({
+        type: "CAPTURE_SNAPSHOT",
+        snapshot,
+        producer_epoch: producerEpoch,
+        session_generation: generation,
+        request_ordinal: ordinal,
+        stage_content_delta: contentDelta(),
+      });
+      const ackEnd = performance.now();
+      contentActive = false;
+      const ackOutcome = resp && resp.ok === true ? "ok" : "fail";
+      lastAckPrevious = {
+        request_ordinal: ordinal,
+        trigger,
+        ack_end_mono: ackEnd,
+        total_ack_latency_ms: ackEnd - sendStart,
+        ack_outcome: ackOutcome,
+        worker_boot_id: resp && resp.stage && resp.stage.worker_boot_id,
+        persisted_sequence: resp && resp.sequence,
+        append_end_mono: resp && resp.stage && resp.stage.append_end_mono,
+        append_duration_ms: resp && resp.stage && resp.stage.append_duration_ms,
+      };
       if (!resp || resp.ok !== true) {
+        contentCounters.failed[trigger] = (contentCounters.failed[trigger] || 0) + 1;
         stopLocal();
-      } else if (probeChanged) {
-        lastHeaderProbeSignature = probeSignature;
+      } else {
+        contentCounters.acked[trigger] = (contentCounters.acked[trigger] || 0) + 1;
+        if (probeChanged) {
+          lastHeaderProbeSignature = probeSignature;
+        }
       }
     }).catch(() => {
+      contentActive = false;
       stopLocal();
+    });
+  }
+
+  function emitInterval() {
+    if (!capturing || timerRegisteredMono == null) return;
+    const callbackMono = performance.now();
+    intervalCallbackOrdinal += 1;
+    contentCounters.timer_callbacks += 1;
+    const expected = D.expectedDeadlineMono(timerRegisteredMono, intervalCallbackOrdinal, intervalMs);
+    emit("interval", {
+      callback_mono: callbackMono,
+      interval_callback_ordinal: intervalCallbackOrdinal,
+      expected_deadline_mono: expected,
+      callback_delay_ms: callbackMono - expected,
+      elapsed_ideal_slot_ordinal: D.elapsedIdealSlotOrdinal(
+        timerRegisteredMono,
+        callbackMono,
+        intervalMs
+      ),
+      visibility_state: currentVisibility(),
+    });
+  }
+
+  function emitMutation() {
+    if (!capturing) return;
+    mutationCallbackOrdinal += 1;
+    contentCounters.mutation_callbacks += 1;
+    emit("mutation", {
+      callback_mono: performance.now(),
+      mutation_callback_ordinal: mutationCallbackOrdinal,
+      visibility_state: currentVisibility(),
     });
   }
 
   function startObserver() {
     if (observer) observer.disconnect();
     observer = new MutationObserver(() => {
-      if (capturing) emit("mutation");
+      // Count the callback only. Do not read MutationRecords or mutation targets.
+      emitMutation();
     });
     observer.observe(document.body, { subtree: true, childList: true, characterData: true });
   }
@@ -1423,17 +1624,38 @@
     const want = Boolean(state && state.capturing);
     if (!want) {
       if (capturing) {
+        const stopMono = performance.now();
         capturing = false;
         if (observer) observer.disconnect();
-        await chrome.runtime.sendMessage({ type: "STOP_SESSION" });
+        contentCounters.expected_interval_opportunities = D.expectedIntervalOpportunities(
+          timerRegisteredMono,
+          stopMono,
+          intervalMs
+        );
+        contentCounters.outstanding_at_stop = waitingEnqueueMonos.length + (contentActive ? 1 : 0);
+        recordLifecycle("session_stop", { mono: stopMono, to_state: currentVisibility() });
+        await chrome.runtime.sendMessage({
+          type: "STOP_SESSION",
+          stage_content_delta: contentDelta(),
+        });
       }
       return;
     }
+    sessionGeneration += 1;
+    intervalCallbackOrdinal = 0;
+    mutationCallbackOrdinal = 0;
+    requestOrdinal = 0;
+    contentCounters = D.emptyCounters();
+    waitingEnqueueMonos = [];
+    lastAckPrevious = null;
     const session = await chrome.runtime.sendMessage({
       type: "START_SESSION",
       intervalMs,
       page_host: location.host,
       page_path: location.pathname,
+      producer_epoch: producerEpoch,
+      session_generation: sessionGeneration,
+      content_time_origin: contentTimeOrigin,
     });
     if (!session || session.ok !== true) {
       stopLocal();
@@ -1444,8 +1666,17 @@
     lastHeaderProbeSignature = "";
     capturing = true;
     startObserver();
-    emit("manual");
-    intervalId = setInterval(() => emit("interval"), intervalMs);
+    contentCounters.manual_callbacks += 1;
+    emit("manual", {
+      callback_mono: performance.now(),
+      visibility_state: currentVisibility(),
+    });
+    timerRegisteredMono = performance.now();
+    recordLifecycle("timer_registered", {
+      mono: timerRegisteredMono,
+      to_state: currentVisibility(),
+    });
+    intervalId = setInterval(emitInterval, intervalMs);
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -1456,6 +1687,8 @@
       applyState(message.state);
     }
   });
+
+  bindLifecycleListeners();
 
   fetch(chrome.runtime.getURL("selector_catalog_v1.json"))
     .then((response) => response.json())

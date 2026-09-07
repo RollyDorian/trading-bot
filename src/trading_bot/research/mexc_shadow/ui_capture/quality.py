@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from trading_bot.research.mexc_shadow.ui_capture.catalog import SCHEMA_NAME
 from trading_bot.research.mexc_shadow.ui_capture.durable import (
     diagnose_sequence,
     is_session_record,
@@ -141,6 +142,8 @@ def summarize_capture(path: Path) -> CaptureQualityReport:
                 )
             elif payload.get("record_type") == "session_end":
                 _attach_session_end(session_rows, payload)
+            continue
+        if payload.get("schema") != SCHEMA_NAME:
             continue
         raw_snapshots.append(payload)
         n_raw += 1

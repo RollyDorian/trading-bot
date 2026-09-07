@@ -24,6 +24,9 @@ from trading_bot.research.mexc_shadow.ui_capture.schema import (
     sanitize_header_diagnostics,
     sanitize_orderbook_diagnostics,
 )
+from trading_bot.research.mexc_shadow.ui_capture.stage_diagnostics import (
+    sanitize_stage_diagnostics,
+)
 
 _PARSE_STATUS: dict[str, ParseStatus] = {
     "ok": "ok",
@@ -138,6 +141,7 @@ def snapshot_from_mapping(payload: Mapping[str, Any]) -> UiRawSnapshot:
         else str(payload["document_lang"]),
         locale_path_document_disagree=bool(payload.get("locale_path_document_disagree")),
         header_diagnostics=sanitize_header_diagnostics(payload.get("header_diagnostics")),
+        stage_diagnostics=sanitize_stage_diagnostics(payload.get("stage_diagnostics")),
     )
 
 
