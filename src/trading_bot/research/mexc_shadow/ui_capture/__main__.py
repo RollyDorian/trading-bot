@@ -106,6 +106,14 @@ def main(argv: list[str] | None = None) -> int:
     forensics.add_argument("--out", type=Path, required=True)
     forensics.add_argument("--md", type=Path, default=None)
 
+    stage_analysis = sub.add_parser(
+        "stage-diagnostic-analysis",
+        help="Score a 1.3.4 visibility experiment. Does not change capture or protocol.",
+    )
+    stage_analysis.add_argument("--raw", type=Path, required=True)
+    stage_analysis.add_argument("--out", type=Path, required=True)
+    stage_analysis.add_argument("--md", type=Path, default=None)
+
     stage_diag = sub.add_parser(
         "stage-diagnostics",
         help="Stage-diagnostics contract report. Optional capture summary. No retune.",
@@ -182,6 +190,14 @@ def main(argv: list[str] | None = None) -> int:
 
         md_path = args.md if args.md is not None else args.out.with_suffix(".md")
         write_cadence_forensics(raw=args.raw, out_json=args.out, out_md=md_path)
+        return 0
+    if args.cmd == "stage-diagnostic-analysis":
+        from trading_bot.research.mexc_shadow.ui_capture.stage_diagnostic_analysis import (
+            write_reports as write_stage_analysis,
+        )
+
+        md_path = args.md if args.md is not None else args.out.with_suffix(".md")
+        write_stage_analysis(raw=args.raw, out_json=args.out, out_md=md_path)
         return 0
     if args.cmd == "stage-diagnostics":
         from trading_bot.research.mexc_shadow.ui_capture import (
