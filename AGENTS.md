@@ -388,7 +388,14 @@ python -m venv .venv
    hidden 2 Hz. No ML / PAPER / LIVE. STATUS
    `MEXC_UI_CAPTURE_STAGE_DIAGNOSTIC_ANALYSIS_READY`, DECISION
    `STOP_FOR_LEAD_REVIEW`
-   (`docs/mexc_ui_capture_stage_diagnostic_analysis_v1.md`). Design review
+   (`docs/mexc_ui_capture_stage_diagnostic_analysis_v1.md`). Follow-on
+   `MEXC_UI_INTERVAL_ONLY_CAPTURE_REMEDIATION_V1` removes mutation raw rows:
+   one manual start snapshot plus a fresh DOM observation on every 500 ms
+   interval. MutationObserver is diagnostic-only (`dirty_since_last_interval`,
+   counters). Protocol v2.0.0 unchanged. Hidden-tab 2 Hz remains out of
+   scope. STATUS `MEXC_UI_INTERVAL_ONLY_CAPTURE_REMEDIATION_READY`, DECISION
+   `STOP_FOR_LEAD_REVIEW`
+   (`docs/mexc_ui_interval_only_capture_remediation_v1.md`). Design review
    `EXTERNAL_RELATIVE_VALUE_FEED_DESIGN_REVIEW` then selected a minimal
    Binance USD-M `ETHUSDT` public `bookTicker`+`aggTrade` pilot (Bybit fallback),
    spool→Parquet→B2 storage (not `market_events`), isolated Compose service

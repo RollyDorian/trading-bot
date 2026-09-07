@@ -398,7 +398,7 @@ def test_extension_catalog_version_and_manifest() -> None:
             encoding="utf-8"
         )
     )
-    assert manifest["version"] == "1.3.4"
+    assert manifest["version"] == "1.3.5"
     assert catalog["catalog_version"] == "v1.2"
     assert "Справедливая цена" in catalog["fields"]["mark"]["labels"]
     assert "Индексная цена" in catalog["fields"]["index"]["labels"]

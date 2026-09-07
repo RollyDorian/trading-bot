@@ -38,13 +38,13 @@ def _extract(name: str):
     )
 
 
-def test_extension_manifest_is_1_3_4_stage_diagnostics() -> None:
+def test_extension_manifest_is_1_3_5_interval_only() -> None:
     manifest = json.loads(
         (REPO / "extensions" / "mexc_ui_capture" / "manifest.json").read_text(
             encoding="utf-8"
         )
     )
-    assert manifest["version"] == "1.3.4"
+    assert manifest["version"] == "1.3.5"
 
 
 def _assert_diag_shape(snap) -> None:

@@ -2,7 +2,7 @@
 
 globalThis.MexcStageDiagnostics = (function stageDiagnostics() {
   const FORMAT_VERSION = 1;
-  const EXTENSION_VERSION = "1.3.4";
+  const EXTENSION_VERSION = "1.3.5";
   const ID_MAX = 64;
   const ENUM_MAX = 32;
   const INTERVAL_DETAIL_CAP = 2048;
@@ -75,6 +75,7 @@ globalThis.MexcStageDiagnostics = (function stageDiagnostics() {
     chunk_occupancy: true,
     ack_outcome: true,
     append_timings: true,
+    dirty_since_last_interval: true,
   };
   const ALLOWED_APPEND_TIMING_KEYS = {
     meta_lookup_ms: true,
@@ -126,6 +127,7 @@ globalThis.MexcStageDiagnostics = (function stageDiagnostics() {
       expected_interval_opportunities: 0,
       timer_callbacks: 0,
       mutation_callbacks: 0,
+      mutation_dirty_sets: 0,
       manual_callbacks: 0,
       callbacks_enqueued: emptyTriggerCounts(),
       tasks_started: emptyTriggerCounts(),
@@ -243,7 +245,11 @@ globalThis.MexcStageDiagnostics = (function stageDiagnostics() {
         out[key] = clipEnum(value, ALLOWED_ACK, "unknown");
         continue;
       }
-      if (key === "stale_generation" || key === "session_id_mismatch") {
+      if (
+        key === "stale_generation" ||
+        key === "session_id_mismatch" ||
+        key === "dirty_since_last_interval"
+      ) {
         out[key] = Boolean(value);
         continue;
       }
@@ -415,6 +421,7 @@ globalThis.MexcStageDiagnostics = (function stageDiagnostics() {
       "expected_interval_opportunities",
       "timer_callbacks",
       "mutation_callbacks",
+      "mutation_dirty_sets",
       "manual_callbacks",
       "stale_generation_detected",
       "session_id_mismatch_detected",
