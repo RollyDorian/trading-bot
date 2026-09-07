@@ -336,7 +336,21 @@ python -m venv .venv
    bars are unchanged. STATUS
    `MEXC_UI_CAPTURE_CADENCE_AND_LOCALE_PROVENANCE_READY`, DECISION
    `STOP_FOR_LEAD_REVIEW`
-   (`docs/mexc_ui_capture_cadence_and_locale_provenance_v1.md`). Design review
+   (`docs/mexc_ui_capture_cadence_and_locale_provenance_v1.md`). Follow-on
+   `MEXC_UI_CAPTURE_V2_CONTRACT_FINAL_GATE` scored a fresh 7.207 min
+   logged-in extension 1.3.3 / catalog v1.2 TAOUSDT export (`3c6e0474`,
+   SHA-256 `1f83d307cc42324f803b26c01f6a6afde5eb1dc65b938909cf50eaeb09b56f2b`)
+   against protocol **v2.0.0** (not v1.0.0;
+   `docs/mexc_mom_gap_hypothesis_protocol_v2_data_contract_amendment.md`). Schema v1, interval 500 ms,
+   heartbeat unchanged-interval commits, bare `/futures/` plus
+   `locale_source=document_lang`/`parser_locale=en-US`, 100% simultaneous
+   bid+ask+last+mark+index, 0 DATA_INVALID, 0 unknown locale on ready rows.
+   Frozen v2 §5 item 8 interarrival fails (p95 1353 ms; 95.87% ≤2000 ms;
+   41/993 gaps >2000 ms). 8.0h identification bar not applied. STATUS
+   `MEXC_UI_CAPTURE_V2_CONTRACT_FINAL_GATE_FAIL`, DECISION
+   `STOP_FOR_LEAD_REVIEW`
+   (`docs/mexc_ui_capture_v2_contract_final_gate_v1.md`). Do not start
+   the 8–12h corpus or retune mom/gap. Design review
    `EXTERNAL_RELATIVE_VALUE_FEED_DESIGN_REVIEW` then selected a minimal
    Binance USD-M `ETHUSDT` public `bookTicker`+`aggTrade` pilot (Bybit fallback),
    spool→Parquet→B2 storage (not `market_events`), isolated Compose service

@@ -89,6 +89,15 @@ def main(argv: list[str] | None = None) -> int:
     final_gate.add_argument("--out", type=Path, required=True)
     final_gate.add_argument("--md", type=Path, default=None)
 
+    v2_gate = sub.add_parser(
+        "v2-contract-gate",
+        help="Score 5-15 min capture against protocol v2.0.0 data contract.",
+    )
+    # Operator NDJSON only. Does not execute mom/gap cells or start a long capture.
+    v2_gate.add_argument("--raw", type=Path, required=True)
+    v2_gate.add_argument("--out", type=Path, required=True)
+    v2_gate.add_argument("--md", type=Path, default=None)
+
     args = parser.parse_args(argv)
     if args.cmd == "extract-html":
         html = args.html.read_text(encoding="utf-8")
@@ -136,6 +145,14 @@ def main(argv: list[str] | None = None) -> int:
 
         md_path = args.md if args.md is not None else args.out.with_suffix(".md")
         write_final_gate(raw=args.raw, out_json=args.out, out_md=md_path)
+        return 0
+    if args.cmd == "v2-contract-gate":
+        from trading_bot.research.mexc_shadow.ui_capture.v2_contract_gate import (
+            write_reports as write_v2_contract_gate,
+        )
+
+        md_path = args.md if args.md is not None else args.out.with_suffix(".md")
+        write_v2_contract_gate(raw=args.raw, out_json=args.out, out_md=md_path)
         return 0
     report = replay_capture_smoke(
         args.raw,
