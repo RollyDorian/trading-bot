@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 DIAGNOSTIC_FORMAT_VERSION = 1
-EXTENSION_VERSION = "1.3.4"
+EXTENSION_VERSION = "1.3.5"
 DIAGNOSTIC_RECORD_SCHEMA = "mexc_ui_stage_diagnostics"
 DIAGNOSTIC_RECORD_TYPES = frozenset({"stage_diagnostics_sidecar"})
 ID_MAX_CHARS = 64
@@ -115,6 +115,7 @@ ALLOWED_STAGE_KEYS = frozenset(
         "chunk_occupancy",
         "ack_outcome",
         "append_timings",
+        "dirty_since_last_interval",
     }
 )
 ALLOWED_APPEND_TIMING_KEYS = frozenset(
@@ -232,6 +233,7 @@ def empty_counters() -> dict[str, Any]:
         "expected_interval_opportunities": 0,
         "timer_callbacks": 0,
         "mutation_callbacks": 0,
+        "mutation_dirty_sets": 0,
         "manual_callbacks": 0,
         "callbacks_enqueued": empty_trigger_counts(),
         "tasks_started": empty_trigger_counts(),
@@ -332,7 +334,11 @@ def sanitize_stage_diagnostics(raw: Any) -> dict[str, Any] | None:
         if name == "ack_outcome":
             out[name] = clip_enum(value, ALLOWED_ACK)
             continue
-        if name in {"stale_generation", "session_id_mismatch"}:
+        if name in {
+            "stale_generation",
+            "session_id_mismatch",
+            "dirty_since_last_interval",
+        }:
             out[name] = bool(value)
             continue
         if name == "append_timings":
@@ -430,6 +436,7 @@ class StageRequest:
     callback_delay_ms: float | None = None
     elapsed_ideal_slot_ordinal: int | None = None
     mutation_callback_ordinal: int | None = None
+    dirty_since_last_interval: bool = False
 
 
 @dataclass
@@ -472,6 +479,8 @@ class StageTrace:
             "interval_callback_ordinal": req.interval_callback_ordinal,
             "expected_deadline_mono": req.expected_deadline_mono,
             "elapsed_ideal_slot_ordinal": req.elapsed_ideal_slot_ordinal,
+            "mutation_callback_ordinal": req.mutation_callback_ordinal,
+            "dirty_since_last_interval": req.dirty_since_last_interval,
             "callback_mono": req.callback_mono,
             "callback_delay_ms": req.callback_delay_ms,
             "content_enqueue_mono": req.enqueue_mono,
@@ -651,7 +660,9 @@ class CaptureStagePipeline:
 
     Matches the live extension: one outstanding content send/ACK, serial
     IndexedDB append, Stop does not drain, stale generation is detected but
-    still processed while ``capturing`` remains true.
+    still processed while ``capturing`` remains true. MutationObserver
+    callbacks increment counters and a dirty flag only; they never enqueue
+    a raw market snapshot.
     """
 
     interval_ms: int = 500
@@ -670,6 +681,7 @@ class CaptureStagePipeline:
     interval_callback_ordinal: int = 0
     mutation_callback_ordinal: int = 0
     persisted_sequence: int = 0
+    dirty_since_last_interval: bool = False
     content_queue: deque[StageRequest] = field(default_factory=deque)
     traces: list[StageTrace] = field(default_factory=list)
     sidecar: BoundedSidecar = field(default_factory=BoundedSidecar)
@@ -683,6 +695,7 @@ class CaptureStagePipeline:
         self.capturing = True
         self.session_id = session_id or self.session_id
         self.timer_registered_mono = now
+        self.dirty_since_last_interval = False
         self.sidecar.record_lifecycle(
             {
                 "kind": "session_start",
@@ -746,6 +759,8 @@ class CaptureStagePipeline:
         )
         delay = now - expected
         slot = elapsed_ideal_slot_ordinal(self.timer_registered_mono, now, self.interval_ms)
+        dirty = self.dirty_since_last_interval
+        self.dirty_since_last_interval = False
         return self._callback_and_enqueue(
             "interval",
             now,
@@ -753,17 +768,22 @@ class CaptureStagePipeline:
             expected_deadline_mono=expected,
             callback_delay_ms=delay,
             elapsed_ideal_slot_ordinal=slot,
+            mutation_callback_ordinal=self.mutation_callback_ordinal,
+            dirty_since_last_interval=dirty,
         )
 
     def mutation_callback(self, now: float) -> StageRequest | None:
+        """Count MutationObserver activity. Never enqueue a raw market snapshot."""
+
         self._advance_to(now)
         if not self.capturing:
             return None
         self.mutation_callback_ordinal += 1
         self.sidecar.counters["mutation_callbacks"] += 1
-        return self._callback_and_enqueue(
-            "mutation", now, mutation_callback_ordinal=self.mutation_callback_ordinal
-        )
+        if not self.dirty_since_last_interval:
+            self.sidecar.counters["mutation_dirty_sets"] += 1
+        self.dirty_since_last_interval = True
+        return None
 
     def settle(self, until: float) -> None:
         self._advance_to(until)
@@ -790,6 +810,7 @@ class CaptureStagePipeline:
             callback_delay_ms=extra.get("callback_delay_ms"),
             elapsed_ideal_slot_ordinal=extra.get("elapsed_ideal_slot_ordinal"),
             mutation_callback_ordinal=extra.get("mutation_callback_ordinal"),
+            dirty_since_last_interval=bool(extra.get("dirty_since_last_interval")),
         )
         if trigger == "manual":
             self.sidecar.counters["manual_callbacks"] += 1

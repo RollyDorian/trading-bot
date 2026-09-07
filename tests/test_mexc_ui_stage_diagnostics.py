@@ -77,8 +77,8 @@ def _min_snapshot(*, sequence: int, received: str, monotonic_ms: float) -> dict:
     }
 
 
-def test_manifest_and_scripts_are_1_3_4_instrumentation_only() -> None:
-    assert MANIFEST["version"] == "1.3.4"
+def test_manifest_and_scripts_are_1_3_5_interval_only() -> None:
+    assert MANIFEST["version"] == "1.3.5"
     assert MANIFEST["content_scripts"][0]["js"] == ["stage_diagnostics.js", "content.js"]
     assert "stage_diagnostics.js" in BACKGROUND
     assert "emitChain = emitChain.then" in CONTENT
@@ -92,7 +92,12 @@ def test_manifest_and_scripts_are_1_3_4_instrumentation_only() -> None:
     assert "workerBootId" in BACKGROUND
     assert "appendChain.then(task, task)" in BACKGROUND
     assert "lastEmitKey" not in CONTENT
+    assert "emitMutation" not in CONTENT
+    assert 'emit("mutation"' not in CONTENT
+    assert "noteMutation" in CONTENT
+    assert "dirtySinceLastInterval" in CONTENT
     assert "INTERVAL_DETAIL_CAP = 2048" in DIAG_JS
+    assert 'EXTENSION_VERSION = "1.3.5"' in DIAG_JS
 
 
 def test_expected_deadline_is_from_registration_not_previous_callback() -> None:
@@ -166,20 +171,23 @@ def test_diagnostic_correlation_and_queue_wait() -> None:
     pipe = CaptureStagePipeline(interval_ms=500, extract_ms=5.0, append_ms=20.0, ipc_ms=1.0)
     pipe.start_session(0.0)
     # Manual occupies the FIFO until ACK at 5+1+20+1 = 27 ms.
+    for index in range(12):
+        assert pipe.mutation_callback(1.0 + index) is None
     pipe.interval_callback(10.0)
-    pipe.mutation_callback(12.0)
     pipe.settle(200.0)
     by_ordinal = {trace.request.request_ordinal: trace for trace in pipe.traces}
-    assert len(by_ordinal) == 3
+    assert len(by_ordinal) == 2
+    assert all(trace.request.trigger != "mutation" for trace in pipe.traces)
     interval = next(trace for trace in pipe.traces if trace.request.trigger == "interval")
-    mutation = next(trace for trace in pipe.traces if trace.request.trigger == "mutation")
-    # Waiting depth excludes the in-flight manual task.
+    # Mutations no longer sit on emitChain, so interval wait is still manual ACK only.
     assert interval.request.content_queue_depth == 0
     wait = interval.content_queue_wait_ms()
     assert wait == interval.extract_start_mono - interval.request.callback_mono
     assert wait == 17.0
-    assert mutation.request.content_queue_depth == 1
-    assert mutation.extract_start_mono == interval.ack_end_mono
+    assert interval.request.dirty_since_last_interval is True
+    assert interval.request.mutation_callback_ordinal == 12
+    assert pipe.sidecar.counters["mutation_callbacks"] == 12
+    assert pipe.sidecar.counters["callbacks_enqueued"]["mutation"] == 0
     assert interval.worker_boot_id == "worker-a"
     assert interval.request.producer_epoch == "producer-a"
     assert interval.request.session_generation == 1
@@ -191,6 +199,7 @@ def test_diagnostic_correlation_and_queue_wait() -> None:
     assert diag["request_ordinal"] == interval.request.request_ordinal
     assert diag["interval_callback_ordinal"] == 1
     assert diag["expected_deadline_mono"] == 500.0
+    assert diag["dirty_since_last_interval"] is True
 
 
 def test_counters_and_abandoned_at_stop() -> None:
@@ -315,7 +324,7 @@ def test_milestone_report_is_instrumentation_only(tmp_path: Path) -> None:
     assert report["protocol_changed"] is False
     assert report["scheduler_changed"] is False
     assert report["live_diagnostic_capture"] == "NOT_RUN"
-    assert report["extension_version"] == "1.3.4"
+    assert report["extension_version"] == "1.3.5"
     text = out_md.read_text(encoding="utf-8")
     assert "Never backdate" in text
     assert milestone_report()["mom_gap_inspected"] is False

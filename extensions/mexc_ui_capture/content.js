@@ -24,6 +24,8 @@
   let requestOrdinal = 0;
   let intervalCallbackOrdinal = 0;
   let mutationCallbackOrdinal = 0;
+  // MutationObserver may set this; interval heartbeats must still extract.
+  let dirtySinceLastInterval = false;
   let timerRegisteredMono = null;
   let contentCounters = D.emptyCounters();
   let waitingEnqueueMonos = [];
@@ -1227,6 +1229,7 @@
   }
 
   function applyAges(fields, nowMono, pageKey) {
+    // lastValue tracks age only. Never copy it into fields[name].value.
     if (pageKey !== agePageKey || captureId !== ageCaptureId) {
       resetAgeClock();
       agePageKey = pageKey;
@@ -1262,6 +1265,7 @@
     const localeCtx = refreshLocaleContext();
     currentLocale = localeCtx.parser_locale;
     const fields = {};
+    // Always reread every catalog field from the live DOM. Missing stays missing.
     for (const [name, spec] of Object.entries(catalog.fields)) {
       fields[name] = extractField(name, spec);
     }
@@ -1493,6 +1497,7 @@
       const visibilityAtExtract = currentVisibility();
       // Interval ticks always extract and commit. Equal bid/ask/last/mark/index
       // values are a new observation, not a skip or a forward-fill.
+      // dirtySinceLastInterval never skips this extract.
       const snapshot = extract(trigger);
       const extractEnd = performance.now();
       // received_at_local / observed_at_local / monotonic_ms stay extract-time
@@ -1525,6 +1530,7 @@
         elapsed_ideal_slot_ordinal: hook && hook.elapsed_ideal_slot_ordinal,
         callback_mono: callbackMono,
         callback_delay_ms: hook && hook.callback_delay_ms,
+        dirty_since_last_interval: Boolean(hook && hook.dirty_since_last_interval),
         content_enqueue_mono: enqueueMono,
         content_queue_depth: queueDepth,
         content_oldest_wait_ms: oldestWait,
@@ -1580,6 +1586,9 @@
     intervalCallbackOrdinal += 1;
     contentCounters.timer_callbacks += 1;
     const expected = D.expectedDeadlineMono(timerRegisteredMono, intervalCallbackOrdinal, intervalMs);
+    const dirty = dirtySinceLastInterval;
+    // Clear before extract so mutations during this heartbeat mark the next slot.
+    dirtySinceLastInterval = false;
     emit("interval", {
       callback_mono: callbackMono,
       interval_callback_ordinal: intervalCallbackOrdinal,
@@ -1591,25 +1600,27 @@
         intervalMs
       ),
       visibility_state: currentVisibility(),
+      dirty_since_last_interval: dirty,
+      mutation_callback_ordinal: mutationCallbackOrdinal,
     });
   }
 
-  function emitMutation() {
+  function noteMutation() {
+    // Count the callback and set a dirty flag. Never extract or enqueue a row.
     if (!capturing) return;
     mutationCallbackOrdinal += 1;
     contentCounters.mutation_callbacks += 1;
-    emit("mutation", {
-      callback_mono: performance.now(),
-      mutation_callback_ordinal: mutationCallbackOrdinal,
-      visibility_state: currentVisibility(),
-    });
+    if (!dirtySinceLastInterval) {
+      contentCounters.mutation_dirty_sets += 1;
+    }
+    dirtySinceLastInterval = true;
   }
 
   function startObserver() {
     if (observer) observer.disconnect();
     observer = new MutationObserver(() => {
       // Count the callback only. Do not read MutationRecords or mutation targets.
-      emitMutation();
+      noteMutation();
     });
     observer.observe(document.body, { subtree: true, childList: true, characterData: true });
   }
@@ -1644,6 +1655,7 @@
     sessionGeneration += 1;
     intervalCallbackOrdinal = 0;
     mutationCallbackOrdinal = 0;
+    dirtySinceLastInterval = false;
     requestOrdinal = 0;
     contentCounters = D.emptyCounters();
     waitingEnqueueMonos = [];

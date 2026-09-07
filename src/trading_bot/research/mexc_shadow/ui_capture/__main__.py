@@ -127,6 +127,13 @@ def main(argv: list[str] | None = None) -> int:
         help="Optional NDJSON with stage_diagnostics; live capture is not required",
     )
 
+    interval_only = sub.add_parser(
+        "interval-only-capture",
+        help="Interval-only capture remediation report. Does not retune mom/gap.",
+    )
+    interval_only.add_argument("--out", type=Path, required=True)
+    interval_only.add_argument("--md", type=Path, default=None)
+
     args = parser.parse_args(argv)
     if args.cmd == "extract-html":
         html = args.html.read_text(encoding="utf-8")
@@ -211,6 +218,14 @@ def main(argv: list[str] | None = None) -> int:
                 stage_diag_mod.summarize_capture_stage_diagnostics(args.raw)
             )
             args.out.write_text(json.dumps(stage_report, indent=2) + "\n", encoding="utf-8")
+        return 0
+    if args.cmd == "interval-only-capture":
+        from trading_bot.research.mexc_shadow.ui_capture.interval_only_capture import (
+            write_reports as write_interval_only,
+        )
+
+        md_path = args.md if args.md is not None else args.out.with_suffix(".md")
+        write_interval_only(out_json=args.out, out_md=md_path)
         return 0
     report = replay_capture_smoke(
         args.raw,
