@@ -395,7 +395,16 @@ python -m venv .venv
    counters). Protocol v2.0.0 unchanged. Hidden-tab 2 Hz remains out of
    scope. STATUS `MEXC_UI_INTERVAL_ONLY_CAPTURE_REMEDIATION_READY`, DECISION
    `STOP_FOR_LEAD_REVIEW`
-   (`docs/mexc_ui_interval_only_capture_remediation_v1.md`). Design review
+   (`docs/mexc_ui_interval_only_capture_remediation_v1.md`). Follow-on
+   `MEXC_UI_INTERVAL_ONLY_VISIBLE_FINAL_V2_GATE` scored a fresh logged-in
+   8.408 min visible-tab TAOUSDT capture from extension 1.3.5 / catalog v1.2
+   against frozen protocol v2.0.0. One manual start row, remaining rows
+   interval-only, zero mutation raw rows, zero visible→hidden, interarrival
+   p95 518 ms and 100% ≤2000 ms. Content wait p95 ~0.1 ms vs prior 1.3.4
+   final-visible ~1526 ms; queue depth high-water 0 vs 26. STATUS
+   `MEXC_UI_INTERVAL_ONLY_VISIBLE_FINAL_V2_GATE_PASS`, DECISION
+   `STOP_FOR_LEAD_REVIEW`
+   (`docs/mexc_ui_interval_only_visible_final_v2_gate_v1.md`). Design review
    `EXTERNAL_RELATIVE_VALUE_FEED_DESIGN_REVIEW` then selected a minimal
    Binance USD-M `ETHUSDT` public `bookTicker`+`aggTrade` pilot (Bybit fallback),
    spool→Parquet→B2 storage (not `market_events`), isolated Compose service
