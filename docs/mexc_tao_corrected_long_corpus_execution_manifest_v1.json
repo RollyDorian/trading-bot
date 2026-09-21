@@ -1,7 +1,7 @@
 {
   "milestone": "MEXC_TAO_CORRECTED_LONG_CORPUS_ADMISSIBILITY_V1",
-  "manifest_status": "LOCKED_BEFORE_ADMISSIBILITY_SCORE",
-  "quality_status": "PENDING_ADMISSIBILITY_SCORE",
+  "manifest_status": "ADMISSIBILITY_SCORED",
+  "quality_status": "MEXC_TAO_CORRECTED_LONG_CORPUS_ADMISSIBLE",
   "decision": "STOP_FOR_LEAD_REVIEW",
   "ml_status": "NOT_STARTED",
   "paper": false,
@@ -36,8 +36,12 @@
     "schema_version": 1,
     "sample_interval_ms": 500,
     "symbol": "TAOUSDT",
-    "capture_ids": ["e41b48eb-852c-4a36-88b6-9fc9a10ced32"],
-    "session_ids": ["e41b48eb-852c-4a36-88b6-9fc9a10ced32"],
+    "capture_ids": [
+      "e41b48eb-852c-4a36-88b6-9fc9a10ced32"
+    ],
+    "session_ids": [
+      "e41b48eb-852c-4a36-88b6-9fc9a10ced32"
+    ],
     "utc_start": "2026-09-20T19:16:41.575Z",
     "utc_end": "2026-09-21T05:52:41.206Z",
     "session_started_at": "2026-09-20T19:16:41.469Z",
@@ -50,7 +54,9 @@
       "manual": 1,
       "interval": 76310
     },
-    "page_paths": ["/futures/TAO_USDT"],
+    "page_paths": [
+      "/futures/TAO_USDT"
+    ],
     "parser_locale": "en-US",
     "locale_source": "document_lang",
     "document_lang": "en-US",
@@ -66,11 +72,15 @@
     "interval_ms": 500,
     "as_of_max_ms": 1000,
     "gap_reset_ms": 2000,
-    "materialized": false,
-    "sha256": null,
-    "reason": "locked_before_admissibility_score_do_not_evaluate_21_cells"
+    "materialized": true,
+    "sha256": "3bf630648ee2abfa1839d720c5e5ffe271266e2d6c6c7453870cc0b92a698d89",
+    "reason": "hashed_after_all_input_gates_passed",
+    "n_rows": 76311,
+    "n_five_ok": 76311,
+    "simultaneous_pct": 100.0,
+    "written": "data/mexc_ui_capture/mexc_tao_corrected_long_corpus_grid_v1.ndjson"
   },
-  "numeric_scale_audit": "PENDING_ADMISSIBILITY_SCORE",
+  "numeric_scale_audit": "PASS",
   "exclusions": {
     "historical_11h67_sha256": "7a41c34d4ae855850cd8a1a47e438e940c38e09d6f5a555c3f397e5650da9c2a",
     "short_gate_captures_forbidden": true,
@@ -82,6 +92,15 @@
     "Corpus SHA-256 is of the gitignored NDJSON bytes; the capture file is not in Git.",
     "This manifest was committed before any mom/gap formula inspection or 21-cell execution.",
     "Admissibility scoring and optional 500 ms grid hash follow in a later commit.",
-    "No PnL, ML, PAPER, LIVE, or protocol modification."
-  ]
+    "No PnL, ML, PAPER, LIVE, or protocol modification.",
+    "Admissibility scored after the locked manifest commit. Still 0 of 21 cells."
+  ],
+  "admissibility": {
+    "passed": true,
+    "usable_hours": 10.59875,
+    "failure_classes": [],
+    "replay_canonical_sha256": "c8a2e8524c002221df9ffdf95d86e4e2c8643fa5ac23227ff8b26299d2c262ad",
+    "whole_session_scored": true,
+    "bad_periods_cropped": false
+  }
 }

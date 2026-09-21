@@ -134,6 +134,26 @@ def main(argv: list[str] | None = None) -> int:
     interval_only.add_argument("--out", type=Path, required=True)
     interval_only.add_argument("--md", type=Path, default=None)
 
+    long_admiss = sub.add_parser(
+        "long-corpus-admissibility",
+        help="Score corrected long TAOUSDT corpus vs protocol v2. No 21 cells.",
+    )
+    long_admiss.add_argument("--raw", type=Path, required=True)
+    long_admiss.add_argument("--out", type=Path, required=True)
+    long_admiss.add_argument("--md", type=Path, default=None)
+    long_admiss.add_argument(
+        "--grid",
+        type=Path,
+        default=None,
+        help="Write the frozen 500 ms grid NDJSON only if every input gate passes",
+    )
+    long_admiss.add_argument(
+        "--manifest",
+        type=Path,
+        default=None,
+        help="Update the locked execution manifest after scoring the same SHA-256",
+    )
+
     args = parser.parse_args(argv)
     if args.cmd == "extract-html":
         html = args.html.read_text(encoding="utf-8")
@@ -226,6 +246,20 @@ def main(argv: list[str] | None = None) -> int:
 
         md_path = args.md if args.md is not None else args.out.with_suffix(".md")
         write_interval_only(out_json=args.out, out_md=md_path)
+        return 0
+    if args.cmd == "long-corpus-admissibility":
+        from trading_bot.research.mexc_shadow.ui_capture.long_corpus_admissibility import (
+            write_reports as write_long_admiss,
+        )
+
+        md_path = args.md if args.md is not None else args.out.with_suffix(".md")
+        write_long_admiss(
+            raw=args.raw,
+            out_json=args.out,
+            out_md=md_path,
+            grid_out=args.grid,
+            manifest_path=args.manifest,
+        )
         return 0
     report = replay_capture_smoke(
         args.raw,
