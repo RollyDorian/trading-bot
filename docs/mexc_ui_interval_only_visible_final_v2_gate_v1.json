@@ -1,0 +1,517 @@
+{
+  "milestone": "MEXC_UI_INTERVAL_ONLY_VISIBLE_FINAL_V2_GATE",
+  "status": "MEXC_UI_INTERVAL_ONLY_VISIBLE_FINAL_V2_GATE_PASS",
+  "decision": "STOP_FOR_LEAD_REVIEW",
+  "ml_status": "NOT_STARTED",
+  "paper": false,
+  "live": false,
+  "strategy_tuning": false,
+  "mom_gap_inspected": false,
+  "n_cells_executed": 0,
+  "long_capture_started": false,
+  "generated_at": "2026-09-20T13:13:11.051783+00:00",
+  "extension_expected": "1.3.5",
+  "catalog_required": "v1.2",
+  "protocol": {
+    "version_scored": "2.0.0",
+    "version_not_scored": "1.0.0",
+    "amendment_doc": "docs/mexc_mom_gap_hypothesis_protocol_v2_data_contract_amendment.md",
+    "v1_blob": "4e8d05940b2bc759acff881779159a7bcba1604e",
+    "v2_merge_commit": "0b4f761bb4c7fa8a6e4520901bfc32f8f2bf59d1",
+    "v2_amendment_commit": "cb679745b1fda6ecde509d8f2656232a89dd192b"
+  },
+  "frozen_protocol_v2": {
+    "simultaneous_min": 0.95,
+    "interarrival_le_2000_min": 0.99,
+    "p95_max_ms": 1000.0,
+    "hours_requirement": "not applied to this 5-15 min gate",
+    "thresholds_relaxed": false
+  },
+  "short_validation": {
+    "protocol_version_scored": "2.0.0",
+    "protocol_version_not_scored": "1.0.0",
+    "path": "data/mexc_ui_capture/mexc_ui_capture_e03fc35f-4280-486c-8144-86ffb1aa6515_2026-09-07T18-30-52-811Z.ndjson",
+    "sha256": "d1d4c08f785efa489760cf33d853223277f00c4837ac9773249c5345f74e3f45",
+    "n_snapshots": 1010,
+    "duration_ms": 504472.0,
+    "duration_minutes": 8.4079,
+    "page_paths": {
+      "/futures/TAO_USDT": 1010
+    },
+    "locales": {
+      "en-US": 1010
+    },
+    "locale_sources": {
+      "document_lang": 1010
+    },
+    "document_langs": {
+      "en-US": 1010
+    },
+    "locale_routes": {
+      "document_lang": 1010
+    },
+    "n_locale_path_document_disagree": 0,
+    "n_locale_route_fail": 0,
+    "field_parser_locales": {
+      "en-US": 5050
+    },
+    "catalog_versions": {
+      "v1.2": 1010
+    },
+    "schema_versions": {
+      "1": 1010
+    },
+    "sample_interval_ms": {
+      "500": 1010
+    },
+    "session_interval_ms": [
+      500,
+      500
+    ],
+    "header_alias_counts": {
+      "9": 1010
+    },
+    "min_header_alias_count": 9,
+    "header_item_counts": {
+      "3": 1010
+    },
+    "header_title_hits_mark_index_funding": {
+      "1,1,1": 1010
+    },
+    "median_last": 259.03,
+    "median_bid": 259.01,
+    "median_ask": 259.03,
+    "median_mark": 259.01,
+    "median_index": 259.0,
+    "n_strategy_ready": 1010,
+    "strategy_ready_rate": 1.0,
+    "strategy_ready_pct": 100.0,
+    "n_unknown_locale_on_strategy_ready": 0,
+    "simultaneous_bid_ask_last_mark_index": 1010,
+    "simultaneous_rate": 1.0,
+    "simultaneous_pct": 100.0,
+    "missing_field_bursts": [],
+    "n_missing_field_bursts": 0,
+    "n_data_invalid": 0,
+    "n_startup_warmup": 0,
+    "n_ready_valid": 1010,
+    "class_counts": {
+      "READY_VALID": 1010
+    },
+    "warmup_and_invalid_bursts": [],
+    "n_bid_ge_ask": 0,
+    "raw_text_has_comma": 0,
+    "raw_text_has_dot": 5050,
+    "n_scale_audit_fail": 0,
+    "scale_audit_first_reason": null,
+    "numeric_scale_audit_ok": true,
+    "selector_diagnostics": {
+      "chosen_bbo_source": {
+        "live_asks_bids_wrapper": 1010
+      },
+      "ambiguity_reason": {},
+      "orderbook_heading_count": {
+        "2": 1010
+      },
+      "visible_orderbook_heading_count": {
+        "1": 1010
+      }
+    },
+    "first_ready": {
+      "session_id": "e03fc35f-4280-486c-8144-86ffb1aa6515",
+      "sequence": 1,
+      "received_at_local": "2026-09-07T18:22:26.347Z"
+    },
+    "mark_selectors": {
+      "header_struct:mark": 1010
+    },
+    "index_selectors": {
+      "header_struct:index": 1010
+    },
+    "replay_canonical_sha256": "554f48839864615b9dddda0a9fbe7e915422d2d0a7def7421f3020187b3c91ea",
+    "storage_errors": [],
+    "sessions": [
+      {
+        "session_id": "e03fc35f-4280-486c-8144-86ffb1aa6515",
+        "started_at": "2026-09-07T18:22:26.226Z",
+        "ended_at": "2026-09-07T18:30:51.217Z",
+        "status": "stopped",
+        "page_host": "www.mexc.com",
+        "page_path": "/futures/TAO_USDT",
+        "interval_ms": 500,
+        "n_snapshots": 1010,
+        "n_chunks": 5,
+        "first_sequence": 1,
+        "last_sequence": 1010,
+        "storage_error": null,
+        "sequence_gaps": [],
+        "client_sequence_mismatches": []
+      }
+    ],
+    "sequence_diagnostics": [],
+    "trigger_counts": {
+      "manual": 1,
+      "interval": 1009
+    },
+    "n_interval_triggers": 1009,
+    "n_unchanged_interval_commits": 678,
+    "n_missing_v133_keys": 0,
+    "interarrival_ms": {
+      "n": 1009,
+      "p50_ms": 499.0,
+      "p90_ms": 514.0,
+      "p95_ms": 518.0,
+      "p99_ms": 529.0,
+      "min_ms": 453.0,
+      "max_ms": 544.0
+    },
+    "quality_interarrival_ms": {
+      "n": 1009,
+      "p50_ms": 499.0,
+      "p90_ms": 514.0,
+      "p95_ms": 518.0,
+      "p99_ms": 529.0,
+      "min_ms": 453.0,
+      "max_ms": 544.0
+    },
+    "interarrival_frac_le_2000_ms": 1.0,
+    "interarrival_n_gt_2000_ms": 0,
+    "interarrival_n_gt_1000_ms": 0,
+    "timing_adequacy": "ADEQUATE_FOR_REVIEW_NOT_PROOF",
+    "n_sessions": 1,
+    "n_chunks_total": 5,
+    "quality_invalid_reasons": {},
+    "hours_requirement": {
+      "protocol_v2_item": 6,
+      "required_usable_hours": 8.0,
+      "applied": false,
+      "reason": "short_gate_5_15_min_not_identification_corpus"
+    },
+    "v1_vs_v2": {
+      "catalog_v1": "v1.1",
+      "catalog_v2": "v1.2",
+      "heartbeat_v1": "not required",
+      "heartbeat_v2": "interval ticks persist when values are unchanged",
+      "locale_v1": "path-implied; catalog v1.1",
+      "locale_v2": "localized path with locale_source=path, or bare /futures/ with locale_source=document_lang",
+      "timing_bars": "unchanged p95<=1000ms and >=99% <=2000ms"
+    },
+    "gates": {
+      "duration_5_to_15_min": true,
+      "extension_1_3_3_locale_fields": true,
+      "schema_mexc_ui_raw_snapshot_v1": true,
+      "catalog_v1_2": true,
+      "configured_interval_500_ms": true,
+      "heartbeat_unchanged_interval_commits": true,
+      "sequence_chunk_continuity": true,
+      "no_storage_errors": true,
+      "locale_v2_provenance": true,
+      "no_unknown_locale_on_strategy_ready": true,
+      "symbol_taousdt": true,
+      "raw_text_tokens_match_locale_scale": true,
+      "absolute_price_scale": true,
+      "bid_lt_ask": true,
+      "mark_index_not_swapped": true,
+      "simultaneous_coverage_ge_95pct": true,
+      "startup_warmup_separated_from_data_invalid": true,
+      "no_post_readiness_data_invalid": true,
+      "no_selector_ambiguity_burst": true,
+      "export_replay_deterministic": true,
+      "frozen_interarrival_p95": true,
+      "frozen_interarrival_le_2000": true,
+      "extension_1_3_5": true,
+      "exactly_one_manual_start_raw_row": true,
+      "remaining_raw_rows_interval": true,
+      "zero_mutation_raw_rows": true,
+      "mutation_callbacks_not_enqueued": true,
+      "continuous_visibility_visible": true,
+      "zero_visible_to_hidden": true,
+      "heartbeat_expected_equals_timer_callbacks": true,
+      "heartbeat_persisted_equals_timer_callbacks": true,
+      "no_stale_generation": true,
+      "no_session_id_mismatch": true,
+      "screenshot_agreement": true
+    },
+    "failure_classes": [],
+    "passed": true,
+    "extension_expected": "1.3.5",
+    "interval_only_audit": {
+      "n_snapshots": 1010,
+      "n_missing_stage_diagnostics": 0,
+      "n_wrong_extension": 0,
+      "session_extension_versions": [
+        "1.3.5",
+        "1.3.5"
+      ],
+      "first_trigger": "manual",
+      "later_trigger_counts": {
+        "interval": 1009
+      },
+      "visibility_states": {
+        "visible": 1010
+      },
+      "visibility_states_at_extract": {
+        "visible": 1010
+      },
+      "n_stale_generation": 0,
+      "n_session_id_mismatch": 0,
+      "n_dirty_since_last_interval": 861,
+      "mutation_callback_ordinal_max": 2115,
+      "visible_to_hidden_transitions": 0,
+      "lifecycle_kinds": {
+        "worker_boot": 1,
+        "session_start": 1,
+        "pageshow": 1,
+        "timer_registered": 1,
+        "session_stop": 1
+      },
+      "lifecycle": [
+        {
+          "kind": "worker_boot",
+          "mono": 2313.4000000059605,
+          "worker_boot_id": "42297f1c-109b-45f0-ab6c-2b7c7ab96e1c"
+        },
+        {
+          "kind": "session_start",
+          "mono": 2313.4000000059605,
+          "producer_epoch": "e3307771-a130-4bc3-8bfc-9c25c4262b4d",
+          "session_generation": 1,
+          "worker_boot_id": "42297f1c-109b-45f0-ab6c-2b7c7ab96e1c"
+        },
+        {
+          "kind": "pageshow",
+          "mono": 10247.5,
+          "to_state": "visible",
+          "producer_epoch": "e3307771-a130-4bc3-8bfc-9c25c4262b4d",
+          "session_generation": 0
+        },
+        {
+          "kind": "timer_registered",
+          "mono": 223025.40000000596,
+          "to_state": "visible",
+          "producer_epoch": "e3307771-a130-4bc3-8bfc-9c25c4262b4d",
+          "session_generation": 1
+        },
+        {
+          "kind": "session_stop",
+          "mono": 727996.2000000179,
+          "to_state": "visible",
+          "producer_epoch": "e3307771-a130-4bc3-8bfc-9c25c4262b4d",
+          "session_generation": 1
+        }
+      ],
+      "expected_interval_opportunities": 1009,
+      "timer_callbacks": 1009,
+      "mutation_callbacks": 2116,
+      "mutation_dirty_sets": 862,
+      "manual_callbacks": 1,
+      "callbacks_enqueued": {
+        "interval": 1009,
+        "mutation": 0,
+        "manual": 1
+      },
+      "snapshots_persisted": {
+        "interval": 1009,
+        "mutation": 0,
+        "manual": 1
+      },
+      "stale_generation_detected": 0,
+      "session_id_mismatch_detected": 0,
+      "outstanding_at_stop": 0,
+      "high_water": {
+        "content_queue_depth": 0,
+        "background_queue_depth": 0,
+        "content_oldest_wait_ms": 0.20000001788139343
+      },
+      "content_queue_depth_high_water": 0,
+      "content_queue_wait_ms": {
+        "n": 1010,
+        "min": 0.0,
+        "p50": 0.0,
+        "p90": 0.09999999403953552,
+        "p95": 0.09999999403953552,
+        "p99": 0.10000002384185791,
+        "max": 0.20000001788139343,
+        "mean": 0.02316831654251212
+      },
+      "content_queue_depth": {
+        "n": 1010,
+        "min": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "extract_duration_ms": {
+        "n": 1010,
+        "min": 64.30000001192093,
+        "p50": 73.30000001192093,
+        "p90": 78.40000000596046,
+        "p95": 80.19999998807907,
+        "p99": 86.40000000596046,
+        "max": 111.80000001192093,
+        "mean": 73.35742574286932
+      },
+      "background_queue_wait_ms": {
+        "n": 1010,
+        "min": 0.0,
+        "p50": 0.09999999403953552,
+        "p90": 0.10000002384185791,
+        "p95": 0.19999998807907104,
+        "p99": 0.30000001192092896,
+        "max": 2.4000000059604645,
+        "mean": 0.06821782169955792
+      },
+      "background_queue_depth": {
+        "n": 1010,
+        "min": 0.0,
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "callback_delay_ms": {
+        "n": 1009,
+        "min": 0.09999999403953552,
+        "p50": 8.099999994039536,
+        "p90": 15.699999988079071,
+        "p95": 17.099999994039536,
+        "p99": 29.80000001192093,
+        "max": 48.19999998807907,
+        "mean": 8.68513379608557
+      },
+      "histogram_append_duration_ms": {
+        "n": 1010,
+        "min": 1.5,
+        "p50": 16.0,
+        "p90": 32.0,
+        "p95": 32.0,
+        "p99": 32.0,
+        "max": 41.900000005960464,
+        "mean": 11.23702970285817,
+        "percentile_method": "histogram_bucket_upper"
+      },
+      "histogram_total_ack_latency_ms": {
+        "n": 1010,
+        "min": 3.0999999940395355,
+        "p50": 16.0,
+        "p90": 32.0,
+        "p95": 64.0,
+        "p99": 64.0,
+        "max": 88.59999999403954,
+        "mean": 17.752970296823154,
+        "percentile_method": "histogram_bucket_upper"
+      },
+      "histogram_content_queue_wait_ms": {
+        "n": 1010,
+        "min": 0.0,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0,
+        "max": 0.20000001788139343,
+        "mean": 0.02316831654251212,
+        "percentile_method": "histogram_bucket_upper"
+      }
+    },
+    "screenshots": [
+      {
+        "local_time": "2026-09-07T22:28:44+04:00",
+        "utc": "2026-09-07T18:28:44Z",
+        "filename": "Снимок экрана 2026-09-07 222844.png",
+        "visible": {
+          "last": 258.7,
+          "fair": 258.72,
+          "index": 258.71,
+          "bid": 258.67,
+          "ask": 258.73,
+          "funding": "+0.0050%/01:31:18",
+          "ui_labels": "English",
+          "decimal": "point",
+          "logged_in": true,
+          "symbol": "TAOUSDT"
+        },
+        "nearest_snapshot": "2026-09-07T18:28:43.830Z",
+        "nearest_sequence": 756,
+        "nearest_delta_ms": 170.0,
+        "captured": {
+          "last": 258.7,
+          "bid": 258.68,
+          "ask": 258.71,
+          "mark": 258.72,
+          "index": 258.71
+        },
+        "scale_match": true,
+        "bid_lt_ask": true,
+        "mark_index_not_swapped": true,
+        "last_abs_delta": 0.0,
+        "fair_abs_delta": 0.0,
+        "index_abs_delta": 0.0,
+        "notes": "Absolute prices ~258. Last delta 0.0 vs UI 258.70. Fair/mark delta 0.0; index delta 0.0. Ordinary book lag of 1–2 cents on bid/ask. Not a mark/index swap."
+      }
+    ],
+    "fifo_before_after": {
+      "prior_extension": "1.3.4",
+      "prior_capture_sha256": "c3699bb2261b153dda093e36e801e9f352ffb02891345c7aea1b1ff1ba6c81c2",
+      "prior_phase": "final_visible",
+      "prior_content_wait_p95_ms": 1525.699999988079,
+      "prior_content_queue_depth_high_water": 26,
+      "now_content_wait_p95_ms": 0.09999999403953552,
+      "now_content_wait_max_ms": 0.20000001788139343,
+      "now_content_queue_depth_high_water": 0,
+      "improvement_percent_required": false
+    },
+    "v2_gates": {
+      "duration_5_to_15_min": true,
+      "extension_1_3_3_locale_fields": true,
+      "schema_mexc_ui_raw_snapshot_v1": true,
+      "catalog_v1_2": true,
+      "configured_interval_500_ms": true,
+      "heartbeat_unchanged_interval_commits": true,
+      "sequence_chunk_continuity": true,
+      "no_storage_errors": true,
+      "locale_v2_provenance": true,
+      "no_unknown_locale_on_strategy_ready": true,
+      "symbol_taousdt": true,
+      "raw_text_tokens_match_locale_scale": true,
+      "absolute_price_scale": true,
+      "bid_lt_ask": true,
+      "mark_index_not_swapped": true,
+      "simultaneous_coverage_ge_95pct": true,
+      "startup_warmup_separated_from_data_invalid": true,
+      "no_post_readiness_data_invalid": true,
+      "no_selector_ambiguity_burst": true,
+      "export_replay_deterministic": true,
+      "frozen_interarrival_p95": true,
+      "frozen_interarrival_le_2000": true
+    },
+    "extra_gates": {
+      "extension_1_3_5": true,
+      "exactly_one_manual_start_raw_row": true,
+      "remaining_raw_rows_interval": true,
+      "zero_mutation_raw_rows": true,
+      "mutation_callbacks_not_enqueued": true,
+      "continuous_visibility_visible": true,
+      "zero_visible_to_hidden": true,
+      "heartbeat_expected_equals_timer_callbacks": true,
+      "heartbeat_persisted_equals_timer_callbacks": true,
+      "no_stale_generation": true,
+      "no_session_id_mismatch": true,
+      "screenshot_agreement": true
+    },
+    "whole_session_scored": true,
+    "bad_periods_cropped": false,
+    "mom_gap_inspected": false
+  },
+  "notes": [
+    "Scored against protocol v2.0.0 data admissibility, not v1.0.0.",
+    "Whole session scored; no hidden-phase crop and no bad-period crop.",
+    "Did not inspect mom/gap formulas or execute any of the 21 cells.",
+    "Did not retune frozen profiles, thresholds, exits, or lookbacks.",
+    "Did not start the 8-12h identification corpus."
+  ]
+}
