@@ -404,7 +404,19 @@ python -m venv .venv
    final-visible ~1526 ms; queue depth high-water 0 vs 26. STATUS
    `MEXC_UI_INTERVAL_ONLY_VISIBLE_FINAL_V2_GATE_PASS`, DECISION
    `STOP_FOR_LEAD_REVIEW`
-   (`docs/mexc_ui_interval_only_visible_final_v2_gate_v1.md`). Design review
+   (`docs/mexc_ui_interval_only_visible_final_v2_gate_v1.md`). Follow-on
+   corrected long-corpus admissibility locked a 10.59875-hour visible
+   extension-1.3.5 / catalog-v1.2 TAOUSDT capture and its 500 ms causal grid;
+   every protocol-v2 input gate passed. First authorized 21-cell execution
+   then ran the frozen seven families at H={1s,2s,5s}: 20 cells are
+   `IDENTITY_REJECTED` and `F07_MID_SMA_MID_MARK__H1S` is
+   `INSUFFICIENT_EVENTS`. Exact conclusion ordering yields
+   `MEXC_ONLY_FAMILY_REJECTED`, while the section-10 external-reference gate
+   remains `MEXC_ONLY_INCONCLUSIVE` because only one independent admissible
+   capture exists and one cell is event-insufficient. No PnL, tuning, ML,
+   PAPER, or LIVE. STATUS `MEXC_MOM_GAP_PROTOCOL_V2_EXECUTION_READY`, DECISION
+   `STOP_FOR_LEAD_REVIEW`
+   (`docs/mexc_mom_gap_protocol_v2_execution_v1.md`). Design review
    `EXTERNAL_RELATIVE_VALUE_FEED_DESIGN_REVIEW` then selected a minimal
    Binance USD-M `ETHUSDT` public `bookTicker`+`aggTrade` pilot (Bybit fallback),
    spool→Parquet→B2 storage (not `market_events`), isolated Compose service
