@@ -396,17 +396,15 @@ python -m venv .venv
    scope. STATUS `MEXC_UI_INTERVAL_ONLY_CAPTURE_REMEDIATION_READY`, DECISION
    `STOP_FOR_LEAD_REVIEW`
    (`docs/mexc_ui_interval_only_capture_remediation_v1.md`). Follow-on
-   `MEXC_TAO_CORRECTED_LONG_CORPUS_ADMISSIBILITY_V1` scored the first corrected
-   long TAOUSDT capture after the accepted extension-1.3.5 visible-path gate
-   against frozen protocol v2.0.0 (merge `0b4f761`). Corpus SHA-256
-   `5c15b9714f804f8df5a327ae81fb2d7fb515ec052aeed0ff1af5df5a8680467c`
-   (10.599 usable hours; 1 manual + 76310 interval; 0 mutation; 100% 500 ms
-   grid five-field coverage; interarrival p95 515 ms and 99.999% ≤2000 ms;
-   one 4131 ms gap, not cropped). STATUS
-   `MEXC_TAO_CORRECTED_LONG_CORPUS_ADMISSIBLE`. Frozen 500 ms grid SHA-256
-   `3bf630648ee2abfa1839d720c5e5ffe271266e2d6c6c7453870cc0b92a698d89`.
-   21 cells not executed. DECISION `STOP_FOR_LEAD_REVIEW`
-   (`docs/mexc_tao_corrected_long_corpus_admissibility_v1.md`). Design review
+   `MEXC_UI_INTERVAL_ONLY_VISIBLE_FINAL_V2_GATE` scored a fresh logged-in
+   8.408 min visible-tab TAOUSDT capture from extension 1.3.5 / catalog v1.2
+   against frozen protocol v2.0.0. One manual start row, remaining rows
+   interval-only, zero mutation raw rows, zero visible→hidden, interarrival
+   p95 518 ms and 100% ≤2000 ms. Content wait p95 ~0.1 ms vs prior 1.3.4
+   final-visible ~1526 ms; queue depth high-water 0 vs 26. STATUS
+   `MEXC_UI_INTERVAL_ONLY_VISIBLE_FINAL_V2_GATE_PASS`, DECISION
+   `STOP_FOR_LEAD_REVIEW`
+   (`docs/mexc_ui_interval_only_visible_final_v2_gate_v1.md`). Design review
    `EXTERNAL_RELATIVE_VALUE_FEED_DESIGN_REVIEW` then selected a minimal
    Binance USD-M `ETHUSDT` public `bookTicker`+`aggTrade` pilot (Bybit fallback),
    spool→Parquet→B2 storage (not `market_events`), isolated Compose service
