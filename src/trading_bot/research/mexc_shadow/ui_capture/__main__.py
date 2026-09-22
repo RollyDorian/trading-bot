@@ -134,6 +134,7 @@ def main(argv: list[str] | None = None) -> int:
     interval_only.add_argument("--out", type=Path, required=True)
     interval_only.add_argument("--md", type=Path, default=None)
 
+
     visible_v2 = sub.add_parser(
         "interval-only-visible-v2-gate",
         help="Score 1.3.5 visible-tab capture against protocol v2.0.0. No retune.",
@@ -235,6 +236,7 @@ def main(argv: list[str] | None = None) -> int:
         md_path = args.md if args.md is not None else args.out.with_suffix(".md")
         write_interval_only(out_json=args.out, out_md=md_path)
         return 0
+
     if args.cmd == "interval-only-visible-v2-gate":
         from trading_bot.research.mexc_shadow.ui_capture.interval_only_visible_v2_gate import (
             write_reports as write_visible_v2,

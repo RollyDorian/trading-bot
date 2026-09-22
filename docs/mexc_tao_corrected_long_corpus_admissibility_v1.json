@@ -1,0 +1,263 @@
+{
+  "milestone": "MEXC_TAO_CORRECTED_LONG_CORPUS_ADMISSIBILITY_V1",
+  "status": "MEXC_TAO_CORRECTED_LONG_CORPUS_ADMISSIBLE",
+  "decision": "STOP_FOR_LEAD_REVIEW",
+  "ml_status": "NOT_STARTED",
+  "paper": false,
+  "live": false,
+  "strategy_tuning": false,
+  "mom_gap_inspected": false,
+  "n_cells_executed": 0,
+  "generated_at": "2026-09-21T16:37:06.202017+00:00",
+  "extension_expected": "1.3.5",
+  "catalog_required": "v1.2",
+  "protocol": {
+    "version_scored": "2.0.0",
+    "version_not_scored": "1.0.0",
+    "amendment_doc": "docs/mexc_mom_gap_hypothesis_protocol_v2_data_contract_amendment.md",
+    "v1_design_doc": "docs/mexc_mom_gap_hypothesis_protocol_design_v1.md",
+    "v1_blob": "4e8d05940b2bc759acff881779159a7bcba1604e",
+    "v2_merge_commit": "0b4f761bb4c7fa8a6e4520901bfc32f8f2bf59d1",
+    "v2_amendment_commit": "cb679745b1fda6ecde509d8f2656232a89dd192b"
+  },
+  "frozen_protocol_v2": {
+    "simultaneous_min": 0.95,
+    "interarrival_le_2000_min": 0.99,
+    "p95_max_ms": 1000.0,
+    "usable_hours_min": 8.0,
+    "grid_ms": 500,
+    "as_of_max_ms": 1000,
+    "gap_reset_ms": 2000,
+    "thresholds_relaxed": false
+  },
+  "operator_condition": "intended continuously-visible Chrome session",
+  "grid_written": "data/mexc_ui_capture/mexc_tao_corrected_long_corpus_grid_v1.ndjson",
+  "long_validation": {
+    "protocol_version_scored": "2.0.0",
+    "protocol_version_not_scored": "1.0.0",
+    "path": "data/mexc_ui_capture/mexc_ui_capture_e41b48eb-852c-4a36-88b6-9fc9a10ced32_2026-09-21T06-04-21-527Z.ndjson",
+    "filename": "mexc_ui_capture_e41b48eb-852c-4a36-88b6-9fc9a10ced32_2026-09-21T06-04-21-527Z.ndjson",
+    "sha256": "5c15b9714f804f8df5a327ae81fb2d7fb515ec052aeed0ff1af5df5a8680467c",
+    "byte_count": 394807859,
+    "n_snapshots": 76311,
+    "n_grid_rows": 76311,
+    "n_grid_five_ok": 76311,
+    "grid_simultaneous_rate": 1.0,
+    "grid_simultaneous_pct": 100.0,
+    "grid_sha256": "3bf630648ee2abfa1839d720c5e5ffe271266e2d6c6c7453870cc0b92a698d89",
+    "grid_materialized": true,
+    "usable_hours": 10.59875,
+    "n_usable_segments": 2,
+    "wall_duration_ms": 38159631.0,
+    "wall_duration_hours": 10.5998975,
+    "page_paths": {
+      "/futures/TAO_USDT": 76311
+    },
+    "locales": {
+      "en-US": 76311
+    },
+    "locale_sources": {
+      "document_lang": 76311
+    },
+    "document_langs": {
+      "en-US": 76311
+    },
+    "locale_routes": {
+      "document_lang": 76311
+    },
+    "n_locale_route_fail": 0,
+    "catalog_versions": {
+      "v1.2": 76311
+    },
+    "schema_versions": {
+      "1": 76311
+    },
+    "sample_interval_ms": {
+      "500": 76311
+    },
+    "session_interval_ms": [
+      500,
+      500
+    ],
+    "median_last": 264.56,
+    "n_strategy_ready": 76311,
+    "n_startup_warmup": 0,
+    "n_data_invalid": 0,
+    "n_bid_ge_ask": 0,
+    "n_scale_audit_fail": 0,
+    "scale_audit_first_reason": null,
+    "n_selector_ambiguity": 0,
+    "mark_selectors": {
+      "header_struct:mark": 76311
+    },
+    "index_selectors": {
+      "header_struct:index": 76311
+    },
+    "replay_canonical_sha256": "c8a2e8524c002221df9ffdf95d86e4e2c8643fa5ac23227ff8b26299d2c262ad",
+    "storage_errors": [],
+    "sessions": [
+      {
+        "record_type": "session_start",
+        "session_id": "e41b48eb-852c-4a36-88b6-9fc9a10ced32",
+        "status": "stopped",
+        "storage_error": null,
+        "n_snapshots": null,
+        "n_chunks": null,
+        "first_sequence": null,
+        "last_sequence": null,
+        "started_at": "2026-09-20T19:16:41.469Z",
+        "ended_at": null,
+        "producer_epoch": "2319bbf6-8330-431f-8f81-2c9785e82531",
+        "session_generation": 1,
+        "worker_boot_id": "2c184f05-d4f9-455c-9e97-da15ac8b6b9e",
+        "extension_version": "1.3.5"
+      },
+      {
+        "record_type": "session_end",
+        "session_id": "e41b48eb-852c-4a36-88b6-9fc9a10ced32",
+        "status": "stopped",
+        "storage_error": null,
+        "n_snapshots": 76311,
+        "n_chunks": 306,
+        "first_sequence": 1,
+        "last_sequence": 76311,
+        "started_at": "2026-09-20T19:16:41.469Z",
+        "ended_at": "2026-09-21T05:52:41.291Z",
+        "producer_epoch": "2319bbf6-8330-431f-8f81-2c9785e82531",
+        "session_generation": 1,
+        "worker_boot_id": "2c184f05-d4f9-455c-9e97-da15ac8b6b9e",
+        "extension_version": "1.3.5"
+      }
+    ],
+    "sequence_diagnostics": [],
+    "trigger_counts": {
+      "manual": 1,
+      "interval": 76310
+    },
+    "first_trigger": "manual",
+    "later_trigger_counts": {
+      "interval": 76310
+    },
+    "n_interval_triggers": 76310,
+    "n_unchanged_interval_commits": 40683,
+    "n_missing_stage_diagnostics": 0,
+    "n_wrong_extension": 0,
+    "session_extension_versions": [
+      "1.3.5",
+      "1.3.5"
+    ],
+    "visibility_states": {
+      "visible": 76311
+    },
+    "visibility_states_at_extract": {
+      "visible": 76311
+    },
+    "visible_to_hidden_transitions": 0,
+    "n_stale_generation": 0,
+    "n_session_id_mismatch": 0,
+    "producer_epochs": [
+      "2319bbf6-8330-431f-8f81-2c9785e82531"
+    ],
+    "session_generations": [
+      1
+    ],
+    "worker_boot_ids": [
+      "2c184f05-d4f9-455c-9e97-da15ac8b6b9e"
+    ],
+    "lifecycle_kinds": {
+      "worker_boot": 1,
+      "session_start": 1,
+      "pageshow": 1,
+      "timer_registered": 1,
+      "session_stop": 1
+    },
+    "expected_interval_opportunities": 76312,
+    "timer_callbacks": 76310,
+    "mutation_callbacks": 189189,
+    "callbacks_enqueued": {
+      "interval": 76310,
+      "mutation": 0,
+      "manual": 1
+    },
+    "snapshots_persisted": {
+      "interval": 76310,
+      "mutation": 0,
+      "manual": 1
+    },
+    "content_queue_depth_high_water": 0,
+    "capture_ids": [
+      "e41b48eb-852c-4a36-88b6-9fc9a10ced32"
+    ],
+    "session_ids": [
+      "e41b48eb-852c-4a36-88b6-9fc9a10ced32"
+    ],
+    "utc_start": "2026-09-20T19:16:41.575Z",
+    "utc_end": "2026-09-21T05:52:41.206Z",
+    "first_symbol": "TAOUSDT",
+    "interarrival_ms": {
+      "n": 76310,
+      "p50_ms": 500.0,
+      "p90_ms": 512.0,
+      "p95_ms": 515.0,
+      "p99_ms": 523.0,
+      "min_ms": 140.0,
+      "max_ms": 4131.0
+    },
+    "interarrival_frac_le_2000_ms": 0.999986895557594,
+    "interarrival_n_gt_2000_ms": 1,
+    "interarrival_n_gt_1000_ms": 3,
+    "hours_requirement": {
+      "protocol_v2_item": 6,
+      "required_usable_hours": 8.0,
+      "applied": true,
+      "usable_hours": 10.59875
+    },
+    "gates": {
+      "designer_did_not_inspect_before_v2_commit": true,
+      "new_corrected_long_capture_not_excluded": true,
+      "schema_mexc_ui_raw_snapshot_v1": true,
+      "catalog_v1_2": true,
+      "configured_interval_500_ms": true,
+      "extension_1_3_5": true,
+      "heartbeat_unchanged_interval_commits": true,
+      "heartbeat_persisted_equals_timer_callbacks": true,
+      "sequence_chunk_continuity": true,
+      "no_storage_errors": true,
+      "usable_hours_ge_8": true,
+      "locale_v2_provenance": true,
+      "no_unknown_locale_on_strategy_ready": true,
+      "symbol_taousdt": true,
+      "exactly_one_manual_start_raw_row": true,
+      "remaining_raw_rows_interval": true,
+      "zero_mutation_raw_rows": true,
+      "visibility_lifecycle_evidence": true,
+      "operator_intended_continuously_visible": true,
+      "no_unexplained_producer_session_worker_transitions": true,
+      "grid_simultaneous_coverage_ge_95pct": true,
+      "frozen_interarrival_p95": true,
+      "frozen_interarrival_le_2000": true,
+      "raw_text_tokens_match_locale_scale": true,
+      "absolute_price_scale": true,
+      "bid_lt_ask": true,
+      "mark_index_not_swapped": true,
+      "no_sustained_selector_ambiguity": true,
+      "no_post_readiness_data_invalid": true,
+      "export_replay_deterministic": true,
+      "corpus_sha256_matches_locked_manifest": true,
+      "corpus_byte_count_matches_locked_manifest": true
+    },
+    "failure_classes": [],
+    "passed": true,
+    "whole_session_scored": true,
+    "bad_periods_cropped": false,
+    "mom_gap_inspected": false,
+    "n_cells_executed": 0
+  },
+  "notes": [
+    "Scored against protocol v2.0.0 data admissibility, not v1.0.0.",
+    "Whole session scored; no hidden-phase crop and no bad-period crop.",
+    "Did not inspect mom/gap formulas or execute any of the 21 cells.",
+    "Did not retune frozen profiles, thresholds, exits, or lookbacks.",
+    "Grid SHA-256 is recorded only when every input gate passes."
+  ]
+}

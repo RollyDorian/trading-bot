@@ -1,0 +1,106 @@
+{
+  "milestone": "MEXC_TAO_CORRECTED_LONG_CORPUS_ADMISSIBILITY_V1",
+  "manifest_status": "ADMISSIBILITY_SCORED",
+  "quality_status": "MEXC_TAO_CORRECTED_LONG_CORPUS_ADMISSIBLE",
+  "decision": "STOP_FOR_LEAD_REVIEW",
+  "ml_status": "NOT_STARTED",
+  "paper": false,
+  "live": false,
+  "strategy_tuning": false,
+  "mom_gap_inspected": false,
+  "n_cells_executed": 0,
+  "protocol": {
+    "id": "MEXC_MOM_GAP_HYPOTHESIS_PROTOCOL_V2_DATA_CONTRACT_AMENDMENT",
+    "version": "2.0.0",
+    "v1_version": "1.0.0",
+    "commit_sha": "0b4f761bb4c7fa8a6e4520901bfc32f8f2bf59d1",
+    "amendment_commit_sha": "cb679745b1fda6ecde509d8f2656232a89dd192b",
+    "v1_blob": "4e8d05940b2bc759acff881779159a7bcba1604e",
+    "v1_file_sha256": "4535601da88c6e0bd432d21081a9e98598b99a0d937395e53e102f2306cfa5b5",
+    "amendment_doc": "docs/mexc_mom_gap_hypothesis_protocol_v2_data_contract_amendment.md",
+    "v1_design_doc": "docs/mexc_mom_gap_hypothesis_protocol_design_v1.md",
+    "source": "git history: merge of PR #48 onto main; amendment blob cb679745"
+  },
+  "corpus": {
+    "filename": "mexc_ui_capture_e41b48eb-852c-4a36-88b6-9fc9a10ced32_2026-09-21T06-04-21-527Z.ndjson",
+    "relative_path": "data/mexc_ui_capture/mexc_ui_capture_e41b48eb-852c-4a36-88b6-9fc9a10ced32_2026-09-21T06-04-21-527Z.ndjson",
+    "byte_count": 394807859,
+    "sha256": "5c15b9714f804f8df5a327ae81fb2d7fb515ec052aeed0ff1af5df5a8680467c",
+    "gitignored": true,
+    "not_committed": true
+  },
+  "capture": {
+    "extension_version": "1.3.5",
+    "selector_catalog_version": "v1.2",
+    "schema": "mexc_ui_raw_snapshot",
+    "schema_version": 1,
+    "sample_interval_ms": 500,
+    "symbol": "TAOUSDT",
+    "capture_ids": [
+      "e41b48eb-852c-4a36-88b6-9fc9a10ced32"
+    ],
+    "session_ids": [
+      "e41b48eb-852c-4a36-88b6-9fc9a10ced32"
+    ],
+    "utc_start": "2026-09-20T19:16:41.575Z",
+    "utc_end": "2026-09-21T05:52:41.206Z",
+    "session_started_at": "2026-09-20T19:16:41.469Z",
+    "session_ended_at": "2026-09-21T05:52:41.291Z",
+    "n_snapshots": 76311,
+    "n_chunks": 306,
+    "first_sequence": 1,
+    "last_sequence": 76311,
+    "trigger_counts_observed": {
+      "manual": 1,
+      "interval": 76310
+    },
+    "page_paths": [
+      "/futures/TAO_USDT"
+    ],
+    "parser_locale": "en-US",
+    "locale_source": "document_lang",
+    "document_lang": "en-US",
+    "locale_route": "bare_path_plus_document_lang",
+    "heartbeat_contract_attested": true,
+    "heartbeat_attestation": "session interval_ms=500; one manual start row plus interval ticks; mutation raw rows not observed in the locked byte scan",
+    "operator_condition": "intended continuously-visible Chrome session",
+    "producer_epoch": "2319bbf6-8330-431f-8f81-2c9785e82531",
+    "session_generation": 1,
+    "worker_boot_id": "2c184f05-d4f9-455c-9e97-da15ac8b6b9e"
+  },
+  "grid": {
+    "interval_ms": 500,
+    "as_of_max_ms": 1000,
+    "gap_reset_ms": 2000,
+    "materialized": true,
+    "sha256": "3bf630648ee2abfa1839d720c5e5ffe271266e2d6c6c7453870cc0b92a698d89",
+    "reason": "hashed_after_all_input_gates_passed",
+    "n_rows": 76311,
+    "n_five_ok": 76311,
+    "simultaneous_pct": 100.0,
+    "written": "data/mexc_ui_capture/mexc_tao_corrected_long_corpus_grid_v1.ndjson"
+  },
+  "numeric_scale_audit": "PASS",
+  "exclusions": {
+    "historical_11h67_sha256": "7a41c34d4ae855850cd8a1a47e438e940c38e09d6f5a555c3f397e5650da9c2a",
+    "short_gate_captures_forbidden": true,
+    "fixtures_forbidden": true,
+    "bad_period_crop_forbidden": true
+  },
+  "notes": [
+    "Frozen protocol-v2 commit SHA taken from git history (PR #48 merge 0b4f761).",
+    "Corpus SHA-256 is of the gitignored NDJSON bytes; the capture file is not in Git.",
+    "This manifest was committed before any mom/gap formula inspection or 21-cell execution.",
+    "Admissibility scoring and optional 500 ms grid hash follow in a later commit.",
+    "No PnL, ML, PAPER, LIVE, or protocol modification.",
+    "Admissibility scored after the locked manifest commit. Still 0 of 21 cells."
+  ],
+  "admissibility": {
+    "passed": true,
+    "usable_hours": 10.59875,
+    "failure_classes": [],
+    "replay_canonical_sha256": "c8a2e8524c002221df9ffdf95d86e4e2c8643fa5ac23227ff8b26299d2c262ad",
+    "whole_session_scored": true,
+    "bad_periods_cropped": false
+  }
+}
