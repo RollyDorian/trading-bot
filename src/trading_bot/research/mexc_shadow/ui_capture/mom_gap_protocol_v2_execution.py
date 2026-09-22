@@ -24,6 +24,7 @@ PROTOCOL_AMENDMENT_BLOB_SHA = "e19c26ef6b6f94123a767f165f7e5d5c8cb0dfd8"
 LOCKED_CORPUS_SHA256 = "5c15b9714f804f8df5a327ae81fb2d7fb515ec052aeed0ff1af5df5a8680467c"
 LOCKED_GRID_SHA256 = "3bf630648ee2abfa1839d720c5e5ffe271266e2d6c6c7453870cc0b92a698d89"
 PROTOCOL_DOC = "docs/mexc_mom_gap_hypothesis_protocol_v2_data_contract_amendment.md"
+EXECUTOR_SOURCE = "src/trading_bot/research/mexc_shadow/ui_capture/mom_gap_protocol_v2_execution.py"
 EXECUTOR_ID = "MEXC_MOM_GAP_PROTOCOL_V2_EXECUTOR"
 EXECUTOR_VERSION = "1.0.0"
 GRID_MS = 500
@@ -152,9 +153,23 @@ def verify_locks(
     )
     if ancestor.returncode != 0:
         raise LockMismatchError("protocol merge SHA is not an ancestor of HEAD")
-    head = _git(repo, "rev-parse", "HEAD")
-    if head != code_commit_sha:
-        raise LockMismatchError(f"executor code commit mismatch: HEAD={head}")
+    if _git(repo, "cat-file", "-t", code_commit_sha) != "commit":
+        raise LockMismatchError("executor code SHA is not a commit")
+    code_blob = _git(repo, "rev-parse", f"{code_commit_sha}:{EXECUTOR_SOURCE}")
+    current_code_blob = _git(repo, "rev-parse", f"HEAD:{EXECUTOR_SOURCE}")
+    if code_blob != current_code_blob:
+        raise LockMismatchError(
+            "executor source differs from code commit: "
+            f"commit={code_blob}, HEAD={current_code_blob}"
+        )
+    code_ancestor = subprocess.run(
+        ["git", "-C", str(repo), "merge-base", "--is-ancestor", code_commit_sha, "HEAD"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if code_ancestor.returncode != 0:
+        raise LockMismatchError("executor code commit is not an ancestor of HEAD")
 
     locked = json.loads(manifest.read_text(encoding="utf-8"))
     if (locked.get("protocol") or {}).get("commit_sha") != PROTOCOL_MERGE_SHA:
@@ -180,6 +195,7 @@ def verify_locks(
         "corpus_sha256": corpus_sha,
         "grid_sha256": grid_sha,
         "executor_code_commit": code_commit_sha,
+        "executor_source_blob": code_blob,
         "manifest_admissible": True,
         "manifest": locked,
     }
