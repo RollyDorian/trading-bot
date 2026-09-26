@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import threading
+import urllib.error
 import urllib.request
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -173,6 +174,7 @@ def test_loopback_http_channel_accepts_public_snapshot_only() -> None:
         )
         with urllib.request.urlopen(request, timeout=2) as response:  # noqa: S310
             reply = json.loads(response.read())
+            assert response.headers["Access-Control-Allow-Origin"] is None
         assert reply == {"ok": True, "events": 0}
         assert server.server_address[0] == "127.0.0.1"
         assert runner.counters["observations_valid"] == 1
@@ -180,6 +182,119 @@ def test_loopback_http_channel_accepts_public_snapshot_only() -> None:
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+def test_loopback_http_channel_rejects_browser_origins_except_extension() -> None:
+    runner = ShadowMvpRunner()
+    extension_origin = "chrome-extension://" + "a" * 32
+    server = build_server(runner, 0, extension_origin=extension_origin)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        stamp = datetime.now(UTC) - timedelta(milliseconds=100)
+        body = json.dumps(_raw(stamp, 1, 100.0)).encode()
+        endpoint = f"http://127.0.0.1:{server.server_port}/v1/snapshot"
+        unrelated = urllib.request.Request(
+            endpoint,
+            data=body,
+            headers={"Content-Type": "application/json", "Origin": "https://example.com"},
+            method="POST",
+        )
+        with pytest.raises(urllib.error.HTTPError) as rejected:
+            urllib.request.urlopen(unrelated, timeout=2)  # noqa: S310
+        assert rejected.value.code == 403
+        assert runner.counters["rows_seen"] == 0
+
+        other_extension = urllib.request.Request(
+            endpoint,
+            data=body,
+            headers={
+                "Content-Type": "application/json",
+                "Origin": "chrome-extension://" + "b" * 32,
+            },
+            method="POST",
+        )
+        with pytest.raises(urllib.error.HTTPError) as rejected_extension:
+            urllib.request.urlopen(other_extension, timeout=2)  # noqa: S310
+        assert rejected_extension.value.code == 403
+
+        preflight = urllib.request.Request(
+            endpoint,
+            headers={
+                "Origin": extension_origin,
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+            method="OPTIONS",
+        )
+        with urllib.request.urlopen(preflight, timeout=2) as response:  # noqa: S310
+            assert response.status == 204
+            assert response.headers["Access-Control-Allow-Origin"] == extension_origin
+        allowed = urllib.request.Request(
+            endpoint,
+            data=body,
+            headers={"Content-Type": "application/json", "Origin": extension_origin},
+            method="POST",
+        )
+        with urllib.request.urlopen(allowed, timeout=2) as response:  # noqa: S310
+            assert response.headers["Access-Control-Allow-Origin"] == extension_origin
+            assert response.headers["Access-Control-Allow-Origin"] != "*"
+        assert runner.counters["observations_valid"] == 1
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_open_positions_are_unscored_abandoned_across_data_gap() -> None:
+    runner = ShadowMvpRunner()
+    runner.ingest_observation(_observation(0, 100.0, mark=100.02, index=100.02), sequence=1)
+    opened = runner.ingest_observation(
+        _observation(1, 100.04, mark=100.06, index=100.06), sequence=2
+    )
+    assert [event["event"] for event in opened] == ["OPEN", "OPEN"]
+
+    abandoned = runner.ingest_observation(
+        _observation(4, 100.20, mark=100.20, index=100.20), sequence=3
+    )
+    assert len(abandoned) == 2
+    assert all(event["event"] == "CLOSE" for event in abandoned)
+    assert all(event["exit_reason"] == "ABANDONED_DATA_GAP" for event in abandoned)
+    assert all(event["scored"] is False and event["gross_bps"] is None for event in abandoned)
+    assert all(runtime.book.open_count() == 0 for runtime in runner.variants)
+    assert all(runtime.book.trades == [] for runtime in runner.variants)
+
+    invalid_runner = ShadowMvpRunner()
+    invalid_runner.ingest_observation(
+        _observation(0, 100.0, mark=100.02, index=100.02), sequence=1
+    )
+    invalid_runner.ingest_observation(
+        _observation(1, 100.04, mark=100.06, index=100.06), sequence=2
+    )
+    invalid = invalid_runner.ingest_mapping(
+        _raw(BASE + timedelta(seconds=1.5), 3, 100.05, crossed=True)
+    )
+    assert len(invalid) == 2
+    assert all(event["exit_reason"] == "ABANDONED_DATA_GAP" for event in invalid)
+    assert all(runtime.book.trades == [] for runtime in invalid_runner.variants)
+
+    stale_runner = ShadowMvpRunner()
+    stale_runner.ingest_observation(
+        _observation(0, 100.0, mark=100.02, index=100.02), sequence=1
+    )
+    stale_runner.ingest_observation(
+        _observation(1, 100.04, mark=100.06, index=100.06), sequence=2
+    )
+    stale_observation = _observation(1.5, 100.05, mark=100.07, index=100.07)
+    stale = stale_runner.ingest_observation(
+        stale_observation,
+        sequence=3,
+        arrival_at=stale_observation.received_at + timedelta(milliseconds=2001),
+        enforce_live_age=True,
+    )
+    assert len(stale) == 2
+    assert all(event["exit_reason"] == "ABANDONED_DATA_GAP" for event in stale)
+    assert all(runtime.book.trades == [] for runtime in stale_runner.variants)
 
 
 def test_no_order_no_credentials_boundary_and_exact_loopback_permission() -> None:

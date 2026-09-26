@@ -51,6 +51,7 @@
   "symbol": "TAOUSDT",
   "variants": [
     {
+      "abandoned_count": 0,
       "candidate_counts": {
         "candidate_accepted": 160,
         "candidate_filters_not_met": 9846,
@@ -189,6 +190,7 @@
       "variant_id": "exploratory_mid_mark_h1s"
     },
     {
+      "abandoned_count": 0,
       "candidate_counts": {
         "candidate_accepted": 357,
         "candidate_filters_not_met": 12471,

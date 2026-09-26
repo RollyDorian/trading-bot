@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import math
+import re
 import signal
 from collections import Counter, deque
 from collections.abc import Mapping, Sequence
@@ -32,6 +33,8 @@ MAX_LIVE_AGE_MS = 2_000.0
 MAX_BODY_BYTES = 2_000_000
 LATENCY_SAMPLE_LIMIT = 10_000
 SLIPPAGE_BPS_PER_SIDE = (0.0, 1.0, 2.0)
+ABANDONED_DATA_GAP = "ABANDONED_DATA_GAP"
+_EXTENSION_ORIGIN = re.compile(r"chrome-extension://[a-p]{32}\Z")
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,18 +93,24 @@ class _VariantRuntime:
 
     def process(self, observation: Observation) -> list[dict[str, Any]]:
         emitted: list[dict[str, Any]] = []
-        closed = self.book.on_observation(observation)
-        if closed is not None:
-            emitted.append(self._close_event(closed))
-
         if self.spec.gap_definition == "mid_vs_mark" and observation.mark is None:
             self.counters["missing_reference"] += 1
+            abandoned = self.abandon(observation.observed_at, "missing_reference")
+            if abandoned is not None:
+                emitted.append(abandoned)
             self.engine.update(observation)
             return emitted
         if self.spec.gap_definition == "mid_vs_index" and observation.index is None:
             self.counters["missing_reference"] += 1
+            abandoned = self.abandon(observation.observed_at, "missing_reference")
+            if abandoned is not None:
+                emitted.append(abandoned)
             self.engine.update(observation)
             return emitted
+
+        closed = self.book.on_observation(observation)
+        if closed is not None:
+            emitted.append(self._close_event(closed))
 
         features = self.engine.update(observation)
         candidate = self.gate.evaluate(
@@ -118,6 +127,27 @@ class _VariantRuntime:
             self.book.maybe_open(candidate, observation, self.spec.config.shadow)
             emitted.append(self._open_event(candidate, observation))
         return emitted
+
+    def abandon(self, when: datetime | None, cause: str) -> dict[str, Any] | None:
+        candidate = self.book.abandon(SYMBOL)
+        if candidate is None:
+            return None
+        self.counters["abandoned_data_gap"] += 1
+        self.counters[f"abandoned_cause_{cause}"] += 1
+        return {
+            "event": "CLOSE",
+            "variant_id": self.spec.variant_id,
+            "observed_at": when.isoformat() if when is not None else None,
+            "symbol": candidate.symbol,
+            "direction": candidate.direction,
+            "entry_at": candidate.observed_at.isoformat(),
+            "exit_reason": ABANDONED_DATA_GAP,
+            "data_gap_cause": cause,
+            "scored": False,
+            "exit_price": None,
+            "gross_bps": None,
+            "net_bps": None,
+        }
 
     def _open_event(self, candidate: Candidate, observation: Observation) -> dict[str, Any]:
         entry_price = observation.ask if candidate.direction == "long" else observation.bid
@@ -190,8 +220,12 @@ class ShadowMvpRunner:
             observation = observation_from_mapping(row)
         except (KeyError, TypeError, ValueError):
             self.counters["data_invalid"] += 1
-            self._reset_features()
-            return []
+            return self._record_events(
+                self._reset_and_abandon(
+                    "invalid_snapshot",
+                    _mapping_timestamp(row, arrival_at),
+                )
+            )
         return self.ingest_observation(
             observation,
             capture_id=str(row.get("capture_id") or ""),
@@ -209,14 +243,17 @@ class ShadowMvpRunner:
         arrival_at: datetime | None = None,
         enforce_live_age: bool = False,
     ) -> list[dict[str, Any]]:
+        emitted: list[dict[str, Any]] = []
         if observation.symbol.replace("_", "").replace("/", "").replace("-", "") != SYMBOL:
             self.counters["wrong_symbol"] += 1
-            self._reset_features()
-            return []
+            return self._record_events(
+                self._reset_and_abandon("wrong_symbol", observation.observed_at)
+            )
         if observation.bid <= 0 or observation.ask <= observation.bid:
             self.counters["data_invalid"] += 1
-            self._reset_features()
-            return []
+            return self._record_events(
+                self._reset_and_abandon("invalid_bbo", observation.observed_at)
+            )
 
         source_latency = (observation.received_at - observation.observed_at).total_seconds() * 1000
         if math.isfinite(source_latency) and source_latency >= 0:
@@ -228,8 +265,9 @@ class ShadowMvpRunner:
                 self._transport_latency_ms.append(transport_latency)
             if enforce_live_age and (transport_latency < 0 or transport_latency > MAX_LIVE_AGE_MS):
                 self.counters["stale_live"] += 1
-                self._reset_features()
-                return []
+                return self._record_events(
+                    self._reset_and_abandon("stale_live", observation.observed_at)
+                )
 
         observed = _as_utc(observation.observed_at)
         new_capture = self._capture_id is not None and capture_id != self._capture_id
@@ -241,21 +279,21 @@ class ShadowMvpRunner:
         )
         if sequence_bad:
             self.counters["sequence_duplicate_or_reversal"] += 1
-            self._reset_features()
-            return []
+            return self._record_events(self._reset_and_abandon("sequence_invalid", observed))
 
         if new_capture:
             self.counters["capture_boundary"] += 1
-            self._reset_features()
+            emitted.extend(self._reset_and_abandon("capture_boundary", observed))
         if self._last_observed_at is not None and not new_capture:
             gap_ms = (observed - self._last_observed_at).total_seconds() * 1000
             if gap_ms <= 0:
                 self.counters["non_monotonic_time"] += 1
-                self._reset_features()
-                return []
+                return self._record_events(
+                    self._reset_and_abandon("non_monotonic_time", observed)
+                )
             if gap_ms > MAX_EVENT_GAP_MS:
                 self.counters["event_gap"] += 1
-                self._reset_features()
+                emitted.extend(self._reset_and_abandon("event_gap", observed))
 
         self._capture_id = capture_id
         self._last_sequence = sequence
@@ -264,16 +302,27 @@ class ShadowMvpRunner:
         self.last_observed_at = observed
         self.counters["observations_valid"] += 1
 
-        emitted: list[dict[str, Any]] = []
         for runtime in self._variants:
             emitted.extend(runtime.process(observation))
-        for event in emitted:
-            self._write_event(event)
-        return emitted
+        return self._record_events(emitted)
 
     def _reset_features(self) -> None:
         for runtime in self._variants:
             runtime.reset_features()
+
+    def _reset_and_abandon(self, cause: str, when: datetime | None) -> list[dict[str, Any]]:
+        emitted: list[dict[str, Any]] = []
+        for runtime in self._variants:
+            event = runtime.abandon(when, cause)
+            if event is not None:
+                emitted.append(event)
+            runtime.reset_features()
+        return emitted
+
+    def _record_events(self, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        for event in events:
+            self._write_event(event)
+        return events
 
     def _write_event(self, event: Mapping[str, Any]) -> None:
         if self._event_stream is None:
@@ -329,6 +378,7 @@ class ShadowMvpRunner:
             "thresholds": asdict(runtime.spec.config.signal),
             "candidate_counts": dict(sorted(runtime.counters.items())),
             "trade_count": len(trades),
+            "abandoned_count": runtime.counters["abandoned_data_gap"],
             "open_positions": runtime.book.open_count(),
             "exit_reasons": dict(sorted(exit_reasons.items())),
             "gross_bps": _distribution(gross),
@@ -369,6 +419,7 @@ def replay_locked_corpus(
 
 class ShadowHttpServer(HTTPServer):
     runner: ShadowMvpRunner
+    allowed_extension_origin: str | None
 
 
 class _SnapshotHandler(BaseHTTPRequestHandler):
@@ -378,13 +429,21 @@ class _SnapshotHandler(BaseHTTPRequestHandler):
         if self.path != "/v1/snapshot":
             self.send_error(404)
             return
+        origin = self.headers.get("Origin")
+        if not _origin_allowed(origin, self.server.allowed_extension_origin):
+            self._reject_origin()
+            return
         self.send_response(204)
-        self._cors_headers()
+        self._cors_headers(origin)
         self.end_headers()
 
     def do_POST(self) -> None:  # noqa: N802
         if self.path != "/v1/snapshot":
             self.send_error(404)
+            return
+        origin = self.headers.get("Origin")
+        if not _origin_allowed(origin, self.server.allowed_extension_origin):
+            self._reject_origin()
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))
@@ -408,27 +467,50 @@ class _SnapshotHandler(BaseHTTPRequestHandler):
             return
         body = json.dumps({"ok": True, "events": len(events)}).encode()
         self.send_response(200)
-        self._cors_headers()
+        self._cors_headers(origin)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
-    def _cors_headers(self) -> None:
-        self.send_header("Access-Control-Allow-Origin", "*")
+    def _cors_headers(self, origin: str | None) -> None:
+        if origin is not None:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+
+    def _reject_origin(self) -> None:
+        body = b'{"ok":false,"error":"origin_forbidden"}'
+        self.send_response(403)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.wfile.write(body)
 
     def log_message(self, format: str, *args: object) -> None:
         return
 
 
-def build_server(runner: ShadowMvpRunner, port: int) -> ShadowHttpServer:
+def build_server(
+    runner: ShadowMvpRunner,
+    port: int,
+    *,
+    extension_origin: str | None = None,
+) -> ShadowHttpServer:
     if not 0 <= port <= 65_535:
         raise ValueError("port must be between 0 and 65535")
+    if extension_origin is not None and _EXTENSION_ORIGIN.fullmatch(extension_origin) is None:
+        raise ValueError("extension_origin must be chrome-extension:// plus a 32-character id")
     server = ShadowHttpServer(("127.0.0.1", port), _SnapshotHandler)
     server.runner = runner
+    server.allowed_extension_origin = extension_origin
     return server
+
+
+def _origin_allowed(origin: str | None, extension_origin: str | None) -> bool:
+    return origin is None or origin == extension_origin
 
 
 def _distribution(values: Sequence[float]) -> dict[str, float | int | None]:
@@ -517,6 +599,16 @@ def _optional_int(value: Any) -> int | None:
         return None
 
 
+def _mapping_timestamp(row: Mapping[str, Any], fallback: datetime | None) -> datetime | None:
+    raw = row.get("observed_at_local") or row.get("received_at_local")
+    if raw is not None:
+        try:
+            return _as_utc(datetime.fromisoformat(str(raw).replace("Z", "+00:00")))
+        except ValueError:
+            pass
+    return _as_utc(fallback) if fallback is not None else None
+
+
 def _as_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
@@ -545,6 +637,11 @@ def _parser() -> argparse.ArgumentParser:
     replay.add_argument("--events", type=Path)
     serve = sub.add_parser("serve", help="Receive extension snapshots on loopback")
     serve.add_argument("--port", type=int, default=8765)
+    serve.add_argument(
+        "--extension-origin",
+        required=True,
+        help="Exact chrome-extension://<32-character-id> Origin allowed to POST",
+    )
     serve.add_argument("--events", type=Path, required=True)
     serve.add_argument("--summary", type=Path, required=True)
     return parser
@@ -568,7 +665,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args.events.parent.mkdir(parents=True, exist_ok=True)
     with args.events.open("a", encoding="utf-8") as event_handle:
         runner = ShadowMvpRunner(event_stream=event_handle)
-        server = build_server(runner, args.port)
+        server = build_server(runner, args.port, extension_origin=args.extension_origin)
         def stop(_signum: int, _frame: object) -> None:
             raise KeyboardInterrupt
 
