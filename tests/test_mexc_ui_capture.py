@@ -73,6 +73,7 @@ def test_mv3_web_accessible_resources_matches_are_chrome_origin_wide() -> None:
         "https://www.mexc.com/futures/*",
         "https://www.mexc.com/*/futures/*",
         "https://futures.mexc.com/*",
+        "http://127.0.0.1:8765/*",
     ]
     assert manifest["content_scripts"][0]["matches"] == [
         "https://www.mexc.com/futures/*",

@@ -416,7 +416,17 @@ python -m venv .venv
    capture exists and one cell is event-insufficient. No PnL, tuning, ML,
    PAPER, or LIVE. STATUS `MEXC_MOM_GAP_PROTOCOL_V2_EXECUTION_READY`, DECISION
    `STOP_FOR_LEAD_REVIEW`
-   (`docs/mexc_mom_gap_protocol_v2_execution_v1.md`). Design review
+   (`docs/mexc_mom_gap_protocol_v2_execution_v1.md`). Follow-on
+   `MEXC_SHADOW_MVP_V0` adds a local public-snapshot-only TAOUSDT shadow runner
+   and a bounded best-effort extension-to-loopback channel (extension 1.3.6).
+   Exactly two fixed exploratory variants reuse existing 1s mid momentum,
+   mid-vs-mark/index gaps, profile thresholds, `FeatureEngine`, `CandidateGate`,
+   and executable `ShadowBook` accounting. The SHA-locked 10.6h corpus replay is
+   development-only, not unseen OOS: 160 mark-gap and 357 index-gap closed shadow
+   trades, both negative in aggregate gross and under all fee overlays. No formula
+   identity, profitability, orders, private data, tuning, ML, PAPER, or LIVE.
+   STATUS `MEXC_SHADOW_MVP_READY`, DECISION `STOP_FOR_LEAD_REVIEW`
+   (`docs/mexc_shadow_mvp_v0.md`). Design review
    `EXTERNAL_RELATIVE_VALUE_FEED_DESIGN_REVIEW` then selected a minimal
    Binance USD-M `ETHUSDT` public `bookTicker`+`aggTrade` pilot (Bybit fallback),
    spool→Parquet→B2 storage (not `market_events`), isolated Compose service

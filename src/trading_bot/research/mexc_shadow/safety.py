@@ -129,6 +129,8 @@ FORBIDDEN_JS_MARKERS = (
     "webdriver",
 )
 
+ALLOWED_SHADOW_ENDPOINT = "http://127.0.0.1:8765/v1/snapshot"
+
 
 def extension_root() -> Path | None:
     """Repo extension dir when running from a checkout; None in a wheel-only install."""
@@ -152,8 +154,22 @@ def extension_source_violations() -> list[str]:
         for marker in FORBIDDEN_JS_MARKERS:
             if marker.lower() in lowered:
                 hits.append(f"{path.name}:{marker}")
-        if "fetch(" in lowered and "chrome.runtime.geturl" not in lowered:
+        loopback_forwarder = path.name == "background.js" and ALLOWED_SHADOW_ENDPOINT in text
+        if (
+            "fetch(" in lowered
+            and "chrome.runtime.geturl" not in lowered
+            and not loopback_forwarder
+        ):
             hits.append(f"{path.name}:fetch_without_runtime_geturl")
-        if 'fetch("http' in lowered or "fetch('http" in lowered:
+        if ('fetch("http' in lowered or "fetch('http" in lowered) and not loopback_forwarder:
             hits.append(f"{path.name}:remote_fetch")
+        for marker in ("http://", "https://"):
+            if marker not in lowered:
+                continue
+            if loopback_forwarder and marker == "http://":
+                without_allowed = text.replace(ALLOWED_SHADOW_ENDPOINT, "")
+                if marker not in without_allowed.lower():
+                    continue
+            if "mexc.com" not in lowered:
+                hits.append(f"{path.name}:unapproved_network_url")
     return hits

@@ -44,7 +44,7 @@ def test_extension_manifest_is_1_3_5_interval_only() -> None:
             encoding="utf-8"
         )
     )
-    assert manifest["version"] == "1.3.5"
+    assert manifest["version"] == "1.3.6"
 
 
 def _assert_diag_shape(snap) -> None:

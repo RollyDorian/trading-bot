@@ -70,13 +70,10 @@ class FeatureEngine:
         seconds = self._params.momentum_lookback_seconds
         if seconds is not None:
             target = now.observed_at - timedelta(seconds=seconds)
-            chosen: Observation | None = None
-            for item in history:
+            for item in reversed(history):
                 if item.observed_at <= target:
-                    chosen = item
-            if chosen is None or chosen.observed_at == now.observed_at:
-                return None
-            return chosen
+                    return item if item.observed_at != now.observed_at else None
+            return None
         index = len(history) - 1 - self._params.momentum_lookback
         if index < 0:
             return None

@@ -36,6 +36,7 @@ hibachi-bot = "trading_bot.cli:main"
 hibachi-archive = "trading_bot.archive_cli:main"
 hibachi-external-ref = "trading_bot.external_market_data.cli:main"
 hibachi-external-offload = "trading_bot.external_market_data.offload.cli:main"
+mexc-shadow = "trading_bot.research.mexc_shadow.mvp:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/trading_bot"]
