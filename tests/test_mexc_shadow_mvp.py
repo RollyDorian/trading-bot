@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import threading
 import urllib.error
 import urllib.request
@@ -303,9 +304,22 @@ def test_no_order_no_credentials_boundary_and_exact_loopback_permission() -> Non
             encoding="utf-8"
         )
     )
-    assert manifest["version"] == "1.3.6"
+    assert manifest["version"] == "1.3.7"
     assert manifest["host_permissions"][-1] == "http://127.0.0.1:8765/*"
     assert extension_source_violations() == []
     assert package_source_violations() == []
     assert package_import_violations() == []
     assert len(LOCKED_CORPUS_SHA256) == 64
+
+
+def test_forwarded_snapshots_use_durable_sequence_and_capture_id() -> None:
+    harness = REPO / "tests" / "js" / "mexc_shadow_forward_sequence.cjs"
+    result = subprocess.run(
+        ["node", str(harness)],
+        cwd=REPO,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
