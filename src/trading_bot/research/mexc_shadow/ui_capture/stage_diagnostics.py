@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 DIAGNOSTIC_FORMAT_VERSION = 1
-EXTENSION_VERSION = "1.3.6"
+EXTENSION_VERSION = "1.3.7"
 DIAGNOSTIC_RECORD_SCHEMA = "mexc_ui_stage_diagnostics"
 DIAGNOSTIC_RECORD_TYPES = frozenset({"stage_diagnostics_sidecar"})
 ID_MAX_CHARS = 64

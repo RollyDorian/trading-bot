@@ -44,9 +44,9 @@ def _stamp(offset_ms: int) -> str:
 
 
 def test_extension_is_interval_only_raw_rows() -> None:
-    assert MANIFEST["version"] == "1.3.6"
-    assert EXTENSION_VERSION == "1.3.6"
-    assert 'EXTENSION_VERSION = "1.3.6"' in DIAG_JS
+    assert MANIFEST["version"] == "1.3.7"
+    assert EXTENSION_VERSION == "1.3.7"
+    assert 'EXTENSION_VERSION = "1.3.7"' in DIAG_JS
     assert "noteMutation" in CONTENT
     assert "emitMutation" not in CONTENT
     assert 'emit("mutation"' not in CONTENT

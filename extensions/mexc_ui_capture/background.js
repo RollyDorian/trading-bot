@@ -265,7 +265,7 @@ async function handleMessage(message) {
         worker_boot_id: workerBootId,
         persisted_sequence: result.committed && result.committed.sequence,
       });
-      enqueueShadowSnapshot(snapshot);
+      enqueueShadowSnapshot(result.committed);
       maybeCheckpoint();
       return {
         ok: true,

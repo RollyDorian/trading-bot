@@ -418,7 +418,7 @@ python -m venv .venv
    `STOP_FOR_LEAD_REVIEW`
    (`docs/mexc_mom_gap_protocol_v2_execution_v1.md`). Follow-on
    `MEXC_SHADOW_MVP_V0` adds a local public-snapshot-only TAOUSDT shadow runner
-   and a bounded best-effort extension-to-loopback channel (extension 1.3.6).
+   and a bounded best-effort extension-to-loopback channel (extension 1.3.7).
    Exactly two fixed exploratory variants reuse existing 1s mid momentum,
    mid-vs-mark/index gaps, profile thresholds, `FeatureEngine`, `CandidateGate`,
    and executable `ShadowBook` accounting. The SHA-locked 10.6h corpus replay is
@@ -431,6 +431,8 @@ python -m venv .venv
    to `<2.1` after a 2.1.1-vs-2.0.54 mypy 1.20.2 differential reproduced and
    eliminated all nine CI typing regressions. Locked replay statistics are
    unchanged because no position was open at its single >2s gap.
+   Extension forwarding uses the durable committed copy so loopback sequence and
+   capture ID match exported rows; the pre-1.3.7 path forwarded sequence 0.
    STATUS `MEXC_SHADOW_MVP_READY`, DECISION `STOP_FOR_LEAD_REVIEW`
    (`docs/mexc_shadow_mvp_v0.md`). Design review
    `EXTERNAL_RELATIVE_VALUE_FEED_DESIGN_REVIEW` then selected a minimal
