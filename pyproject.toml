@@ -3,39 +3,21 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
-name = "hibachi-eth-research-bot"
+name = "mexc-shadow"
 version = "0.1.0"
-description = "Safety-first research and collection service for Hibachi ETH/USDT perpetuals."
+description = "MEXC zero-fee scalping bot: shadow engine and Web-UI capture tooling."
 readme = "README.md"
 requires-python = ">=3.13,<4"
-dependencies = [
-  "alembic>=1.16,<2",
-  "asyncpg>=0.30,<1",
-  # botocore is pulled transitively by boto3; do not pin it independently.
-  "boto3>=1.35,<2",
-  "hibachi-xyz==0.3.1",
-  "fastapi>=0.116,<1",
-  "pyarrow>=21,<24",
-  "pydantic-settings>=2.10,<3",
-  "sqlalchemy[asyncio]>=2.0.41,<2.1",
-  "structlog>=25.4,<26",
-  "tzdata>=2025.2",
-  "uvicorn[standard]>=0.35,<1",
-]
+dependencies = []
 
 [project.optional-dependencies]
 dev = [
   "mypy>=1.17,<2",
   "pytest>=8.4,<9",
-  "pytest-asyncio>=1.1,<2",
   "ruff>=0.12,<1",
 ]
 
 [project.scripts]
-hibachi-bot = "trading_bot.cli:main"
-hibachi-archive = "trading_bot.archive_cli:main"
-hibachi-external-ref = "trading_bot.external_market_data.cli:main"
-hibachi-external-offload = "trading_bot.external_market_data.offload.cli:main"
 mexc-shadow = "trading_bot.research.mexc_shadow.mvp:main"
 
 [tool.hatch.build.targets.wheel]
