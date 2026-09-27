@@ -1,4 +1,4 @@
-/* Persist read-only snapshots in IndexedDB. No trading, no remote upload. */
+/* Persist read-only snapshots in IndexedDB, then best-effort forward to loopback. */
 
 importScripts("stage_diagnostics.js");
 importScripts("durable.js");
@@ -14,6 +14,51 @@ let sidecar = D.newSidecar();
 let bgQueued = 0;
 let bgActive = false;
 let lastCheckpointMono = 0;
+const SHADOW_ENDPOINT = "http://127.0.0.1:8765/v1/snapshot";
+const SHADOW_QUEUE_LIMIT = 32;
+const SHADOW_TIMEOUT_MS = 1000;
+const shadowQueue = [];
+let shadowSending = false;
+const shadowForward = { sent: 0, failed: 0, dropped: 0, queue_high_water: 0 };
+
+function enqueueShadowSnapshot(snapshot) {
+  if (shadowQueue.length >= SHADOW_QUEUE_LIMIT) {
+    shadowQueue.shift();
+    shadowForward.dropped += 1;
+  }
+  shadowQueue.push(snapshot);
+  shadowForward.queue_high_water = Math.max(shadowForward.queue_high_water, shadowQueue.length);
+  void drainShadowQueue();
+}
+
+async function drainShadowQueue() {
+  if (shadowSending) return;
+  shadowSending = true;
+  try {
+    while (shadowQueue.length) {
+      const snapshot = shadowQueue.shift();
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), SHADOW_TIMEOUT_MS);
+      try {
+        const response = await fetch(SHADOW_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(snapshot),
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(`loopback status ${response.status}`);
+        shadowForward.sent += 1;
+      } catch (_ignored) {
+        // Local shadow mode is optional. Durable capture must remain independent.
+        shadowForward.failed += 1;
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+  } finally {
+    shadowSending = false;
+  }
+}
 
 D.noteWorkerBoot(sidecar, workerBootId);
 D.recordLifecycle(sidecar, {
@@ -220,6 +265,7 @@ async function handleMessage(message) {
         worker_boot_id: workerBootId,
         persisted_sequence: result.committed && result.committed.sequence,
       });
+      enqueueShadowSnapshot(snapshot);
       maybeCheckpoint();
       return {
         ok: true,
@@ -289,6 +335,7 @@ async function handleMessage(message) {
       last_sequence: meta ? meta.last_sequence : null,
       status: meta ? meta.status : "idle",
       worker_boot_id: workerBootId,
+      shadow_forward: Object.assign({}, shadowForward, { queue_depth: shadowQueue.length }),
     };
   }
   return { ok: false, error: "unknown message type" };

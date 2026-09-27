@@ -1,0 +1,332 @@
+{
+  "corpus": {
+    "path": "D:\\\u043f\u0440\u043e\u0433\u0440\u0430\u043c\u043c\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435\\trading-bot\\data\\mexc_ui_capture\\mexc_ui_capture_e41b48eb-852c-4a36-88b6-9fc9a10ced32_2026-09-21T06-04-21-527Z.ndjson",
+    "sha256": "5c15b9714f804f8df5a327ae81fb2d7fb515ec052aeed0ff1af5df5a8680467c"
+  },
+  "counters": {
+    "event_gap": 1,
+    "non_snapshot_rows": 2,
+    "observations_valid": 76311,
+    "rows_seen": 76313
+  },
+  "data_invalid_counters": {
+    "data_invalid": 0,
+    "event_gap": 1,
+    "non_monotonic_time": 0,
+    "sequence_duplicate_or_reversal": 0,
+    "stale_live": 0,
+    "wrong_symbol": 0
+  },
+  "duration_hours": 10.5998975,
+  "latency_ms": {
+    "localhost_transport": {
+      "count": 0,
+      "max": null,
+      "mean": null,
+      "min": null,
+      "p05": null,
+      "p50": null,
+      "p95": null,
+      "sum": 0.0
+    },
+    "sample_cap": 10000,
+    "source": {
+      "count": 10000,
+      "max": 0.0,
+      "mean": 0.0,
+      "min": 0.0,
+      "p05": 0.0,
+      "p50": 0.0,
+      "p95": 0.0,
+      "sum": 0.0
+    }
+  },
+  "milestone": "MEXC_SHADOW_MVP_V0",
+  "notes": [
+    "Exactly two fixed exploratory variants; neither is an identified author formula.",
+    "Historical replay is development evidence, not unseen OOS.",
+    "All entries/exits use executable ask/bid; no orders or private data are used."
+  ],
+  "status": "DEVELOPMENT_ONLY_NOT_UNSEEN_OOS",
+  "symbol": "TAOUSDT",
+  "variants": [
+    {
+      "abandoned_count": 0,
+      "candidate_counts": {
+        "candidate_accepted": 160,
+        "candidate_filters_not_met": 9846,
+        "candidate_position_open": 83,
+        "feature_resets": 1,
+        "no_candidate": 66222
+      },
+      "cost_scenarios": {
+        "maker_6bps_per_side": {
+          "fee_bps_per_side": 6.0,
+          "mean_net_bps": -12.147644223847617,
+          "n_trades": 160,
+          "sum_gross_bps": -23.623075815618627,
+          "sum_net_bps": -1943.6230758156187
+        },
+        "taker_8bps_per_side": {
+          "fee_bps_per_side": 8.0,
+          "mean_net_bps": -16.147644223847614,
+          "n_trades": 160,
+          "sum_gross_bps": -23.623075815618627,
+          "sum_net_bps": -2583.6230758156184
+        },
+        "zero_fee": {
+          "fee_bps_per_side": 0.0,
+          "mean_net_bps": -0.1476442238476164,
+          "n_trades": 160,
+          "sum_gross_bps": -23.623075815618627,
+          "sum_net_bps": -23.623075815618627
+        }
+      },
+      "exit_reasons": {
+        "GAP_HIT": 81,
+        "HARD_STOP": 35,
+        "RAPID_ADVERSE": 22,
+        "TIME_STOP": 19,
+        "TRAIL_EXIT": 3
+      },
+      "formula": {
+        "gap": "mid_vs_mark",
+        "momentum": "mid_return_1s",
+        "orientation": "long mom>0 gap<0; short inverse"
+      },
+      "gross_bps": {
+        "count": 160,
+        "max": 43.90653634697594,
+        "mean": -0.1476442238476164,
+        "min": -44.47882421195204,
+        "p05": -16.060336752055704,
+        "p50": 3.59384750009184,
+        "p95": 14.546031695721299,
+        "sum": -23.623075815618627
+      },
+      "maximum_drawdown_gross_bps": 202.79463294354258,
+      "open_positions": 0,
+      "slippage_sensitivity": [
+        {
+          "fee_bps_per_side": 0.0,
+          "mean_net_bps": -0.1476442238476164,
+          "n_trades": 160,
+          "slippage_bps_per_side": 0.0,
+          "sum_net_bps": -23.623075815618627
+        },
+        {
+          "fee_bps_per_side": 0.0,
+          "mean_net_bps": -2.1476442238476166,
+          "n_trades": 160,
+          "slippage_bps_per_side": 1.0,
+          "sum_net_bps": -343.6230758156186
+        },
+        {
+          "fee_bps_per_side": 0.0,
+          "mean_net_bps": -4.1476442238476166,
+          "n_trades": 160,
+          "slippage_bps_per_side": 2.0,
+          "sum_net_bps": -663.6230758156187
+        },
+        {
+          "fee_bps_per_side": 6.0,
+          "mean_net_bps": -12.147644223847617,
+          "n_trades": 160,
+          "slippage_bps_per_side": 0.0,
+          "sum_net_bps": -1943.6230758156187
+        },
+        {
+          "fee_bps_per_side": 6.0,
+          "mean_net_bps": -14.147644223847616,
+          "n_trades": 160,
+          "slippage_bps_per_side": 1.0,
+          "sum_net_bps": -2263.6230758156184
+        },
+        {
+          "fee_bps_per_side": 6.0,
+          "mean_net_bps": -16.147644223847614,
+          "n_trades": 160,
+          "slippage_bps_per_side": 2.0,
+          "sum_net_bps": -2583.6230758156184
+        },
+        {
+          "fee_bps_per_side": 8.0,
+          "mean_net_bps": -16.147644223847614,
+          "n_trades": 160,
+          "slippage_bps_per_side": 0.0,
+          "sum_net_bps": -2583.6230758156184
+        },
+        {
+          "fee_bps_per_side": 8.0,
+          "mean_net_bps": -18.147644223847614,
+          "n_trades": 160,
+          "slippage_bps_per_side": 1.0,
+          "sum_net_bps": -2903.6230758156184
+        },
+        {
+          "fee_bps_per_side": 8.0,
+          "mean_net_bps": -20.147644223847614,
+          "n_trades": 160,
+          "slippage_bps_per_side": 2.0,
+          "sum_net_bps": -3223.6230758156184
+        }
+      ],
+      "tail_losses_gross_bps": {
+        "loss_count": 74,
+        "p05": -20.433605967517586,
+        "p10": -16.543173249962905,
+        "worst": -44.47882421195204
+      },
+      "thresholds": {
+        "gap_abs_min_bps": 1.5,
+        "gap_definition": "mid_vs_mark",
+        "mom_abs_min_bps": 3.0,
+        "momentum_definition": "mid_return_lookback",
+        "momentum_lookback": 1,
+        "momentum_lookback_seconds": 1.0,
+        "target_multiplier": 2.0
+      },
+      "trade_count": 160,
+      "variant_id": "exploratory_mid_mark_h1s"
+    },
+    {
+      "abandoned_count": 0,
+      "candidate_counts": {
+        "candidate_accepted": 357,
+        "candidate_filters_not_met": 12471,
+        "candidate_position_open": 349,
+        "feature_resets": 1,
+        "no_candidate": 63134
+      },
+      "cost_scenarios": {
+        "maker_6bps_per_side": {
+          "fee_bps_per_side": 6.0,
+          "mean_net_bps": -12.267069376022055,
+          "n_trades": 357,
+          "sum_gross_bps": -95.34376723987381,
+          "sum_net_bps": -4379.343767239874
+        },
+        "taker_8bps_per_side": {
+          "fee_bps_per_side": 8.0,
+          "mean_net_bps": -16.267069376022057,
+          "n_trades": 357,
+          "sum_gross_bps": -95.34376723987381,
+          "sum_net_bps": -5807.343767239874
+        },
+        "zero_fee": {
+          "fee_bps_per_side": 0.0,
+          "mean_net_bps": -0.2670693760220555,
+          "n_trades": 357,
+          "sum_gross_bps": -95.34376723987381,
+          "sum_net_bps": -95.34376723987381
+        }
+      },
+      "exit_reasons": {
+        "GAP_HIT": 181,
+        "HARD_STOP": 77,
+        "RAPID_ADVERSE": 43,
+        "TIME_STOP": 42,
+        "TRAIL_EXIT": 14
+      },
+      "formula": {
+        "gap": "mid_vs_index",
+        "momentum": "mid_return_1s",
+        "orientation": "long mom>0 gap<0; short inverse"
+      },
+      "gross_bps": {
+        "count": 357,
+        "max": 43.90653634697594,
+        "mean": -0.2670693760220555,
+        "min": -44.47882421195204,
+        "p05": -15.878865947200005,
+        "p50": 3.7713078895751373,
+        "p95": 12.993598685251396,
+        "sum": -95.34376723987381
+      },
+      "maximum_drawdown_gross_bps": 255.5035989101728,
+      "open_positions": 0,
+      "slippage_sensitivity": [
+        {
+          "fee_bps_per_side": 0.0,
+          "mean_net_bps": -0.2670693760220555,
+          "n_trades": 357,
+          "slippage_bps_per_side": 0.0,
+          "sum_net_bps": -95.34376723987381
+        },
+        {
+          "fee_bps_per_side": 0.0,
+          "mean_net_bps": -2.2670693760220555,
+          "n_trades": 357,
+          "slippage_bps_per_side": 1.0,
+          "sum_net_bps": -809.3437672398738
+        },
+        {
+          "fee_bps_per_side": 0.0,
+          "mean_net_bps": -4.2670693760220555,
+          "n_trades": 357,
+          "slippage_bps_per_side": 2.0,
+          "sum_net_bps": -1523.3437672398738
+        },
+        {
+          "fee_bps_per_side": 6.0,
+          "mean_net_bps": -12.267069376022055,
+          "n_trades": 357,
+          "slippage_bps_per_side": 0.0,
+          "sum_net_bps": -4379.343767239874
+        },
+        {
+          "fee_bps_per_side": 6.0,
+          "mean_net_bps": -14.267069376022055,
+          "n_trades": 357,
+          "slippage_bps_per_side": 1.0,
+          "sum_net_bps": -5093.343767239874
+        },
+        {
+          "fee_bps_per_side": 6.0,
+          "mean_net_bps": -16.267069376022057,
+          "n_trades": 357,
+          "slippage_bps_per_side": 2.0,
+          "sum_net_bps": -5807.343767239874
+        },
+        {
+          "fee_bps_per_side": 8.0,
+          "mean_net_bps": -16.267069376022057,
+          "n_trades": 357,
+          "slippage_bps_per_side": 0.0,
+          "sum_net_bps": -5807.343767239874
+        },
+        {
+          "fee_bps_per_side": 8.0,
+          "mean_net_bps": -18.267069376022057,
+          "n_trades": 357,
+          "slippage_bps_per_side": 1.0,
+          "sum_net_bps": -6521.343767239874
+        },
+        {
+          "fee_bps_per_side": 8.0,
+          "mean_net_bps": -20.267069376022057,
+          "n_trades": 357,
+          "slippage_bps_per_side": 2.0,
+          "sum_net_bps": -7235.343767239874
+        }
+      ],
+      "tail_losses_gross_bps": {
+        "loss_count": 156,
+        "p05": -21.993508593229073,
+        "p10": -15.998818188777687,
+        "worst": -44.47882421195204
+      },
+      "thresholds": {
+        "gap_abs_min_bps": 1.5,
+        "gap_definition": "mid_vs_index",
+        "mom_abs_min_bps": 3.0,
+        "momentum_definition": "mid_return_lookback",
+        "momentum_lookback": 1,
+        "momentum_lookback_seconds": 1.0,
+        "target_multiplier": 2.0
+      },
+      "trade_count": 357,
+      "variant_id": "exploratory_mid_index_h1s"
+    }
+  ]
+}

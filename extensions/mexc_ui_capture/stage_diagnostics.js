@@ -2,7 +2,7 @@
 
 globalThis.MexcStageDiagnostics = (function stageDiagnostics() {
   const FORMAT_VERSION = 1;
-  const EXTENSION_VERSION = "1.3.5";
+  const EXTENSION_VERSION = "1.3.6";
   const ID_MAX = 64;
   const ENUM_MAX = 32;
   const INTERVAL_DETAIL_CAP = 2048;

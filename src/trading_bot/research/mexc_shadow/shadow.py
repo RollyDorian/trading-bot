@@ -70,6 +70,12 @@ class ShadowBook:
     def open_count(self) -> int:
         return len(self._open)
 
+    def abandon(self, symbol: str) -> Candidate | None:
+        """Drop an unscorable open shadow without creating PnL or risk state."""
+
+        open_pos = self._open.pop(symbol, None)
+        return open_pos.candidate if open_pos is not None else None
+
     def maybe_open(
         self,
         candidate: Candidate,

@@ -78,7 +78,7 @@ def _min_snapshot(*, sequence: int, received: str, monotonic_ms: float) -> dict:
 
 
 def test_manifest_and_scripts_are_1_3_5_interval_only() -> None:
-    assert MANIFEST["version"] == "1.3.5"
+    assert MANIFEST["version"] == "1.3.6"
     assert MANIFEST["content_scripts"][0]["js"] == ["stage_diagnostics.js", "content.js"]
     assert "stage_diagnostics.js" in BACKGROUND
     assert "emitChain = emitChain.then" in CONTENT
@@ -97,7 +97,7 @@ def test_manifest_and_scripts_are_1_3_5_interval_only() -> None:
     assert "noteMutation" in CONTENT
     assert "dirtySinceLastInterval" in CONTENT
     assert "INTERVAL_DETAIL_CAP = 2048" in DIAG_JS
-    assert 'EXTENSION_VERSION = "1.3.5"' in DIAG_JS
+    assert 'EXTENSION_VERSION = "1.3.6"' in DIAG_JS
 
 
 def test_expected_deadline_is_from_registration_not_previous_callback() -> None:
@@ -324,7 +324,7 @@ def test_milestone_report_is_instrumentation_only(tmp_path: Path) -> None:
     assert report["protocol_changed"] is False
     assert report["scheduler_changed"] is False
     assert report["live_diagnostic_capture"] == "NOT_RUN"
-    assert report["extension_version"] == "1.3.5"
+    assert report["extension_version"] == "1.3.6"
     text = out_md.read_text(encoding="utf-8")
     assert "Never backdate" in text
     assert milestone_report()["mom_gap_inspected"] is False
