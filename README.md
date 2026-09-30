@@ -1,299 +1,111 @@
-# Hibachi ETH perpetual research bot
+# MEXC zero-fee scalping bot
 
-Safety-first Python service for researching short-horizon strategies on the
-Hibachi `ETH/USDT-P` perpetual contract.
+Local, public-data-only research stack for ultra-short (≤ a few seconds)
+positions on MEXC USD-M futures (primary instrument `TAOUSDT`), targeting the
+zero-fee treatment that MEXC grants to Web-UI traders.
 
-The review-only normalized-data core is documented in
-[`docs/normalization.md`](docs/normalization.md). Its real-data capacity pilot
-blocks production activation on the current disk budget; collection remains
-RAW-only.
+The **Web UI is the trading surface**: MEXC zero fees do not apply to the bot
+API, so market data (and eventually orders) must come through the browser.
+The Chrome MV3 extension in `extensions/mexc_ui_capture/` captures rendered
+futures data; the pure-stdlib shadow engine in
+`src/trading_bot/research/mexc_shadow/` turns those snapshots into virtual
+positions and cost-aware reports.
 
-## Current milestone
+## Current state
 
-The repository collects public data and exports immutable, checksummed datasets for
-deterministic offline research. It contains no order placement, cancellation, account,
-transfer, withdrawal, leverage, or private API commands. `BOT_MODE` remains `collect`.
-The phased RAW/NORMALIZED/RESEARCH target contract is documented in
-[`docs/data_architecture.md`](docs/data_architecture.md).
+The engine is **shadow-only**: virtual positions, append-only NDJSON research
+events, no real orders. Real UI order placement is a later milestone and must
+be added explicitly.
 
-The verified external archive, capacity planner, and dry-run retention gates
-are documented in [`docs/storage_lifecycle.md`](docs/storage_lifecycle.md).
-External history can be written to S3-compatible storage or directly to an
-owner-protected operator PC through SSH without publishing PostgreSQL or
-staging completed Parquet on the collector host.
+## Repository layout
 
-
-## Offline baseline research
-
-The baseline is a deliberately simple short-horizon momentum benchmark over exported
-one-second candles. It emits research intents only. The report applies configurable
-taker costs, funding estimate, slippage, latency penalty, and execution delay. Maker
-fees are recorded in configuration but are not used by this taker-only baseline.
-
-This is not a validated strategy and is not evidence of profitability. PAPER remains
-blocked until chronological out-of-sample evaluation across multiple versioned
-datasets passes acceptance thresholds chosen before viewing those samples.
-
-## Exact research workflow
-
-### 1. Apply migrations
-
-```powershell
-.\.venv\Scripts\alembic.exe upgrade head
-```
-
-### 2. Collect public events
-
-```powershell
-.\.venv\Scripts\hibachi-bot.exe --stream
-```
-
-### 3. Export a bounded versioned dataset
-
-The start is inclusive and the end is exclusive. Both timestamps must include a
-timezone. The default destination is `data/research/eth-usdt-p/`.
-
-```powershell
-.\.venv\Scripts\hibachi-bot.exe --export-dataset `
-  --start 2026-07-18T00:00:00Z `
-  --end 2026-07-18T08:00:00Z
-```
-
-Each dataset contains `manifest.json`, `events.parquet`, `candles_1s.parquet`, and
-`README.md`. The ID includes symbol, UTC bounds, and schema version. The manifest
-contains row counts, deterministic export timestamp, software revision, and SHA-256
-checksums. Re-export to an existing ID fails instead of overwriting it.
-
-### 4. Replay the offline baseline
-
-```powershell
-.\.venv\Scripts\hibachi-bot.exe --offline-replay `
-  data/research/eth-usdt-p/eth-usdt-p_20260718T000000000000Z_20260718T080000000000Z_v1 `
-  --report research-report.json
-```
-
-Replay validates the manifest and every artifact checksum before reading candles. It
-uses no network or exchange client. Identical dataset and typed configuration produce
-an identical report.
-
-### 5. Read the report
-
-The terminal prints a concise `OFFLINE RESEARCH SIMULATION` summary. The JSON report
-contains dataset/configuration identity, signals, simulated entries/exits, gross PnL,
-fees, funding, slippage plus latency, net PnL, win rate, maximum drawdown, average
-holding time, skipped-signal reasons, intents, and simulated trades.
-
-All PnL fields are research simulation outputs. The baseline assumes one position at a
-time and a cooldown. It does not model queue position, partial fills, liquidation,
-spread dynamics, time-varying fees, exact funding settlements, or market impact.
-
-### VPS/Linux equivalents
-
-Run these from the checked-out repository with `DATABASE_URL` configured outside Git:
-
-```bash
-python3.13 -m venv .venv
-.venv/bin/python -m pip install -e '.[dev]'
-.venv/bin/alembic upgrade head
-.venv/bin/hibachi-bot --stream
-.venv/bin/hibachi-bot --export-dataset \
-  --start 2026-07-18T00:00:00Z \
-  --end 2026-07-18T08:00:00Z
-.venv/bin/hibachi-bot --offline-replay \
-  data/research/eth-usdt-p/eth-usdt-p_20260718T000000000000Z_20260718T080000000000Z_v1 \
-  --report research-report.json
-```
-
-Do not run collection before migrations complete. Generated datasets and reports are
-ignored by Git; copy them to controlled research storage with their manifest intact.
-
-## Versioned exporter, evaluator, and dashboard
-
-The dashboard milestone adds a compact version layout alongside the checksummed
-bounded format above:
-
-```powershell
-.\.venv\Scripts\hibachi-bot.exe export-dataset `
-  --out datasets `
-  --version v1_20260718 `
-  --start 2026-07-18T00:00:00Z `
-  --end 2026-07-19T00:00:00Z
-
-.\.venv\Scripts\hibachi-bot.exe evaluate-dataset `
-  datasets/v1_20260718 `
-  --window 20 `
-  --threshold-bps 5
-
-docker compose up -d --build dashboard
-```
-
-Omit `--version` to allocate the next `vN_YYYYMMDD` directory. Each version contains
-`ETH-USDT-P.parquet`, `manifest.json`, and, after evaluation,
-`eval_momentum.json`. Existing versions are never overwritten.
-
-The dashboard listens on `127.0.0.1:8000` by default and exposes read-only status,
-dataset, evaluation, and recent-market endpoints. Its Chart.js asset is loaded from a
-public CDN by the browser; API and evaluation code make no exchange requests.
-
-The momentum evaluator reports hypothetical PnL without fees. This deliberately
-incomplete benchmark must not be compared with the cost-aware replay report or used
-to admit PAPER mode.
-
-## Paper admission research gate
-
-Generate quality and cost-aware replay reports for four chronological datasets:
-
-```powershell
-$datasets = @(
-  "data/research/eth-usdt-p/eth-usdt-p_20260701T000000000000Z_20260702T000000000000Z_v1",
-  "data/research/eth-usdt-p/eth-usdt-p_20260702T000000000000Z_20260703T000000000000Z_v1",
-  "data/research/eth-usdt-p/eth-usdt-p_20260703T000000000000Z_20260704T000000000000Z_v1",
-  "data/research/eth-usdt-p/eth-usdt-p_20260704T000000000000Z_20260705T000000000000Z_v1"
-)
-foreach ($dataset in $datasets) {
-  .\.venv\Scripts\hibachi-bot.exe validate-dataset --dataset $dataset
-  .\.venv\Scripts\hibachi-bot.exe --offline-replay $dataset `
-    --report "$dataset/offline_replay.json"
-}
-
-.\.venv\Scripts\hibachi-bot.exe admit-paper `
-  --datasets $datasets `
-  --validation-count 1 `
-  --oos-count 2 `
-  --report paper-admission-report.json
-```
-
-`paper-admission-report.json` is the default dashboard admission-report path; override it
-with `ADMISSION_REPORT_PATH`. It records artifact decisions, chronological splits, OOS
-aggregates, thresholds, and every criterion result. Existing reports are not overwritten
-unless `--force` is explicit. See [the formal policy](docs/paper_admission.md).
-
-An admitted result does not enable PAPER, authorize trading, or provide evidence of
-future profitability. `BOT_MODE=collect` remains mandatory and human review is required.
-The latest collected-data exercise and its unresolved blockers are documented in
-[the Milestone 4 admission review](docs/milestone4_admission_review.md).
-Timestamp, clock-domain, and sequence requirements are defined in
-[the quality invariants](docs/timestamp_quality_invariants.md).
-Research/test PostgreSQL isolation and the safe collection workflow are documented in
-[COLLECT-only operations](docs/collect_only_operations.md).
-Routine status, preflight, bounded logs, protected backups, isolated restore validation,
-and rollback preparation are documented in the
-[COLLECT-only operations runbook](docs/operations_runbook.md).
-For a stopped collector with unavailable logs, the deployed image also provides
-`python -m trading_bot.startup_diagnostic`: a bounded read-only prerequisite check. It does
-not start collection or modify PostgreSQL; see the operations runbook for its fail-closed
-result contract.
-The bounded host-local JSON monitoring contract and provider-neutral alert examples are
-documented in [COLLECT-only monitoring](docs/monitoring.md).
-The Zabbix design uses a root-owned bounded oneshot and sanitized cache; the agent receives
-neither Docker nor sudo access.
-Operational status and monitoring share a bounded two-sample restart classifier: historical
-restart counts remain visible, while recent, advancing, unhealthy, or uncertain state blocks.
-They also share a bounded storage classifier: PostgreSQL-only collection treats disabled
-dashboard dataset/report mounts as not applicable, while every enabled filesystem sink
-must be declared, mounted, and writable or fail closed.
-Bounded stream-quality, storage-growth, capacity forecasting, and retention decisions are
-documented in [data quality and retention readiness](docs/retention_readiness.md).
-The review-only container/VPS release architecture, health checks, rollback, and backup
-requirements are documented in [the deployment plan](docs/deployment_plan.md). Deployment
-remains a manual, separately authorized operation; no automated host connectivity exists.
+| Path | What it is |
+|---|---|
+| `extensions/mexc_ui_capture/` | Chrome MV3 extension (v1.3.7): read-only capture of rendered MEXC futures market data (bid/ask/last/mark/index), durable IndexedDB chunks, optional loopback forwarding to `http://127.0.0.1:8765/v1/snapshot` |
+| `src/trading_bot/research/mexc_shadow/` | Shadow engine, pure stdlib: `MarketDataSource` → `FeatureEngine` (pluggable) → `CandidateGate` → `ShadowBook` → cost overlay. `mvp.py` provides the loopback receiver (`serve`) and deterministic replay (`replay`). `ui_capture/` normalizes and validates captured UI exports |
+| `configs/mexc_shadow/` | Frozen profiles: `author_observed_v0`, `conservative_v0` |
+| `data/mexc_ui_capture/`, `data/mexc_shadow/` | Captured corpora and shadow events (git-ignored) |
+| `docs/mexc_*.md` | MEXC milestone history and frozen protocol-v2 gates |
+| `tests/test_mexc_*.py` | Test suite |
 
 ## Requirements
 
 - Python 3.13+
-- PostgreSQL 16+
-- Network access to Hibachi public APIs
+- Chrome (or any Chromium) for the extension
+- No runtime Python dependencies: the MEXC stack is pure stdlib
 
-The Python requirement follows the current official `hibachi-xyz` SDK rather
-than the older `3.12+` assumption in the original specification.
-
-## Local setup
+## Setup
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev]"
-Copy-Item .env.example .env
-hibachi-bot
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\ruff.exe check .
+.\.venv\Scripts\mypy.exe src
 ```
 
-The default configuration uses only public endpoints and requires no API keys.
-Secrets must never be committed, logged, or sent to Telegram.
+## Load the extension
 
-## Safety invariant
+1. Open `chrome://extensions`, enable **Developer mode**.
+2. **Load unpacked** → select `extensions/mexc_ui_capture/`.
+3. Open a MEXC futures page (e.g. `https://www.mexc.com/futures/TAOUSDT`) and
+   start capture from the extension popup.
 
-`BOT_MODE` remains `collect`: PAPER is an account-free CLI research action, not an
-exchange runtime mode. Any non-collect mode fails during configuration loading.
+Capture is read-only: the extension writes durable IndexedDB chunks first and
+never fails capture; loopback forwarding is optional and bounded.
 
-## Database schema
+## Shadow runner
 
-Raw market and system events are stored append-only in PostgreSQL. Apply the
-schema after setting `DATABASE_URL`:
+### Live capture (loopback receiver)
 
 ```powershell
-.\.venv\Scripts\alembic.exe upgrade head
+.\.venv\Scripts\mexc-shadow.exe serve `
+  --extension-origin chrome-extension://<extension-id-from-chrome-extensions> `
+  --events data\mexc_shadow\live_events.ndjson `
+  --summary data\mexc_shadow\live_summary.json
 ```
 
-The event payload remains JSON so upstream messages can be preserved without
-loss, while timestamps, sequence numbers, source, symbol, latency, and event type
-are indexed columns for validation and replay.
+The receiver accepts only the exact `chrome-extension://<32-character-id>`
+Origin configured at startup; origin-less localhost CLI requests remain
+supported. `OPEN` and `CLOSE` are append-only NDJSON research events; the
+summary includes exit reasons, fee and slippage overlays, drawdown, tail
+losses, latency, and invalid-data counters.
 
-After the migration, start continuous public market collection explicitly:
+### Deterministic replay
 
 ```powershell
-hibachi-bot --stream
+.\.venv\Scripts\mexc-shadow.exe replay `
+  --raw <corpus.ndjson> `
+  --events data\mexc_shadow\replay_events.ndjson `
+  --summary data\mexc_shadow\replay_summary.json
 ```
 
-Without `--stream`, the command only validates current public contract metadata
-and exits. If PostgreSQL becomes unavailable or the WebSocket receive loop stops,
-the collector records a `DEGRADED` event and reconnects with bounded exponential
-backoff. Repeated failures produce `HALTED` and stop the process. Order book
-updates are accepted only after a snapshot; detected sequence gaps or regressions
-produce `DESYNC` and restart the stream instead of continuing with invalid state.
+Replay validates the corpus SHA before evaluation; a mismatch fails.
 
-## Local PostgreSQL and end-to-end check
+## Safety invariants
 
-Docker Compose starts a PostgreSQL 16 instance bound only to localhost. The
-credentials in `compose.yaml` are development-only and match `.env.example`:
+- Extension is read-only: no clicks, no DOM writes.
+- Shadow engine: no order placement, no private endpoints, no trading
+  credentials, no browser driver.
+- Loopback receiver: exact-Origin allowlist, no wildcard CORS.
+- Captured corpora are immutable evidence: SHA-locked files are never
+  rewritten or rescaled.
+- Frozen profiles and protocol-v2 timing gates are unchanged unless
+  explicitly re-approved.
 
-```powershell
-docker compose up -d --wait postgres
-.\.venv\Scripts\alembic.exe upgrade head
-```
+## Locked development replay
 
-Run the deterministic end-to-end COLLECT check with:
+- Corpus SHA-256: `5c15b9714f804f8df5a327ae81fb2d7fb515ec052aeed0ff1af5df5a8680467c`
+- 10.6 h TAOUSDT, 76,311 valid snapshots.
+- Both exploratory variants (1-second executable-mid momentum with
+  `mid_vs_mark` / `mid_vs_index`) are **negative in aggregate gross** —
+  development sample, not OOS evidence.
 
-```powershell
-.\scripts\e2e_collect.ps1
-```
+Full machine result: [`docs/mexc_shadow_mvp_v0_replay.json`](docs/mexc_shadow_mvp_v0_replay.json).
 
-The check uses the isolated `cryptobot-e2e` Compose project on localhost port
-`55432` with database `cryptobot_test`, sends one representative public market message through
-`MarketCollector`, verifies the normalized fields and unchanged raw payload in
-PostgreSQL, and confirms that an ended stream fails closed. It removes the test
-container and its isolated volume afterward; pass `-KeepDatabase` to keep them
-for local inspection. The check does not connect to account or trading APIs.
+## Key documents
 
-## Replay, data quality, and retention
-
-Read-only maintenance commands use the configured `DATABASE_URL` and do not
-connect to account or trading APIs:
-
-```powershell
-hibachi-bot --quality-date 2026-07-16
-hibachi-bot --replay --start 2026-07-16T00:00:00Z --event-type trades --limit 1000
-```
-
-Replay output is deterministic JSON Lines ordered by `received_at` and database
-`id`. Daily quality output groups counts, missing timestamps/sequences, and
-latency statistics by symbol and topic.
-
-Retention is disabled unless both the timezone-aware cutoff and explicit
-confirmation flag are provided:
-
-```powershell
-hibachi-bot --retention-before 2026-06-01T00:00:00Z --confirm-retention
-```
-
-GitHub Actions runs unit tests, PostgreSQL integration, Ruff, Mypy, and Alembic
-validation for every pull request.
+- [`docs/mexc_shadow_mvp_v0.md`](docs/mexc_shadow_mvp_v0.md) — shadow MVP: scope, safety, run, locked replay
+- [`docs/mexc_mom_gap_hypothesis_protocol_design_v1.md`](docs/mexc_mom_gap_hypothesis_protocol_design_v1.md) — protocol design
+- [`docs/mexc_mom_gap_hypothesis_protocol_v2_data_contract_amendment.md`](docs/mexc_mom_gap_hypothesis_protocol_v2_data_contract_amendment.md) — frozen protocol-v2 data contract
+- [`docs/mexc_zero_fee_signal_recon_and_engine_v1.md`](docs/mexc_zero_fee_signal_recon_and_engine_v1.md) — zero-fee signal reconnaissance and engine

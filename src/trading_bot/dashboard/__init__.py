@@ -1,1 +1,0 @@
-"""Read-only operational dashboard."""

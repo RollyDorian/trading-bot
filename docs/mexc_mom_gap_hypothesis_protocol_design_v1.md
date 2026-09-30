@@ -404,9 +404,9 @@ identity at adequate resolution and an unobserved leader—most plausibly an
 external reference venue—should be tested next. It does **not** identify a
 venue, instrument, stream, lag, or profitable strategy. Any external-feed
 candidate family requires a separate pre-registration and arrival-time causal
-contract; the repository's existing external-feed design likewise treats local
-receipt time as the only causal clock
-([timestamp model](external_relative_value_feed_design_v1.md#4-timestamp-model)).
+contract; the repository's external-feed design (now in git history) likewise
+treats local receipt time as the only causal clock (timestamp model:
+`external_relative_value_feed_design_v1.md#4-timestamp-model`).
 
 If any prerequisite fails, use `MEXC_ONLY_INCONCLUSIVE`, not the external-feed
 conclusion.
